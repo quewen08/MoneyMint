@@ -1,0 +1,25 @@
+{
+  "name": "moneymint",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.5.0",
+    "echarts": "^6.0.0",
+    "nuxt": "^4.0.0",
+    "sqlite": "^5.1.1",
+    "vue": "^3.4.0",
+    "vue-echarts": "^8.0.1",
+    "vue-router": "^4.3.0"
+  },
+  "devDependencies": {
+    "@nuxt/devtools": "latest",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.10.2"
+  }
+}

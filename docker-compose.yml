@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  moneymint:
+    build: .
+    container_name: moneymint
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
