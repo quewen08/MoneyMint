@@ -58,6 +58,8 @@ export function createBeancountManager() {
   async function ensureDataDir() {
     try {
       await fs.mkdir(DATA_DIR, { recursive: true })
+      await fs.mkdir(`${DATA_DIR}/accounts`, { recursive: true })
+      await fs.mkdir(`${DATA_DIR}/date`, { recursive: true })
     } catch (error) {
       console.error('创建数据目录失败:', error)
       throw error
@@ -199,11 +201,40 @@ export function createBeancountManager() {
     await ensureDataDir()
     // 检查主要文件是否存在
     try {
-      await fs.access(BEANCOUNT_FILES.main)
-      // 检查账户目录是否存在
-      await fs.access(BEANCOUNT_FILES.accounts.assets)
-      // 检查日期目录是否存在
-      await fs.access(BEANCOUNT_FILES.date.index)
+      await fs.access(BEANCOUNT_FILES.main).catch(async () => {
+        // 如果主要文件不存在，创建一个空文件
+        await fs.writeFile(BEANCOUNT_FILES.main, '')
+      })
+      // 检查assets账户文件是否存在
+      await fs.access(BEANCOUNT_FILES.accounts.assets).catch(async () => {
+        // 如果账户文件不存在，创建一个空文件
+        await fs.writeFile(BEANCOUNT_FILES.accounts.assets, '')
+      })
+      // 检查liabilities账户文件是否存在
+      await fs.access(BEANCOUNT_FILES.accounts.liabilities).catch(async () => {
+        // 如果账户文件不存在，创建一个空文件
+        await fs.writeFile(BEANCOUNT_FILES.accounts.liabilities, '')
+      })
+      // 检查equity账户文件是否存在
+      await fs.access(BEANCOUNT_FILES.accounts.equity).catch(async () => {
+        // 如果账户文件不存在，创建一个空文件
+        await fs.writeFile(BEANCOUNT_FILES.accounts.equity, '')
+      })
+      // 检查expenses账户文件是否存在
+      await fs.access(BEANCOUNT_FILES.accounts.expenses).catch(async () => {
+        // 如果账户文件不存在，创建一个空文件
+        await fs.writeFile(BEANCOUNT_FILES.accounts.expenses, '')
+      })
+      // 检查income账户文件是否存在
+      await fs.access(BEANCOUNT_FILES.accounts.income).catch(async () => {
+        // 如果账户文件不存在，创建一个空文件
+        await fs.writeFile(BEANCOUNT_FILES.accounts.income, '')
+      })
+      // 检查日期文件是否存在
+      await fs.access(BEANCOUNT_FILES.date.index).catch(async () => {
+        // 如果日期文件不存在，创建一个空文件
+        await fs.writeFile(BEANCOUNT_FILES.date.index, '')
+      })
     } catch (error) {
       console.error('Beancount文件结构不完整:', error)
       throw new Error('Beancount文件结构不完整，请确保所有必要文件都存在')
