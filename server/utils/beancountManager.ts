@@ -1,15 +1,13 @@
 import fs from 'fs/promises'
 import path from 'path'
 import Database from 'better-sqlite3'
+import properLockfile from 'proper-lockfile'
 
 // Get project root directory path
 const ROOT_DIR = process.cwd()
 const DATA_DIR = path.join(ROOT_DIR, 'data')
 const TRANSACTIONS_FILE = path.join(DATA_DIR, 'transactions.json')
 const DB_FILE = path.join(DATA_DIR, 'transactions.db')
-
-// SQLite数据库连接
-let db: Database = null
 
 // Beancount文件结构
 const BEANCOUNT_FILES = {
@@ -66,104 +64,82 @@ export function createBeancountManager() {
     }
   }
 
-  // 初始化数据库连接
-  function initializeDatabase() {
-    if (!db) {
-      db = new Database(DB_FILE)
+  // 获取数据库连接
+  function getDatabaseConnection() {
+    const db = new Database(DB_FILE)
+    
+    // 检查并处理旧的表结构
+    try {
+      // 检查transactions表是否有postings字段
+      const hasPostingsColumn = db.prepare(`
+        SELECT COUNT(*) AS count FROM pragma_table_info('transactions') WHERE name = 'postings'
+      `).get().count > 0
       
-      // 检查并处理旧的表结构
-      try {
-        // 检查transactions表是否有postings字段
-        const hasPostingsColumn = db.prepare(`
-          SELECT COUNT(*) AS count FROM pragma_table_info('transactions') WHERE name = 'postings'
-        `).get().count > 0
+      if (hasPostingsColumn) {
+        // 如果有postings字段，需要迁移数据
+        console.log('检测到旧数据库结构，正在迁移数据...')
         
-        if (hasPostingsColumn) {
-          // 如果有postings字段，需要迁移数据
-          console.log('检测到旧数据库结构，正在迁移数据...')
-          
-          // 确保posts表存在
-          db.exec(`
-            CREATE TABLE IF NOT EXISTS posts (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              transaction_id TEXT NOT NULL,
-              account TEXT NOT NULL,
-              amount REAL NOT NULL,
-              currency TEXT DEFAULT 'CNY',
-              FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
-            )
-          `)
-          
-          // 从旧表中读取所有交易
-          const oldTransactions = db.prepare('SELECT * FROM transactions').all()
-          
-          // 将旧表中的postings数据迁移到posts表
-          for (const oldTrans of oldTransactions) {
-            if (oldTrans.postings) {
-              try {
-                const postings = JSON.parse(oldTrans.postings)
-                for (const posting of postings) {
-                  db.prepare(`
-                    INSERT INTO posts (transaction_id, account, amount, currency)
-                    VALUES (?, ?, ?, ?)
-                  `).run(oldTrans.id, posting.account, posting.amount, posting.currency || 'CNY')
-                }
-              } catch (e) {
-                console.error(`迁移交易 ${oldTrans.id} 的分账单失败:`, e)
+        // 确保posts表存在
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaction_id TEXT NOT NULL,
+            account TEXT NOT NULL,
+            amount REAL NOT NULL,
+            currency TEXT DEFAULT 'CNY',
+            FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+          )
+        `)
+        
+        // 从旧表中读取所有交易
+        const oldTransactions = db.prepare('SELECT * FROM transactions').all()
+        
+        // 将旧表中的postings数据迁移到posts表
+        for (const oldTrans of oldTransactions) {
+          if (oldTrans.postings) {
+            try {
+              const postings = JSON.parse(oldTrans.postings)
+              for (const posting of postings) {
+                db.prepare(`
+                  INSERT INTO posts (transaction_id, account, amount, currency)
+                  VALUES (?, ?, ?, ?)
+                `).run(oldTrans.id, posting.account, posting.amount, posting.currency || 'CNY')
               }
+            } catch (e) {
+              console.error(`迁移交易 ${oldTrans.id} 的分账单失败:`, e)
             }
           }
-          
-          // 创建新的transactions表（不包含postings字段）
-          db.exec('ALTER TABLE transactions RENAME TO transactions_old')
-          db.exec(`
-            CREATE TABLE IF NOT EXISTS transactions (
-              id TEXT PRIMARY KEY,
-              date TEXT NOT NULL,
-              flag TEXT,
-              payee TEXT,
-              narration TEXT NOT NULL,
-              tags TEXT,
-              links TEXT,
-              type TEXT NOT NULL,
-              timestamp INTEGER NOT NULL
-            )
-          `)
-          
-          // 将旧表数据迁移到新表
-          db.exec(`
-            INSERT INTO transactions (id, date, flag, payee, narration, tags, links, type, timestamp)
-            SELECT id, date, flag, payee, narration, tags, links, type, timestamp
-            FROM transactions_old
-          `)
-          
-          // 删除旧表
-          db.exec('DROP TABLE transactions_old')
-          
-          console.log('数据库结构迁移完成！')
-        } else {
-          // 如果没有postings字段，直接创建表
-          db.exec(`
-            CREATE TABLE IF NOT EXISTS transactions (
-              id TEXT PRIMARY KEY,
-              date TEXT NOT NULL,
-              flag TEXT,
-              payee TEXT,
-              narration TEXT NOT NULL,
-              tags TEXT,
-              links TEXT,
-              type TEXT NOT NULL,
-              timestamp INTEGER NOT NULL
-            )
-          `)
         }
-      } catch (e) {
-        console.error('检查或迁移数据库结构时出错:', e)
-        // 如果出错，尝试重新创建表
-        db.exec('DROP TABLE IF EXISTS transactions')
-        db.exec('DROP TABLE IF EXISTS posts')
         
-        // 创建新表
+        // 创建新的transactions表（不包含postings字段）
+        db.exec('ALTER TABLE transactions RENAME TO transactions_old')
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS transactions (
+            id TEXT PRIMARY KEY,
+            date TEXT NOT NULL,
+            flag TEXT,
+            payee TEXT,
+            narration TEXT NOT NULL,
+            tags TEXT,
+            links TEXT,
+            type TEXT NOT NULL,
+            timestamp INTEGER NOT NULL
+          )
+        `)
+        
+        // 将旧表数据迁移到新表
+        db.exec(`
+          INSERT INTO transactions (id, date, flag, payee, narration, tags, links, type, timestamp)
+          SELECT id, date, flag, payee, narration, tags, links, type, timestamp
+          FROM transactions_old
+        `)
+        
+        // 删除旧表
+        db.exec('DROP TABLE transactions_old')
+        
+        console.log('数据库结构迁移完成！')
+      } else {
+        // 如果没有postings字段，直接创建表
         db.exec(`
           CREATE TABLE IF NOT EXISTS transactions (
             id TEXT PRIMARY KEY,
@@ -178,22 +154,44 @@ export function createBeancountManager() {
           )
         `)
       }
+    } catch (e) {
+      console.error('检查或迁移数据库结构时出错:', e)
+      // 如果出错，尝试重新创建表
+      db.exec('DROP TABLE IF EXISTS transactions')
+      db.exec('DROP TABLE IF EXISTS posts')
       
-      // 确保posts表存在
+      // 创建新表
       db.exec(`
-        CREATE TABLE IF NOT EXISTS posts (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          transaction_id TEXT NOT NULL,
-          account TEXT NOT NULL,
-          amount REAL NOT NULL,
-          currency TEXT DEFAULT 'CNY',
-          FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+        CREATE TABLE IF NOT EXISTS transactions (
+          id TEXT PRIMARY KEY,
+          date TEXT NOT NULL,
+          flag TEXT,
+          payee TEXT,
+          narration TEXT NOT NULL,
+          tags TEXT,
+          links TEXT,
+          type TEXT NOT NULL,
+          timestamp INTEGER NOT NULL
         )
       `)
-      
-      // 为account字段创建索引，加速账户余额查询
-      db.exec(`CREATE INDEX IF NOT EXISTS idx_posts_account ON posts(account)`)
     }
+    
+    // 确保posts表存在
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transaction_id TEXT NOT NULL,
+        account TEXT NOT NULL,
+        amount REAL NOT NULL,
+        currency TEXT DEFAULT 'CNY',
+        FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+      )
+    `)
+    
+    // 为account字段创建索引，加速账户余额查询
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_posts_account ON posts(account)`)
+    
+    return db
   }
 
   // 初始化Beancount文件
@@ -239,14 +237,12 @@ export function createBeancountManager() {
       console.error('Beancount文件结构不完整:', error)
       throw new Error('Beancount文件结构不完整，请确保所有必要文件都存在')
     }
-    // 初始化数据库
-    initializeDatabase()
   }
 
   // 读取所有交易记录
   async function readTransactions(): Promise<Transaction[]> {
     await ensureDataDir()
-    initializeDatabase()
+    const db = getDatabaseConnection()
 
     try {
       // 首先尝试从数据库读取
@@ -280,7 +276,7 @@ export function createBeancountManager() {
       console.error('从数据库读取交易记录失败:', error)
       // 如果数据库读取失败，尝试从JSON文件读取作为备选
       try {
-        const data = await fs.readFile(TRANSACTIONS_FILE, 'utf-8')
+        const data = await properLockfile.read(TRANSACTIONS_FILE, { encoding: 'utf-8' })
         const transactions = JSON.parse(data)
         // 将JSON数据导入数据库
         await writeTransactions(transactions)
@@ -292,13 +288,15 @@ export function createBeancountManager() {
         }
         throw jsonError
       }
+    } finally {
+      db.close()
     }
   }
 
   // 写入交易记录
   async function writeTransactions(transactions: Transaction[]): Promise<void> {
     await ensureDataDir()
-    initializeDatabase()
+    const db = getDatabaseConnection()
 
     try {
       // 开始事务
@@ -347,16 +345,27 @@ export function createBeancountManager() {
       db.exec('COMMIT')
       
       // 同时更新JSON文件作为备份
-      await fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(transactions, null, 2), 'utf-8')
+      await properLockfile.lock(TRANSACTIONS_FILE)
+      try {
+        await fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(transactions, null, 2), 'utf-8')
+      } finally {
+        await properLockfile.unlock(TRANSACTIONS_FILE)
+      }
       console.log('交易记录写入数据库成功！')
     } catch (error) {
       // 回滚事务
       db.exec('ROLLBACK')
       console.error('写入交易记录失败:', error)
       // 回退到JSON文件存储
-      await fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(transactions, null, 2), 'utf-8')
+      await properLockfile.lock(TRANSACTIONS_FILE)
+      try {
+        await fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(transactions, null, 2), 'utf-8')
+      } finally {
+        await properLockfile.unlock(TRANSACTIONS_FILE)
+      }
       throw error
     } finally {
+      db.close()
       // 无论如何都更新Beancount文件
       await updateBeancountFile(transactions)
     }
@@ -440,8 +449,13 @@ export function createBeancountManager() {
 
       const transactionsContent = transactionContents.join('\n')
 
-      // 写入月份文件
-      await fs.writeFile(monthFile, transactionsContent, 'utf-8')
+      // 写入月份文件，使用文件锁
+      await properLockfile.lock(monthFile, { retries: 5 })
+      try {
+        await fs.writeFile(monthFile, transactionsContent, 'utf-8')
+      } finally {
+        await properLockfile.unlock(monthFile)
+      }
     }
 
     // 更新date.bean文件，确保所有月份文件都被包含
@@ -462,8 +476,13 @@ export function createBeancountManager() {
     const includes = await Promise.all(includeStatements)
     const newDateIndexContent = `;【交易记录】\n\n${includes.flat().join('\n')}`
 
-    // 写入date.bean文件
-    await fs.writeFile(BEANCOUNT_FILES.date.index, newDateIndexContent, 'utf-8')
+    // 写入date.bean文件，使用文件锁
+    await properLockfile.lock(BEANCOUNT_FILES.date.index, { retries: 5 })
+    try {
+      await fs.writeFile(BEANCOUNT_FILES.date.index, newDateIndexContent, 'utf-8')
+    } finally {
+      await properLockfile.unlock(BEANCOUNT_FILES.date.index)
+    }
   }
 
   // 账户类型定义
@@ -476,9 +495,10 @@ export function createBeancountManager() {
   // 获取交易记录 - 支持按日期范围筛选和分页
   async function getTransactions(startDate?: number, endDate?: number, limit = 0): Promise<Transaction[]> {
     await initializeBeancountFile()
-    initializeDatabase()
 
     try {
+      const db = getDatabaseConnection()
+      
       // 使用SQLite查询交易记录
       let query = `
         SELECT * FROM transactions
@@ -661,7 +681,6 @@ export function createBeancountManager() {
   // 添加交易记录
   async function addTransaction(transactionData: Omit<Transaction, 'id' | 'timestamp'>): Promise<Transaction> {
     await initializeBeancountFile()
-    initializeDatabase()
 
     // 多账户交易验证：至少需要两个账户行
     if (transactionData.postings.length < 2) {
@@ -691,6 +710,8 @@ export function createBeancountManager() {
     }
 
     try {
+      const db = getDatabaseConnection()
+      
       // 使用SQLite插入新交易
       const transactionStmt = db.prepare(`
         INSERT INTO transactions (id, timestamp, flag, date, payee, narration, tags, links, type)
@@ -743,9 +764,10 @@ export function createBeancountManager() {
   // 删除交易记录
   async function deleteTransaction(id: string): Promise<void> {
     await initializeBeancountFile()
-    initializeDatabase()
 
     try {
+      const db = getDatabaseConnection()
+      
       // 使用SQLite删除特定id的交易
       const stmt = db.prepare('DELETE FROM transactions WHERE id = ?')
       stmt.run(id)
@@ -850,7 +872,6 @@ export function createBeancountManager() {
   async function getAccountTransactions(account: string, limit = 0): Promise<Transaction[]> {
     await initializeBeancountFile()
     const accounts = await getAccounts()
-    initializeDatabase()
 
     // 解码账户名（处理浏览器编码的中文参数）
     const decodedAccount = decodeURIComponent(account)
@@ -865,6 +886,7 @@ export function createBeancountManager() {
     const targetActualName = nicknameToActual.get(decodedAccount) || decodedAccount
 
     try {
+      const db = getDatabaseConnection()
       // 首先通过posts表查询包含该账户的交易ID
       const stmt = db.prepare(`
         SELECT transaction_id FROM posts WHERE account = ?
@@ -929,7 +951,6 @@ export function createBeancountManager() {
   async function getAccountBalance(account: string): Promise<number> {
     await initializeBeancountFile()
     const accounts = await getAccounts()
-    initializeDatabase()
 
     // 解码账户名（处理浏览器编码的中文参数）
     const decodedAccount = decodeURIComponent(account)
@@ -944,6 +965,7 @@ export function createBeancountManager() {
     const targetActualName = nicknameToActual.get(decodedAccount) || decodedAccount
 
     try {
+      const db = getDatabaseConnection()
       // 使用SQLite直接查询posts表计算账户余额
       const stmt = db.prepare('SELECT SUM(amount) as balance FROM posts WHERE account = ?')
       const result = stmt.get(targetActualName)
@@ -1176,7 +1198,6 @@ export function createBeancountManager() {
   // 同步Beancount文件与数据库的交易记录
   async function syncTransactions(): Promise<void> {
     await initializeBeancountFile()
-    initializeDatabase()
 
     // 读取数据库中的交易
     const dbTransactions = await getTransactions()
@@ -1199,6 +1220,8 @@ export function createBeancountManager() {
       console.log(`同步交易记录: 添加 ${transactionsToAdd.length} 条, 删除 ${transactionsToDelete.length} 条`)
 
       try {
+        const db = getDatabaseConnection()
+        
         // 开始数据库事务
         db.exec('BEGIN TRANSACTION')
 
@@ -1266,8 +1289,6 @@ export function createBeancountManager() {
 
         console.log('交易记录同步完成！')
       } catch (error) {
-        // 回滚事务
-        db.exec('ROLLBACK')
         console.error('同步过程中数据库操作失败:', error)
 
         // 回退到原始JSON操作方法
@@ -1389,7 +1410,6 @@ export function createBeancountManager() {
   async function setAccountBalance(account: string, date: string, balance: number, padAccount: string): Promise<boolean> {
     await initializeBeancountFile()
     const accounts = await getAccounts()
-    initializeDatabase()
 
     // 解码账户名
     const decodedAccount = decodeURIComponent(account)
@@ -1412,6 +1432,8 @@ export function createBeancountManager() {
     }
 
     try {
+      const db = getDatabaseConnection()
+      
       // 计算当前账户的实际余额
       const actualBalance = await getAccountBalance(targetAccount.actualName)
       const difference = balance - actualBalance
@@ -1494,7 +1516,6 @@ export function createBeancountManager() {
 
       return true
     } catch (error) {
-      db.exec('ROLLBACK')
       console.error('设置账户余额失败:', error)
       return false
     }
