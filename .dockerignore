@@ -1,1 +1,51 @@
 Dockerfile
+.git*
+
+# 排除Node.js依赖
+node_modules/
+*.lock
+
+# 排除Python虚拟环境
+venv/
+env/
+
+# 排除构建输出
+.output/
+dist/
+.nuxt/
+
+# 排除日志文件
+logs/
+*.log
+
+# 排除环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 排除临时文件
+*.tmp
+*.swp
+
+# 排除操作系统文件
+.DS_Store
+Thumbs.db
+
+# 排除测试文件
+__pycache__/
+*.pyc
+*.pyo
+
+# 排除文档
+*.md
+*.rst
+
+# 排除配置文件
+*.ini
+*.cfg
+*.conf
+
+# 排除其他不必要的文件
+*.zip
+*.tar.gz
+*.rar

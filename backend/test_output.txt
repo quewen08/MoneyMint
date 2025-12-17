@@ -1,0 +1,6 @@
+Status Code: 200
+Number of accounts: 46
+First few accounts:
+Account: Assets:Current:储蓄存款:LH:微信:微众银行, Balance: 100553.38, Type: Assets
+Account: Assets:Current:储蓄存款:LH:招商银行, Balance: 50636.74, Type: Assets
+Account: Assets:Current:储蓄存款:QW:微信:微众银行, Balance: 100609.24, Type: Assets
