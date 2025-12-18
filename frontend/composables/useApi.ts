@@ -1,15 +1,34 @@
 export const useApi = () => {
   const config = useRuntimeConfig()
   const apiBaseUrl = config.public.apiBaseUrl
+  const authToken = useState<string | null>('authToken', () => null)
+  const user = useState<{ username: string; role: string } | null>('user', () => null)
 
-const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
+  // 从localStorage恢复登录状态
+  if (process.client) {
+    const savedToken = localStorage.getItem('authToken')
+    const savedUser = localStorage.getItem('user')
+    if (savedToken && savedUser) {
+      authToken.value = savedToken
+      user.value = JSON.parse(savedUser)
+    }
+  }
+
+  const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
     try {
+      // 添加认证头
+      const headers: any = {
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+
+      if (authToken.value) {
+        headers['Authorization'] = `Bearer ${authToken.value}`
+      }
+
       const response = await fetch(`${apiBaseUrl}${endpoint}`, {
         ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers
-        }
+        headers
       })
 
       if (!response.ok) {
@@ -26,7 +45,79 @@ const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
     }
   }
 
+  // 认证相关函数
+  const login = async (username: string, password: string) => {
+    try {
+      const data = await fetchApi('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password })
+      })
+      
+      // 保存认证信息
+      authToken.value = data.access_token
+      user.value = { username: data.username, role: data.role }
+      
+      // 持久化到localStorage
+      if (process.client) {
+        localStorage.setItem('authToken', data.access_token)
+        localStorage.setItem('user', JSON.stringify({ username: data.username, role: data.role }))
+      }
+      
+      return data
+    } catch (error) {
+      console.error('Login failed:', error)
+      throw error
+    }
+  }
+
+  const register = async (username: string, password: string) => {
+    try {
+      const data = await fetchApi('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username, password })
+      })
+      return data
+    } catch (error) {
+      console.error('Registration failed:', error)
+      throw error
+    }
+  }
+
+  const checkRegistrationStatus = async () => {
+    try {
+      const data = await fetchApi('/auth/register/status')
+      return data
+    } catch (error) {
+      console.error('检查注册状态失败:', error)
+      return { enabled: false }
+    }
+  }
+
+  const logout = () => {
+    // 清除认证信息
+    authToken.value = null
+    user.value = null
+    
+    // 从localStorage删除
+    if (process.client) {
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('user')
+      // 重定向到登录页面
+      window.location.href = '/login'
+    }
+  }
+
   return {
+    // 认证状态
+    authToken,
+    user,
+    
+    // 认证函数
+    login,
+    register,
+    checkRegistrationStatus,
+    logout,
+    
     // Ledger endpoints
     getLedger: () => fetchApi('/ledger'),
     getEntries: (params: {start_date?: string, end_date?: string, page?: number, page_size?: number, sort?: string, order?: string} = {}) => {

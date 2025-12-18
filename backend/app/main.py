@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
+from flask_bcrypt import Bcrypt
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 import beancount.loader
 import beanquery
 import os
@@ -8,7 +10,8 @@ import time
 import threading
 import json
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
+import re
 
 # 加载环境变量
 load_dotenv()
@@ -16,11 +19,86 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
+# JWT 配置
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this-in-production')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)  # Token有效期7天
+
+# 初始化扩展
+bcrypt = Bcrypt(app)
+jwt = JWTManager(app)
+
 # 配置
 LEDGER_FILE = os.getenv('LEDGER_FILE', 'data/main.bean')
 
+# 从环境变量获取用户配置
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
+ENABLE_REGISTRATION = os.getenv('ENABLE_REGISTRATION', 'true').lower() == 'true'
+PAD_EQUITY_ACCOUNT = os.getenv('PAD_EQUITY_ACCOUNT', 'Equity:Opening-Balances')
+
+# 用户数据（简化实现，实际应用中应使用数据库）
+users = {
+    ADMIN_USERNAME: {'password_hash': bcrypt.generate_password_hash(ADMIN_PASSWORD).decode('utf-8'), 'role': 'admin'}
+}
+
 # 确保数据目录存在
 os.makedirs('data', exist_ok=True)
+
+
+# 用户认证API
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """用户登录"""
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+
+    if not username or not password:
+        return jsonify({'error': '用户名和密码不能为空'}), 400
+
+    if username not in users:
+        return jsonify({'error': '用户名或密码错误'}), 401
+
+    # 验证密码
+    if bcrypt.check_password_hash(users[username]['password_hash'], password):
+        # 创建JWT Token
+        access_token = create_access_token(identity=username)
+        return jsonify({'access_token': access_token, 'username': username, 'role': users[username]['role']}), 200
+    else:
+        return jsonify({'error': '用户名或密码错误'}), 401
+
+
+@app.route('/api/auth/register/status', methods=['GET'])
+def check_registration_status():
+    """检查注册功能状态"""
+    return jsonify({'enabled': ENABLE_REGISTRATION})
+
+
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    """用户注册"""
+    # 检查是否启用了注册功能
+    if not ENABLE_REGISTRATION:
+        return jsonify({'error': '注册功能已关闭'}), 403
+
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+
+    if not username or not password:
+        return jsonify({'error': '用户名和密码不能为空'}), 400
+
+    if len(password) < 6:
+        return jsonify({'error': '密码长度不能少于6位'}), 400
+
+    if username in users:
+        return jsonify({'error': '用户名已存在'}), 409
+
+    # 创建新用户
+    users[username] = {'password_hash': bcrypt.generate_password_hash(password).decode('utf-8'), 'role': 'user'}
+
+    return jsonify({'message': '注册成功'}), 201
+
 
 # 初始化默认账本文件
 if not os.path.exists(LEDGER_FILE):
@@ -34,6 +112,7 @@ option "operating_currency" "CNY"
 2023-01-01 open Income:Salary CNY
 2023-01-01 open Expenses:Food CNY
 2023-01-01 open Expenses:Transport CNY
+2023-01-01 open Equity:Opening-Balances CNY
 '''
         )
 
@@ -113,6 +192,7 @@ def notify_subscribers(event="update", data=None):
 
 
 @app.route('/api/ledger', methods=['GET'])
+@jwt_required()
 def get_ledger():
     """获取账本基本信息"""
     entries, errors, options = load_ledger()
@@ -129,6 +209,7 @@ def get_ledger():
 
 
 @app.route('/api/entries', methods=['GET'])
+@jwt_required()
 def get_entries():
     """获取所有记账条目（支持时间段筛选、分页和排序）"""
     entries, errors, options = load_ledger()
@@ -202,6 +283,7 @@ def get_entries():
 
 
 @app.route('/api/query', methods=['POST'])
+@jwt_required()
 def run_query():
     """执行Beancount查询"""
     data = request.json
@@ -222,6 +304,7 @@ def run_query():
 
 
 @app.route('/api/entries', methods=['POST'])
+@jwt_required()
 def add_entry():
     """添加新的记账条目"""
     data = request.json
@@ -273,7 +356,34 @@ def add_entry():
             number = data['amount']
             currency = 'CNY'
 
-        entry_str = f"{data['date']} balance {data['account']} {number} {currency}\n"
+        # 计算当前账户余额
+        entries, errors, options = load_ledger()
+        account = data['account']
+        balance_date = datetime.fromisoformat(data['date']).date()
+
+        # 计算截至balance日期前一天的账户余额
+        current_balance = 0.0
+        for entry in entries:
+            if hasattr(entry, 'date') and entry.date < balance_date:
+                if hasattr(entry, 'postings'):
+                    for posting in entry.postings:
+                        if posting.account == account and hasattr(posting, 'units') and posting.units:
+                            current_balance += float(posting.units.number)
+
+        # 转换目标余额为浮点数
+        target_balance = float(number)
+
+        # 构建条目字符串
+        entry_str = ""
+
+        # 如果当前余额与目标余额不一致，添加Pad指令
+        if abs(current_balance - target_balance) > 0.001:  # 允许小数点后三位的误差
+            # Pad的日期应该是balance的前一天
+            pad_date = balance_date - timedelta(days=1)
+            entry_str = f"{pad_date.isoformat()} pad {account} {PAD_EQUITY_ACCOUNT}\n"
+
+        # 添加Balance断言
+        entry_str += f"{data['date']} balance {account} {number} {currency}\n"
     elif entry_type == 'Pad':
         # Pad类型条目
         if not all(k in data for k in ['source_account', 'target_account']):
@@ -318,6 +428,7 @@ def add_entry():
 
 
 @app.route('/api/entries/<path:entry_id>', methods=['PUT'])
+@jwt_required()
 def update_entry(entry_id):
     """更新现有的记账条目"""
     try:
@@ -428,6 +539,7 @@ def update_entry(entry_id):
 
 
 @app.route('/api/entries/<path:entry_id>', methods=['DELETE'])
+@jwt_required()
 def delete_entry(entry_id):
     """删除现有的记账条目"""
     try:
@@ -485,8 +597,9 @@ def delete_entry(entry_id):
 
 
 @app.route('/api/accounts', methods=['GET'])
+@jwt_required()
 def get_accounts():
-    """获取所有账户"""
+    """获取所有账户信息"""
     entries, errors, options = load_ledger()
 
     # 收集所有账户
@@ -500,8 +613,9 @@ def get_accounts():
 
 
 @app.route('/api/accounts/balances', methods=['GET'])
+@jwt_required()
 def get_account_balances():
-    """获取所有账户的余额信息（支持日期范围筛选）"""
+    """获取账户余额"""
     entries, errors, options = load_ledger()
     currency = options.get('operating_currency', 'CNY')
 
@@ -580,6 +694,7 @@ def get_account_balances():
 
 
 @app.route('/api/events', methods=['GET'])
+@jwt_required()
 def events():
     """SSE端点，用于实时通知账本更新"""
 

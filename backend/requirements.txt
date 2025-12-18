@@ -7,3 +7,5 @@ fava
 python-dotenv
 pandas
 plotly
+flask-bcrypt
+flask-jwt-extended

@@ -16,4 +16,8 @@ services:
       - ./backend/data:/app/backend/data  # 数据目录持久化
     environment:
       - TZ=Asia/Shanghai
+      - JWT_SECRET_KEY=your-secret-key-change-this-in-production
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin123
+      - ENABLE_REGISTRATION=true
     restart: unless-stopped

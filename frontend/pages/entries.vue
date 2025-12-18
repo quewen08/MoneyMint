@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-4xl mx-auto">
+  <div class="mx-auto">
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-2xl font-bold">记账记录</h2>
       <button @click="showAddModal = true" class="btn btn-primary">
