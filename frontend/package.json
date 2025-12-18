@@ -2,6 +2,23 @@
   "name": "frontend",
   "private": true,
   "type": "module",
+  "version": "0.0.1",
+  "license": "MIT",
+  "description": "MoneyMint Frontend",
+  "author": "Awen",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quewen08/MoneyMint.git"
+  },
+  "bugs": {
+    "url": "https://github.com/quewen08/MoneyMint/issues"
+  },
+  "keywords": [
+    "MoneyMint",
+    "Nuxt",
+    "Vue",
+    "TailwindCSS"
+  ],
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
