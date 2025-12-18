@@ -133,6 +133,12 @@
             >
               编辑
             </button>
+            <button
+              @click="openCopyModal({ ...entry, id: `${entry.meta?.filename}:${entry.meta?.lineno}` })"
+              class="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+            >
+              复制
+            </button>
           </div>
 
           <!-- 账户记录详情 -->
@@ -304,6 +310,18 @@ const handleRefreshData = () => {
 const openEditModal = (entry: any) => {
   editingEntry.value = entry;
   showEditModal.value = true;
+};
+
+// 打开复制模态框
+const openCopyModal = (entry: any) => {
+  // 创建一个新的条目对象，不包含原条目的ID和元数据
+  const copiedEntry = {
+    ...entry,
+    id: '', // 清空ID，使其成为新条目
+    date: new Date().toISOString().split('T')[0] // 默认使用当前日期
+  };
+  editingEntry.value = copiedEntry;
+  showAddModal.value = true; // 使用添加模态框而不是编辑模态框
 };
 
 // 关闭模态框

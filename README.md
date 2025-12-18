@@ -1,39 +1,42 @@
-# MoneyMint 记账系统
+# MoneyMint Accounting System
 
-基于 beancount 和 fava 的个人记账系统，包含后端服务和移动端友好的前端界面。
+A personal accounting system based on beancount and fava, with backend services and a mobile-friendly frontend interface.
 
-## 项目结构
+## Project Structure
 
 ```
 MoneyMint/
-├── backend/          # Python 后端服务
-│   ├── app/         # 应用代码
-│   ├── config/      # 配置文件
+├── backend/          # Python backend services
+│   ├── app/         # Application code
+│   ├── config/      # Configuration files
 │   └── requirements.txt
-├── frontend/         # Nuxt 前端项目
-│   ├── components/  # 组件
-│   ├── pages/       # 页面
+├── frontend/         # Nuxt frontend project
+│   ├── components/  # Components
+│   ├── pages/       # Pages
 │   └── nuxt.config.ts
 └── README.md
 ```
 
-## 技术栈
+## Technology Stack
 
-- **后端**: Python, Flask, Beancount, Fava
-- **前端**: Nuxt.js, Vue 3, Tailwind CSS
-- **数据库**: Beancount 账本文件 (纯文本)
+- **Backend**: Python, Flask, Beancount, Fava
+- **Frontend**: Nuxt.js, Vue 3, Tailwind CSS
+- **Database**: Beancount ledger files (plain text)
 
-## 功能特性
+## Features
 
-- 账本管理
-- 收支记录
-- 分类统计
-- 图表分析
-- 移动端友好
+- Ledger management
+- Income and expense records
+- Category statistics
+- Chart analysis
+- Mobile-friendly design
+- Transaction record copy function: quickly create similar transactions
+- Account filtering when adding transactions: easy to select target accounts when there are multiple accounts
+- View current account transaction records in account details: support date filtering and pagination
 
-## 安装与运行
+## Installation and Running
 
-### 后端
+### Backend
 
 ```bash
 cd backend
@@ -43,7 +46,7 @@ pip install -r requirements.txt
 python app/main.py
 ```
 
-### 前端
+### Frontend
 
 ```bash
 cd frontend

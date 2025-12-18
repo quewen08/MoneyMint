@@ -251,6 +251,112 @@
                 </div>
               </div>
             </div>
+            <!-- 交易记录部分 -->
+            <div class="pt-4 border-t border-gray-200">
+              <h4 class="text-lg font-semibold mb-4">交易记录</h4>
+              
+              <!-- 交易记录筛选 -->
+              <div class="flex flex-col md:flex-row gap-3 mb-4">
+                <div class="flex-1">
+                  <input
+                    v-model="accountEntriesDateRange.startDate"
+                    type="date"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                    placeholder="开始日期"
+                  />
+                </div>
+                <div class="flex-1">
+                  <input
+                    v-model="accountEntriesDateRange.endDate"
+                    type="date"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                    placeholder="结束日期"
+                  />
+                </div>
+                <button
+                  @click="loadAccountEntries"
+                  class="btn btn-primary whitespace-nowrap"
+                  :disabled="loadingAccountEntries"
+                >
+                  <span v-if="loadingAccountEntries" class="inline-block animate-spin rounded-full h-4 w-4 mr-2 border-b-2 border-white"></span>
+                  筛选
+                </button>
+                <button
+                  @click="clearAccountEntriesDateRange"
+                  class="btn btn-secondary whitespace-nowrap"
+                >
+                  清除
+                </button>
+              </div>
+              
+              <!-- 交易记录列表 -->
+              <div v-if="loadingAccountEntries" class="text-center py-4">
+                <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+              </div>
+              <div v-else-if="accountEntries.length === 0" class="text-center py-4 text-gray-500">
+                暂无交易记录
+              </div>
+              <div v-else class="space-y-2 max-h-[300px] overflow-y-auto">
+                <div
+                  v-for="entry in accountEntries"
+                  :key="JSON.stringify(entry)"
+                  class="border border-gray-200 rounded-lg p-3 hover:bg-gray-50"
+                >
+                  <div class="flex justify-between items-start">
+                    <div class="font-medium text-gray-800">
+                      {{ entry.date }}
+                      <span v-if="entry.narration" class="ml-2 text-sm">{{ entry.narration }}</span>
+                    </div>
+                    <div class="text-sm text-gray-500">{{ entry.type }}</div>
+                  </div>
+                  <div v-if="entry.postings" class="mt-2 space-y-1">
+                    <div
+                      v-for="(posting, idx) in entry.postings"
+                      :key="idx"
+                      class="flex justify-between items-center text-sm"
+                    >
+                      <div class="font-medium" :class="posting.account === selectedAccount.name ? 'text-primary' : ''">
+                        {{ posting.account }}
+                      </div>
+                      <div v-if="posting.units" class="font-medium" :class="posting.units.number >= 0 ? 'text-green-600' : 'text-red-600'">
+                        {{ posting.units.number }} {{ posting.units.currency }}
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else-if="entry.account" class="mt-2 text-sm text-gray-700">
+                    账户: {{ entry.account }}
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 分页 -->
+              <div v-if="accountEntriesPagination.total > 0" class="mt-4 flex justify-between items-center">
+                <div class="text-sm text-gray-500">
+                  共 {{ accountEntriesPagination.total }} 条记录
+                </div>
+                <div class="flex gap-2">
+                  <button
+                    @click="loadAccountEntries(accountEntriesPagination.page - 1)"
+                    class="btn btn-sm btn-secondary"
+                    :disabled="accountEntriesPagination.page === 1 || loadingAccountEntries"
+                  >
+                    上一页
+                  </button>
+                  <span class="text-sm px-2">
+                    第 {{ accountEntriesPagination.page }} / {{ accountEntriesPagination.pages }} 页
+                  </span>
+                  <button
+                    @click="loadAccountEntries(accountEntriesPagination.page + 1)"
+                    class="btn btn-sm btn-secondary"
+                    :disabled="accountEntriesPagination.page === accountEntriesPagination.pages || loadingAccountEntries"
+                  >
+                    下一页
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 操作按钮 -->
             <div class="pt-4 border-t border-gray-200 space-y-2">
               <button
                 @click="showSetBalanceModal = true"
@@ -554,7 +660,7 @@
 import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useApi } from "~/composables/useApi";
 
-const { accounts } = useApi();
+const { accounts, getEntries } = useApi();
 
 const loading = ref(true);
 const submitting = ref(false);
@@ -564,6 +670,12 @@ const showAddAccountModal = ref(false);
 const showCloseAccountModal = ref(false);
 const showSetBalanceModal = ref(false);
 const dateRange = ref({ startDate: "", endDate: "" });
+
+// 账户交易记录相关变量
+const loadingAccountEntries = ref(false);
+const accountEntries = ref<any[]>([]);
+const accountEntriesPagination = ref({ total: 0, page: 1, pages: 0, page_size: 10 });
+const accountEntriesDateRange = ref({ startDate: "", endDate: "" });
 
 // 新增账户表单数据
 const newAccount = ref({
@@ -654,8 +766,49 @@ const formatCurrency = (amount: number): string => {
 };
 
 // 显示账户详情
-const showAccountDetails = (account: any) => {
+const showAccountDetails = async (account: any) => {
   selectedAccount.value = account;
+  // 加载该账户的交易记录
+  await loadAccountEntries();
+};
+
+// 加载账户交易记录
+const loadAccountEntries = async (page = 1) => {
+  if (!selectedAccount.value) return;
+  
+  try {
+    loadingAccountEntries.value = true;
+    accountEntriesPagination.value.page = page;
+    
+    const params: any = {
+      page: page,
+      page_size: accountEntriesPagination.value.page_size,
+      account: selectedAccount.value.name
+    };
+    
+    // 添加日期筛选
+    if (accountEntriesDateRange.value.startDate) {
+      params.start_date = accountEntriesDateRange.value.startDate;
+    }
+    if (accountEntriesDateRange.value.endDate) {
+      params.end_date = accountEntriesDateRange.value.endDate;
+    }
+    
+    const response = await getEntries(params);
+    accountEntries.value = response.entries;
+    accountEntriesPagination.value.total = response.pagination.total;
+    accountEntriesPagination.value.pages = response.pagination.pages;
+  } catch (error) {
+    console.error("Error loading account entries:", error);
+  } finally {
+    loadingAccountEntries.value = false;
+  }
+};
+
+// 清除账户交易记录日期筛选
+const clearAccountEntriesDateRange = async () => {
+  accountEntriesDateRange.value = { startDate: "", endDate: "" };
+  await loadAccountEntries();
 };
 
 // 处理新增账户

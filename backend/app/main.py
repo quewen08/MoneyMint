@@ -211,12 +211,13 @@ def get_ledger():
 @app.route('/api/entries', methods=['GET'])
 @jwt_required()
 def get_entries():
-    """获取所有记账条目（支持时间段筛选、分页和排序）"""
+    """获取所有记账条目（支持时间段筛选、账户筛选、分页和排序）"""
     entries, errors, options = load_ledger()
 
     # 从请求参数中获取筛选条件
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
+    account = request.args.get('account')  # 添加账户筛选条件
     page = int(request.args.get('page', 1))
     page_size = int(request.args.get('page_size', 20))
     sort = request.args.get('sort', 'date')  # 默认按日期排序
@@ -257,7 +258,19 @@ def get_entries():
             if hasattr(entry, 'account'):
                 entry_data['account'] = entry.account
 
-            entries_data.append(entry_data)
+            # 账户筛选
+            if account:
+                # 检查Open/Close/Balance类型的账户
+                if hasattr(entry, 'account') and entry.account == account:
+                    entries_data.append(entry_data)
+                # 检查Transaction类型的记账行
+                elif hasattr(entry, 'postings'):
+                    for posting in entry.postings:
+                        if posting.account == account:
+                            entries_data.append(entry_data)
+                            break
+            else:
+                entries_data.append(entry_data)
 
     # 排序
     entries_data.sort(key=lambda x: x[sort] if sort in x else '', reverse=(order == 'desc'))

@@ -111,6 +111,13 @@
               :key="index"
               class="space-y-2 mb-3"
             >
+              <!-- 账户搜索框 -->
+              <input
+                type="text"
+                v-model="posting.accountSearch"
+                placeholder="搜索账户..."
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+              />
               <div class="grid grid-cols-3 gap-2">
                 <select
                   v-model="posting.account"
@@ -119,7 +126,7 @@
                 >
                   <option value="">选择账户</option>
                   <option
-                    v-for="account in accountsStore.list"
+                    v-for="account in filteredAccounts(posting.accountSearch)"
                     :key="account"
                     :value="account"
                   >
@@ -203,8 +210,8 @@ const formData = reactive({
   narration: "",
   tagsInput: "",
   postings: [
-    { account: "", amount: "" },
-    { account: "", amount: "" },
+    { account: "", amount: "", accountSearch: "" },
+    { account: "", amount: "", accountSearch: "" },
   ],
 });
 
@@ -261,6 +268,7 @@ const loadEntryToForm = (entry: EntryWithId) => {
     return {
       account: p.account,
       amount: amount,
+      accountSearch: "", // 初始化搜索字段
     };
   });
 };
@@ -317,8 +325,19 @@ const handleSubmit = async () => {
   }
 };
 
+// 添加记账行
 const addPosting = () => {
-  formData.postings.push({ account: "", amount: "" });
+  formData.postings.push({ account: "", amount: "", accountSearch: "" });
+};
+
+// 筛选账户列表
+const filteredAccounts = (searchTerm: string) => {
+  if (!searchTerm.trim()) {
+    return accountsStore.list;
+  }
+  return accountsStore.list.filter(account => 
+    account.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 };
 
 const removePosting = (index: number) => {
