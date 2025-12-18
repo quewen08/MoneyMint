@@ -5,11 +5,18 @@ export default defineNuxtConfig({
   modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
   runtimeConfig: {
     public: {
-      apiBaseUrl: 'http://localhost:5000/api'
+      apiBaseUrl: '/api'
     }
   },
   css: ['~/assets/css/main.css'],
   ssr: false, // 开启服务端渲染
+  nitro: {
+    routeRules: {
+      '/api/**': {
+        proxy: 'http://localhost:5000/api/**'
+      }
+    }
+  },
   app: {
     head: {
       title: 'MoneyMint 记账',

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  money-mint:
+    # 编译前端和后端，生成静态文件，可不用
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # 镜像名称
+    image: quewen/money-mint:latest
+    # 容器名称
+    container_name: money-mint-app
+    ports:
+      - "3000:3000"  # 前端服务端口
+    volumes:
+      - ./backend/data:/app/backend/data  # 数据目录持久化
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
