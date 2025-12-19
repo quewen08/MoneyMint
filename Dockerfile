@@ -138,9 +138,7 @@ RUN echo "LEDGER_FILE=/app/backend/data/main.bean" > ./backend/.env
 RUN VERSION=$(cat /app/backend/app/version.py | grep -E '^__version__' | cut -d"'" -f2) && echo "APP_VERSION=$VERSION" > /app/.env
 
 # 启动脚本（使用ash兼容语法）
-RUN printf '#!/bin/sh \n
-cd /app/backend && . /app/backend/.venv/bin/activate && python run.py &\n
-cd /app/frontend && pm2-runtime ecosystem.config.cjs' > /app/start.sh && chmod +x /app/start.sh
+RUN printf '#!/bin/sh \r\ncd /app/backend && . /app/backend/.venv/bin/activate && python run.py &\r\ncd /app/frontend && pm2-runtime ecosystem.config.cjs' > /app/start.sh && chmod +x /app/start.sh
 
 # 检查启动脚本是否存在并具有执行权限
 RUN ls -la /app/start.sh && cat /app/start.sh
