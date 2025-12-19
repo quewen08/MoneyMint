@@ -153,7 +153,7 @@
             </button>
             <button
               @click="$router.push('/stats')"
-              class="btn btn-info flex flex-col items-center p-6"
+              class="btn btn-secondary flex flex-col items-center p-6"
             >
               <span class="text-3xl mb-2">📊</span>
               <span>查看统计</span>
@@ -420,7 +420,11 @@ const refreshData = async () => {
   try {
     loading.value = true;
     ledger.value = await getLedger();
-    const result = await getEntries();
+    // 因为仪表盘需要获取近30天的交易记录，所以这里限制获取最近30天的交易记录
+    const result = await getEntries({
+      start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      end_date: new Date().toISOString(),
+    });
     // 兼容新旧API格式
     entries.value = result.entries ? result.entries : result;
 

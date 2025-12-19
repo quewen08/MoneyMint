@@ -5,7 +5,7 @@
       <div class="flex gap-3">
         <button
           @click="showAddAccountModal = true"
-          class="btn btn-primary justify-items-center"
+          class="btn btn-primary flex items-center justify-items-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -25,7 +25,7 @@
         </button>
         <button
           @click="refreshData"
-          class="btn btn-secondary justify-items-center"
+          class="btn btn-secondary flex items-center justify-items-center"
           :disabled="loading"
         >
           <svg
@@ -272,7 +272,7 @@
                   />
                 </div>
                 <button
-                  @click="loadAccountEntries"
+                  @click="loadAccountEntries(accountEntriesPagination.page)"
                   class="btn btn-primary whitespace-nowrap"
                   :disabled="loadingAccountEntries"
                 >
@@ -767,8 +767,10 @@ const formatCurrency = (amount: number): string => {
 // 显示账户详情
 const showAccountDetails = async (account: any) => {
   selectedAccount.value = account;
+  // 切换账户时，重置分页状态为第一页
+  accountEntriesPagination.value.page = 1;
   // 加载该账户的交易记录
-  await loadAccountEntries();
+  await loadAccountEntries(1);
 };
 
 // 加载账户交易记录
@@ -777,7 +779,6 @@ const loadAccountEntries = async (page = 1) => {
   
   try {
     loadingAccountEntries.value = true;
-    accountEntriesPagination.value.page = page;
     
     const params: any = {
       page: page,
@@ -795,8 +796,13 @@ const loadAccountEntries = async (page = 1) => {
     
     const response = await getEntries(params);
     accountEntries.value = response.entries;
-    accountEntriesPagination.value.total = response.pagination.total;
-    accountEntriesPagination.value.pages = response.pagination.pages;
+    // 更新分页信息，包括当前页码
+    accountEntriesPagination.value = {
+      ...accountEntriesPagination.value,
+      page: page,  // 确保当前页码与请求的页码一致
+      total: response.pagination.total,
+      pages: response.pagination.pages
+    };
   } catch (error) {
     console.error("Error loading account entries:", error);
   } finally {

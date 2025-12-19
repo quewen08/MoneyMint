@@ -3,7 +3,6 @@ flask
 flask-cors
 beancount
 beanquery
-fava
 python-dotenv
 pandas
 plotly

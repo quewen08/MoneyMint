@@ -41,7 +41,23 @@ def get_entries():
                 if end_date and entry_date > datetime.fromisoformat(end_date).date():
                     continue
 
-            entry_data = {'type': type(entry).__name__, 'date': entry.date.isoformat(), 'meta': dict(entry.meta)}
+            # 递归函数：确保字典中所有键都是字符串类型
+            def ensure_string_keys(d):
+                if isinstance(d, dict):
+                    result = {}
+                    for k, v in d.items():
+                        result[str(k)] = ensure_string_keys(v)
+                    return result
+                elif isinstance(d, (list, tuple)):
+                    return [ensure_string_keys(item) for item in d]
+                else:
+                    return d
+
+            # 确保meta字段的所有键都是字符串类型，避免JSON序列化错误
+            meta_dict = {}
+            if hasattr(entry, 'meta'):
+                meta_dict = ensure_string_keys(dict(entry.meta))
+            entry_data = {'type': type(entry).__name__, 'date': entry.date.isoformat(), 'meta': meta_dict}
 
             # 添加交易描述
             if hasattr(entry, 'narration'):
