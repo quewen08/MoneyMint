@@ -134,8 +134,13 @@ RUN mkdir -p ./backend/data
 # 创建环境变量文件
 RUN echo "LEDGER_FILE=/app/backend/data/main.bean" > ./backend/.env
 
+# 提取版本号并设置为环境变量
+RUN VERSION=$(cat /app/backend/app/version.py | grep -E '^__version__' | cut -d"'" -f2) && echo "APP_VERSION=$VERSION" > /app/.env
+
 # 启动脚本（使用ash兼容语法）
-RUN printf '#!/bin/sh\ncd /app/backend && . /app/backend/.venv/bin/activate && python app/main.py &\ncd /app/frontend && pm2-runtime ecosystem.config.cjs' > /app/start.sh && chmod +x /app/start.sh
+RUN printf '#!/bin/sh
+cd /app/backend && . /app/backend/.venv/bin/activate && python run.py &
+cd /app/frontend && pm2-runtime ecosystem.config.cjs' > /app/start.sh && chmod +x /app/start.sh
 
 # 检查启动脚本是否存在并具有执行权限
 RUN ls -la /app/start.sh && cat /app/start.sh

@@ -1,7 +1,7 @@
 <template>
   <div class="mx-auto">
     <div class="flex justify-between items-center mb-6">
-      <h2 class="text-2xl font-bold">账户管理</h2>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white">账户管理</h2>
       <div class="flex gap-3">
         <button
           @click="showAddAccountModal = true"
@@ -51,23 +51,23 @@
     <div class="card p-4 mb-6">
       <div class="flex flex-col md:flex-row gap-4 items-center">
         <div class="flex-1">
-          <label class="block text-sm font-medium text-gray-700 mb-1"
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >开始日期</label
           >
           <input
             v-model="dateRange.startDate"
             type="date"
-            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           />
         </div>
         <div class="flex-1">
-          <label class="block text-sm font-medium text-gray-700 mb-1"
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >结束日期</label
           >
           <input
             v-model="dateRange.endDate"
             type="date"
-            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           />
         </div>
         <div class="flex gap-3 pt-4 md:pt-0">
@@ -87,21 +87,21 @@
 
     <!-- 账户统计信息 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div class="card p-4 bg-blue-50">
-        <div class="text-sm text-blue-700 mb-1">总资产</div>
-        <div class="text-2xl font-bold text-blue-900">
+      <div class="card p-4 bg-blue-50 dark:bg-blue-900/30">
+        <div class="text-sm text-blue-700 dark:text-blue-300 mb-1">总资产</div>
+        <div class="text-2xl font-bold text-blue-900 dark:text-blue-100">
           {{ formatCurrency(totalAssets) }}
         </div>
       </div>
-      <div class="card p-4 bg-red-50">
-        <div class="text-sm text-red-700 mb-1">总负债</div>
-        <div class="text-2xl font-bold text-red-900">
+      <div class="card p-4 bg-red-50 dark:bg-red-900/30">
+        <div class="text-sm text-red-700 dark:text-red-300 mb-1">总负债</div>
+        <div class="text-2xl font-bold text-red-900 dark:text-red-100">
           {{ formatCurrency(totalLiabilities) }}
         </div>
       </div>
-      <div class="card p-4 bg-green-50">
-        <div class="text-sm text-green-700 mb-1">净资产</div>
-        <div class="text-2xl font-bold text-green-900">
+      <div class="card p-4 bg-green-50 dark:bg-green-900/30">
+        <div class="text-sm text-green-700 dark:text-green-300 mb-1">净资产</div>
+        <div class="text-2xl font-bold text-green-900 dark:text-green-100">
           {{ formatCurrency(totalNetWorth) }}
         </div>
       </div>
@@ -114,10 +114,8 @@
         ></div>
       </div>
 
-      <div
-        v-else-if="accountList.length === 0"
-        class="text-center py-8 text-gray-500"
-      >
+      <div v-else-if="accountList.length === 0"
+        class="text-center py-8 text-gray-500 dark:text-gray-400">
         <p>暂无账户</p>
       </div>
 
@@ -125,10 +123,10 @@
         <!-- 按账户类型分组显示 -->
         <div v-for="(accountGroup, type) in groupedAccounts" :key="type">
           <div class="flex justify-between items-center mb-3">
-            <h3 class="text-lg font-semibold text-gray-700">
+            <h3 class="text-lg font-semibold text-gray-700 dark:text-white">
               {{ getAccountTypeName(type) }}
             </h3>
-            <span class="text-sm text-gray-500">
+            <span class="text-sm text-gray-500 dark:text-gray-400">
               {{ formatCurrency(getGroupTotal(type)) }}
             </span>
           </div>
@@ -136,7 +134,7 @@
             <div
               v-for="account in accountGroup"
               :key="account.name"
-              class="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800/70 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
               @click="showAccountDetails(account)"
             >
               <div class="flex items-center">
@@ -189,14 +187,14 @@
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
       <div
-        class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
+        class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto transition-colors"
       >
         <div class="p-6">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xl font-bold">账户详情</h3>
+            <h3 class="text-xl font-bold dark:text-white">账户详情</h3>
             <button
               @click="selectedAccount = null"
-              class="text-gray-500 hover:text-gray-700"
+              class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -409,13 +407,13 @@
       v-if="showAddAccountModal"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
-      <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 transition-colors duration-200">
         <div class="p-6">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xl font-bold">新增账户</h3>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white">新增账户</h3>
             <button
               @click="showAddAccountModal = false"
-              class="text-gray-500 hover:text-gray-700"
+              class="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 transition-colors"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -436,48 +434,48 @@
           <form @submit.prevent="handleAddAccount">
             <div class="space-y-4">
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1"
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                   >账户名称</label
                 >
                 <input
                   v-model="newAccount.account"
                   type="text"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                  class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
                   placeholder="例如：Assets:Cash"
                   required
                 />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1"
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                   >账户说明</label
                 >
                 <input
                   v-model="newAccount.note"
                   type="text"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                  class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
                   placeholder="例如：钱包现金"
                 />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1"
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                   >货币单位</label
                 >
                 <input
                   v-model="newAccount.currency"
                   type="text"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                  class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
                   placeholder="例如：CNY"
                   required
                 />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1"
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                   >日期</label
                 >
                 <input
                   v-model="newAccount.date"
                   type="date"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                  class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
                   required
                 />
               </div>
@@ -505,13 +503,13 @@
       v-if="showCloseAccountModal"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
-      <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 transition-colors duration-200">
         <div class="p-6">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xl font-bold">关闭账户</h3>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white">关闭账户</h3>
             <button
               @click="showCloseAccountModal = false"
-              class="text-gray-500 hover:text-gray-700"
+              class="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 transition-colors"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -530,18 +528,18 @@
             </button>
           </div>
           <div class="space-y-4">
-            <div class="text-sm text-gray-600">
+            <div class="text-sm text-gray-600 dark:text-gray-300">
               确定要关闭账户
               <span class="font-medium">{{ selectedAccount?.name }}</span> 吗？
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1"
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >日期</label
               >
               <input
                 v-model="closeAccountData.date"
                 type="date"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
                 required
               />
             </div>
@@ -658,9 +656,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from "vue";
-import { useApi } from "~/composables/useApi";
+import { useNuxtApp } from '#app';
 
-const { accounts, getEntries } = useApi();
+const { $api } = useNuxtApp();
+const { accounts, getEntries } = $api;
 
 const loading = ref(true);
 const submitting = ref(false);

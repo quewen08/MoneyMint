@@ -1,20 +1,20 @@
 <template>
   <!-- 登录页面保持独立布局，不使用默认布局 -->
   <NuxtLayout :name="false">
-    <div class="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
-        <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">
+    <div class="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+      <div class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md">
+        <h1 class="text-3xl font-bold text-center text-gray-800 dark:text-white mb-8">
           MoneyMint
         </h1>
 
         <!-- 选项卡导航 -->
-        <div class="flex border-b mb-6">
+        <div class="flex border-b border-gray-200 dark:border-gray-700 mb-6">
           <button
             :class="[
               'flex-1 py-2 px-4 font-medium text-sm',
               activeTab === 'login'
-                ? 'border-b-2 border-blue-500 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700',
+                ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300',
             ]"
             @click="activeTab = 'login'"
           >
@@ -25,8 +25,8 @@
             :class="[
               'flex-1 py-2 px-4 font-medium text-sm',
               activeTab === 'register'
-                ? 'border-b-2 border-blue-500 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700',
+                ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300',
             ]"
             @click="activeTab = 'register'"
           >
@@ -40,7 +40,7 @@
             <div>
               <label
                 for="login-username"
-                class="block text-sm font-medium text-gray-700 mb-1"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >用户名</label
               >
               <input
@@ -48,7 +48,7 @@
                 id="login-username"
                 v-model="loginForm.username"
                 required
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 placeholder="请输入用户名"
               />
             </div>
@@ -56,7 +56,7 @@
             <div>
               <label
                 for="login-password"
-                class="block text-sm font-medium text-gray-700 mb-1"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >密码</label
               >
               <input
@@ -64,14 +64,14 @@
                 id="login-password"
                 v-model="loginForm.password"
                 required
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 placeholder="请输入密码"
               />
             </div>
 
             <div
               v-if="error"
-              class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md"
+              class="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-md"
             >
               {{ error }}
             </div>
@@ -92,7 +92,7 @@
             <div>
               <label
                 for="register-username"
-                class="block text-sm font-medium text-gray-700 mb-1"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >用户名</label
               >
               <input
@@ -100,7 +100,7 @@
                 id="register-username"
                 v-model="registerForm.username"
                 required
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 placeholder="请输入用户名"
               />
             </div>
@@ -108,7 +108,7 @@
             <div>
               <label
                 for="register-password"
-                class="block text-sm font-medium text-gray-700 mb-1"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >密码</label
               >
               <input
@@ -117,7 +117,7 @@
                 v-model="registerForm.password"
                 required
                 minlength="6"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 placeholder="请输入至少6位密码"
               />
             </div>
@@ -125,7 +125,7 @@
             <div>
               <label
                 for="register-confirm-password"
-                class="block text-sm font-medium text-gray-700 mb-1"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >确认密码</label
               >
               <input
@@ -133,14 +133,14 @@
                 id="register-confirm-password"
                 v-model="registerForm.confirmPassword"
                 required
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 placeholder="请再次输入密码"
               />
             </div>
 
             <div
               v-if="error"
-              class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md"
+              class="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-md"
             >
               {{ error }}
             </div>
@@ -162,10 +162,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { useApi } from "~/composables/useApi";
+import { useNuxtApp } from '#app';
 
 const router = useRouter();
-const api = useApi();
+const { $api } = useNuxtApp();
 
 // 注册状态控制
 const showRegisterTab = ref(true);
@@ -190,7 +190,7 @@ const registerForm = ref({
 // 检查注册功能是否可用
 const checkRegistrationAvailability = async () => {
   try {
-    const status = await api.checkRegistrationStatus();
+    const status = await $api.checkRegistrationStatus();
     showRegisterTab.value = status.enabled;
     // 如果注册功能关闭且当前在注册标签页，切换到登录标签页
     if (!status.enabled && activeTab.value === "register") {
@@ -217,7 +217,7 @@ const handleLogin = async () => {
   error.value = "";
 
   try {
-    await api.login(loginForm.value.username, loginForm.value.password);
+    await $api.login(loginForm.value.username, loginForm.value.password);
     await router.push("/");
   } catch (err: any) {
     error.value = err.message || "登录失败，请检查用户名和密码";
@@ -238,7 +238,7 @@ const handleRegister = async () => {
   }
 
   try {
-    await api.register(
+    await $api.register(
       registerForm.value.username,
       registerForm.value.password
     );
@@ -259,7 +259,7 @@ const handleRegister = async () => {
 };
 
 // 如果已经登录，跳转到首页
-if (api.user.value) {
+if ($api.user.value) {
   router.push("/");
 }
 </script>

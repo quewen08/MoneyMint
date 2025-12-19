@@ -15,9 +15,12 @@ services:
     volumes:
       - ./backend/data:/app/backend/data  # 数据目录持久化
     environment:
-      - TZ=Asia/Shanghai
-      - JWT_SECRET_KEY=your-secret-key-change-this-in-production
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=admin123
-      - ENABLE_REGISTRATION=true
+      - TZ=Asia/Shanghai # 时区设置
+      - LEDGER_FILE=data/main.bean # 账本文件路径
+      - FLASK_ENV=production # Flask 环境
+      - JWT_SECRET_KEY=your-secret-key-change-this-in-production # JWT 密钥
+      - ADMIN_USERNAME=admin # 管理员用户名
+      - ADMIN_PASSWORD=admin123 # 管理员密码
+      - ENABLE_REGISTRATION=true # 是否启用注册
+      - PAD_EQUITY_ACCOUNT=Equity:Opening-Balances # 填充资产账户
     restart: unless-stopped

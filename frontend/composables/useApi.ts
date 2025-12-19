@@ -1,17 +1,64 @@
+import { watch } from 'vue'
+
 export const useApi = () => {
   const config = useRuntimeConfig()
   const apiBaseUrl = config.public.apiBaseUrl
+  // 使用全局唯一的状态，确保多个useApi实例共享同一个状态
   const authToken = useState<string | null>('authToken', () => null)
   const user = useState<{ username: string; role: string } | null>('user', () => null)
 
+  // 检查localStorage可用性
+  const isLocalStorageAvailable = () => {
+    try {
+      const test = '__localStorage_test__'
+      localStorage.setItem(test, test)
+      localStorage.removeItem(test)
+      return true
+    } catch (e) {
+      console.warn('localStorage not available:', e)
+      return false
+    }
+  }
+
   // 从localStorage恢复登录状态
-  if (process.client) {
+  if (process.client && isLocalStorageAvailable()) {
     const savedToken = localStorage.getItem('authToken')
     const savedUser = localStorage.getItem('user')
     if (savedToken && savedUser) {
-      authToken.value = savedToken
-      user.value = JSON.parse(savedUser)
+      // 只有当值不同时才更新，避免不必要的watch触发
+      if (authToken.value !== savedToken) {
+        authToken.value = savedToken
+      }
+      if (user.value?.username !== JSON.parse(savedUser).username) {
+        user.value = JSON.parse(savedUser)
+      }
+    } else {
+      // 清除状态，确保同步
+      authToken.value = null
+      user.value = null
     }
+  }
+
+  // 监听authToken变化，同步到localStorage
+  if (process.client && isLocalStorageAvailable()) {
+    watch(authToken, (newValue) => {
+      console.log('authToken changed:', newValue)
+      if (newValue) {
+        localStorage.setItem('authToken', newValue)
+      } else {
+        localStorage.removeItem('authToken')
+      }
+    })
+
+    // 监听user变化，同步到localStorage
+    watch(user, (newValue) => {
+      console.log('user changed:', newValue)
+      if (newValue) {
+        localStorage.setItem('user', JSON.stringify(newValue))
+      } else {
+        localStorage.removeItem('user')
+      }
+    })
   }
 
   const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
@@ -32,6 +79,26 @@ export const useApi = () => {
       })
 
       if (!response.ok) {
+        // 处理401未授权错误
+        if (response.status === 401) {
+          // 清除认证信息
+          authToken.value = null
+          user.value = null
+
+          // 持久化清除
+          if (process.client && isLocalStorageAvailable()) {
+            localStorage.removeItem('authToken')
+            localStorage.removeItem('user')
+          }
+
+          // 重定向到登录页面
+          if (process.client) {
+            window.location.href = '/login'
+          }
+
+          throw new Error('Authentication token expired or invalid')
+        }
+
         const error = await response.json().catch(() => ({
           message: 'Unknown error occurred'
         }))
@@ -52,17 +119,17 @@ export const useApi = () => {
         method: 'POST',
         body: JSON.stringify({ username, password })
       })
-      
+
       // 保存认证信息
       authToken.value = data.access_token
       user.value = { username: data.username, role: data.role }
-      
+
       // 持久化到localStorage
-      if (process.client) {
+      if (process.client && isLocalStorageAvailable()) {
         localStorage.setItem('authToken', data.access_token)
         localStorage.setItem('user', JSON.stringify({ username: data.username, role: data.role }))
       }
-      
+
       return data
     } catch (error) {
       console.error('Login failed:', error)
@@ -97,12 +164,15 @@ export const useApi = () => {
     // 清除认证信息
     authToken.value = null
     user.value = null
-    
+
     // 从localStorage删除
-    if (process.client) {
+    if (process.client && isLocalStorageAvailable()) {
       localStorage.removeItem('authToken')
       localStorage.removeItem('user')
-      // 重定向到登录页面
+    }
+
+    // 重定向到登录页面
+    if (process.client) {
       window.location.href = '/login'
     }
   }
@@ -111,16 +181,16 @@ export const useApi = () => {
     // 认证状态
     authToken,
     user,
-    
+
     // 认证函数
     login,
     register,
     checkRegistrationStatus,
     logout,
-    
+
     // Ledger endpoints
     getLedger: () => fetchApi('/ledger'),
-    getEntries: (params: {start_date?: string, end_date?: string, account?: string, page?: number, page_size?: number, sort?: string, order?: string} = {}) => {
+    getEntries: (params: { start_date?: string, end_date?: string, account?: string, page?: number, page_size?: number, sort?: string, order?: string } = {}) => {
       // 构建查询参数
       const queryParams = new URLSearchParams()
       if (params.start_date) queryParams.append('start_date', params.start_date)
@@ -130,7 +200,7 @@ export const useApi = () => {
       if (params.page_size) queryParams.append('page_size', params.page_size.toString())
       if (params.sort) queryParams.append('sort', params.sort)
       if (params.order) queryParams.append('order', params.order)
-      
+
       const endpoint = `/entries?${queryParams.toString()}`
       return fetchApi(endpoint)
     },
@@ -158,11 +228,11 @@ export const useApi = () => {
     // Accounts endpoint
     accounts: {
       getAccounts: () => fetchApi('/accounts'),
-      getAccountBalances: (params: {start_date?: string, end_date?: string} = {}) => {
+      getAccountBalances: (params: { start_date?: string, end_date?: string } = {}) => {
         const queryParams = new URLSearchParams()
         if (params.start_date) queryParams.append('start_date', params.start_date)
         if (params.end_date) queryParams.append('end_date', params.end_date)
-        
+
         const endpoint = `/accounts/balances?${queryParams.toString()}`
         return fetchApi(endpoint)
       },

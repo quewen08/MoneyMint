@@ -2,13 +2,18 @@
 export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: true },
-  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
+  modules: [
+    '@nuxtjs/tailwindcss', 
+    '@pinia/nuxt',
+  ],
   runtimeConfig: {
     public: {
       apiBaseUrl: '/api'
     }
   },
-  css: ['~/assets/css/main.css'],
+  css: [
+    '~/assets/css/main.css',
+  ],
   ssr: false, // 开启服务端渲染
   nitro: {
     routeRules: {
@@ -17,13 +22,17 @@ export default defineNuxtConfig({
       }
     }
   },
+  devServer: {
+    port: 3000,
+    host: '0.0.0.0'
+  },
   app: {
     head: {
       title: 'MoneyMint 记账',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'description', content: '个人记账系统' }
+        { name: 'description', content: 'MoneyMint 是一个基于 Vue 3 和 Nuxt 3 的个人记账系统' }
       ]
     }
   }

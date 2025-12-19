@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { useApi } from '~/composables/useApi'
+import { useNuxtApp } from '#app'
 
 export const useAccountsStore = defineStore('accounts', {
   state: () => ({
@@ -21,8 +21,8 @@ export const useAccountsStore = defineStore('accounts', {
         this.loading = true
         this.error = null
         
-        const { accounts } = useApi()
-        const accountList = await accounts.getAccounts()
+        const { $api } = useNuxtApp()
+        const accountList = await $api.accounts.getAccounts()
         
         this.list = accountList
         return accountList

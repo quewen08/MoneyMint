@@ -1,20 +1,29 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { useRuntimeConfig } from '#app'
-import { useApi } from './useApi'
+import { useRuntimeConfig, useNuxtApp } from '#app'
 
-export const useSse = () => {
+// 创建全局单例变量
+let sseInstance: ReturnType<typeof createSseInstance> | null = null
+
+const createSseInstance = () => {
     const isConnected = ref(false)
+    const isConnecting = ref(false) // 添加连接中标志，防止并发连接
     const events = ref([] as any[])
     let source: Response | null = null
     let reader: ReadableStreamDefaultReader | undefined = undefined
     let decoder: TextDecoder | null = null
     let reconnectTimeout: number | null = null
-    const { user, authToken } = useApi()
+    const { $api } = useNuxtApp()
+    const { user, authToken } = $api
 
     const connect = () => {
-        if (isConnected.value) {
+        // 如果已经连接或正在连接，则不执行
+        if (isConnected.value || isConnecting.value) {
             return
         }
+        
+        // 设置连接中标志
+        isConnecting.value = true
+        
 
         const config = useRuntimeConfig()
         const apiBaseUrl = config.public.apiBaseUrl
@@ -30,6 +39,7 @@ export const useSse = () => {
                 credentials: 'include'
             }).then(async (response) => {
                 if (!response.ok) {
+                    isConnecting.value = false // 连接失败，重置连接中标志
                     throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`)
                 }
 
@@ -42,6 +52,7 @@ export const useSse = () => {
                 }
 
                 isConnected.value = true
+                isConnecting.value = false // 连接成功，重置连接中标志
                 console.log('SSE connected')
 
                 // 开始读取SSE事件
@@ -55,6 +66,7 @@ export const useSse = () => {
         } catch (error) {
             console.error('Failed to connect to SSE:', error)
             isConnected.value = false
+            isConnecting.value = false // 连接失败，重置连接中标志
             // 尝试重连
             scheduleReconnect()
         }
@@ -129,7 +141,7 @@ export const useSse = () => {
 
         if (reader) {
             reader.cancel()
-            reader = null
+            reader = undefined
         }
 
         source = null
@@ -156,9 +168,7 @@ export const useSse = () => {
         connect()
     })
 
-    onUnmounted(() => {
-        disconnect()
-    })
+    // 组件卸载时不要断开连接，因为单例需要在整个应用生命周期中保持
 
     return {
         isConnected,
@@ -166,4 +176,14 @@ export const useSse = () => {
         connect,
         disconnect
     }
+}
+
+export const useSse = () => {
+    // 如果还没有创建实例，则创建一个新实例
+    if (!sseInstance) {
+        sseInstance = createSseInstance()
+    }
+    
+    // 返回单例实例
+    return sseInstance
 }
