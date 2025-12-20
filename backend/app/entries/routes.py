@@ -147,7 +147,7 @@ def add_entry():
         if not data.get('account'):
             return jsonify({'error': 'Account is required for Open/Close entries'}), 400
 
-        entry_str = f"{data['date']} {entry_type} {data['account']}\n"
+        entry_str = f"{data['date']} {entry_type.lower()} {data['account']}\n"
 
         # 添加货币
         if data.get('currency'):

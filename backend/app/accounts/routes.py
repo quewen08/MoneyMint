@@ -14,14 +14,21 @@ def get_accounts():
     """获取所有账户信息"""
     entries, errors, options = load_ledger()
 
-    # 收集所有账户
-    accounts = set()
+    # 收集所有Open和Close的账户
+    open_accounts = set()
+    closed_accounts = set()
+    
     for entry in entries:
-        if hasattr(entry, 'postings'):
-            for posting in entry.postings:
-                accounts.add(posting.account)
+        if hasattr(entry, 'account'):
+            if type(entry).__name__ == 'Open':
+                open_accounts.add(entry.account)
+            elif type(entry).__name__ == 'Close':
+                closed_accounts.add(entry.account)
+    
+    # 只返回未关闭的账户
+    active_accounts = open_accounts - closed_accounts
 
-    return jsonify(sorted(list(accounts)))
+    return jsonify(sorted(list(active_accounts)))
 
 
 @accounts_bp.route('/balances', methods=['GET'])
@@ -43,6 +50,8 @@ def get_account_balances():
     balances = {}
     account_notes = {}
     account_currencies = {}
+    open_accounts = set()
+    closed_accounts = set()
 
     for entry in entries:
         # 检查entry是否有日期属性
@@ -56,21 +65,26 @@ def get_account_balances():
                     continue
 
         # 处理账户的Open信息（包含note和currency）
-        if hasattr(entry, 'account') and (type(entry).__name__ == 'Open'):
-            account = entry.account
-            # 获取note信息
-            if hasattr(entry, 'meta') and entry.meta:
-                if 'note' in entry.meta:
-                    account_notes[account] = entry.meta['note']
-            # 获取currency信息
-            if hasattr(entry, 'currencies') and entry.currencies:
-                # currencies可能是字符串列表或对象列表
-                if isinstance(entry.currencies[0], str):
-                    account_currencies[account] = entry.currencies[0]
-                else:
-                    account_currencies[account] = (
-                        entry.currencies[0].currency if hasattr(entry.currencies[0], 'currency') else currency
-                    )
+        if hasattr(entry, 'account'):
+            if type(entry).__name__ == 'Open':
+                account = entry.account
+                open_accounts.add(account)
+                # 获取note信息
+                if hasattr(entry, 'meta') and entry.meta:
+                    if 'note' in entry.meta:
+                        account_notes[account] = entry.meta['note']
+                # 获取currency信息
+                if hasattr(entry, 'currencies') and entry.currencies:
+                    # currencies可能是字符串列表或对象列表
+                    if isinstance(entry.currencies[0], str):
+                        account_currencies[account] = entry.currencies[0]
+                    else:
+                        account_currencies[account] = (
+                            entry.currencies[0].currency if hasattr(entry.currencies[0], 'currency') else currency
+                        )
+            elif type(entry).__name__ == 'Close':
+                account = entry.account
+                closed_accounts.add(account)
 
         # 计算账户余额
         if hasattr(entry, 'postings'):
@@ -82,10 +96,19 @@ def get_account_balances():
                     if account not in balances:
                         balances[account] = 0.0
                     balances[account] += amount
+                    
+    print(closed_accounts)
 
+    # 只返回未关闭的账户
+    active_accounts = open_accounts - closed_accounts
+    
     # 构建账户详情
     account_details = []
     for account, balance in balances.items():
+        # 只包含活跃账户
+        if account not in active_accounts:
+            continue
+            
         # 提取账户类型
         account_type = account.split(':')[0] if ':' in account else 'Other'
 
