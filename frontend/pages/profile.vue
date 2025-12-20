@@ -3,40 +3,47 @@
     <div class="max-w-3xl mx-auto">
       <div class="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden transition-colors duration-200">
         <div class="bg-gradient-to-r from-blue-500 to-indigo-600 h-24"></div>
-        
+
         <div class="px-6 py-8">
           <div class="text-center">
-            <div class="w-20 h-20 bg-blue-100 dark:bg-blue-900 rounded-full mx-auto -mt-12 flex items-center justify-center transition-colors duration-200">
-              <span class="text-blue-600 dark:text-blue-300 text-3xl font-bold">{{ user?.username?.charAt(0)?.toUpperCase() || 'U' }}</span>
+            <div
+              class="w-20 h-20 bg-blue-100 dark:bg-blue-900 rounded-full mx-auto -mt-12 flex items-center justify-center transition-colors duration-200">
+              <span class="text-blue-600 dark:text-blue-300 text-3xl font-bold">
+                {{ user?.username?.charAt(0)?.toUpperCase() || 'U' }}</span>
             </div>
-            <h2 class="text-2xl font-bold text-gray-800 dark:text-white mt-4 transition-colors duration-200">{{ user?.username || '用户' }}</h2>
+            <h2 class="text-2xl font-bold text-gray-800 dark:text-white mt-4 transition-colors duration-200">{{
+              user?.username || '用户' }}</h2>
           </div>
 
           <div class="mt-10 space-y-6">
             <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300 mb-4 transition-colors duration-200">账户信息</h3>
+              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300 mb-4 transition-colors duration-200">
+                账户信息
+              </h3>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 transition-colors duration-200">用户名</label>
+                  <label
+                    class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 transition-colors duration-200">用户名</label>
                   <p class="text-gray-800 dark:text-white">{{ user?.username }}</p>
                 </div>
               </div>
             </div>
 
             <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300 mb-4 transition-colors duration-200">应用设置</h3>
+              <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300 mb-4 transition-colors duration-200">
+                应用设置
+              </h3>
               <div class="space-y-4">
                 <div class="flex items-center justify-between" @click="toggleDarkMode">
                   <span class="text-gray-700 dark:text-gray-300 transition-colors duration-200">深色模式</span>
                   <label class="relative inline-block w-12 align-middle select-none cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      v-model="darkMode" 
-                      class="sr-only"
-                      @change="toggleDarkMode"
-                    >
-                    <div class="block bg-gray-200 dark:bg-gray-600 w-12 h-6 rounded-full transition-colors duration-200"></div>
-                    <div class="absolute left-1 top-1 bg-white dark:bg-gray-300 w-4 h-4 rounded-full transition-transform duration-200 transform" :class="{ 'translate-x-6': darkMode }"></div>
+                    <input type="checkbox" v-model="darkMode" class="sr-only" @change="toggleDarkMode">
+                    <div
+                      class="block bg-gray-200 dark:bg-gray-600 w-12 h-6 rounded-full transition-colors duration-200">
+                    </div>
+                    <div
+                      class="absolute left-1 top-1 bg-white dark:bg-gray-300 w-4 h-4 rounded-full transition-transform duration-200 transform"
+                      :class="{ 'translate-x-6': darkMode }"></div>
                   </label>
                 </div>
                 <div class="flex items-center justify-between" @click="toggleAutoSync">
@@ -48,24 +55,21 @@
                     </div>
                   </div>
                   <label class="relative inline-block w-12 align-middle select-none cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      v-model="autoSync" 
-                      class="sr-only"
-                      @change="toggleAutoSync"
-                    >
-                    <div class="block bg-gray-200 dark:bg-gray-600 w-12 h-6 rounded-full transition-colors duration-200"></div>
-                    <div class="absolute left-1 top-1 bg-white dark:bg-gray-300 w-4 h-4 rounded-full transition-transform duration-200 transform" :class="{ 'translate-x-6': autoSync }"></div>
+                    <input type="checkbox" v-model="autoSync" class="sr-only" @change="toggleAutoSync">
+                    <div
+                      class="block bg-gray-200 dark:bg-gray-600 w-12 h-6 rounded-full transition-colors duration-200">
+                    </div>
+                    <div
+                      class="absolute left-1 top-1 bg-white dark:bg-gray-300 w-4 h-4 rounded-full transition-transform duration-200 transform"
+                      :class="{ 'translate-x-6': autoSync }"></div>
                   </label>
                 </div>
               </div>
             </div>
 
             <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-              <button 
-                @click="logout" 
-                class="w-full py-3 px-4 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors duration-200 font-medium"
-              >
+              <button @click="logout"
+                class="w-full py-3 px-4 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors duration-200 font-medium">
                 退出登录
               </button>
             </div>
@@ -75,7 +79,8 @@
 
       <div class="mt-8 bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden transition-colors duration-200">
         <div class="px-6 py-6">
-          <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300 mb-4 transition-colors duration-200">关于 MoneyMint</h3>
+          <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300 mb-4 transition-colors duration-200">关于
+            MoneyMint</h3>
           <p class="text-gray-600 dark:text-gray-400 mb-4 transition-colors duration-200">版本: {{ appVersion }}</p>
           <p class="text-gray-600 dark:text-gray-400 transition-colors duration-200">{{ APP_DESCRIPTION }}</p>
         </div>
@@ -164,7 +169,7 @@ onMounted(async () => {
   // 获取版本信息
   const versionInfo = await fetchVersionInfo()
   appVersion.value = versionInfo.version
-  
+
   // 从localStorage恢复深色模式
   if (process.client && isLocalStorageAvailable()) {
     const savedDarkMode = localStorage.getItem('darkMode')

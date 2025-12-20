@@ -3,84 +3,104 @@
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-2xl font-bold text-gray-900 dark:text-white">账户管理</h2>
       <div class="flex gap-3">
-        <button
-          @click="showAddAccountModal = true"
-          class="btn btn-primary flex items-center justify-items-center"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5 mr-1"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 4v16m8-8H4"
-            />
+        <button @click="showAddAccountModal = true" class="btn btn-primary flex items-center justify-items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
           新增账户
         </button>
-        <button
-          @click="refreshData"
-          class="btn btn-secondary flex items-center justify-items-center"
-          :disabled="loading"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5 mr-1"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
+        <button @click="refreshData" class="btn btn-secondary flex items-center justify-items-center"
+          :disabled="loading">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           刷新
         </button>
       </div>
     </div>
 
-    <!-- 日期范围选择器 -->
-    <div class="card p-4 mb-6">
-      <div class="flex flex-col md:flex-row gap-4 items-center">
-        <div class="flex-1">
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-            >开始日期</label
-          >
-          <input
-            v-model="dateRange.startDate"
-            type="date"
-            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-          />
+    <!-- 合并的筛选面板 -->
+    <div class="card mb-6">
+      <!-- 筛选面板头部 -->
+      <div 
+        class="flex justify-between items-center p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        @click="toggleFilterPanel"
+      >
+        <h3 class="font-medium text-gray-900 dark:text-white">筛选条件</h3>
+        <svg 
+          class="w-5 h-5 text-gray-500 transition-transform"
+          :class="{ 'rotate-180': isFilterPanelOpen, 'rotate-0': !isFilterPanelOpen }"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      
+      <!-- 筛选面板内容 -->
+      <div v-if="isFilterPanelOpen" class="border-t border-gray-200 dark:border-gray-700">
+        <!-- 日期范围选择器 -->
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">日期范围</h4>
+          <div class="flex flex-col md:flex-row gap-4">
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">开始日期</label>
+              <input v-model="dateRange.startDate" type="date"
+                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+            </div>
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">结束日期</label>
+              <input v-model="dateRange.endDate" type="date"
+                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+            </div>
+          </div>
+          <div class="flex gap-3 mt-4">
+            <button @click="applyDateRange" class="btn btn-primary flex-1" :disabled="loading">
+              应用日期筛选
+            </button>
+            <button @click="clearDateRange" class="btn btn-secondary flex-1">
+              清除日期筛选
+            </button>
+          </div>
         </div>
-        <div class="flex-1">
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-            >结束日期</label
-          >
-          <input
-            v-model="dateRange.endDate"
-            type="date"
-            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-          />
-        </div>
-        <div class="flex gap-3 pt-4 md:pt-0">
-          <button
-            @click="applyDateRange"
-            class="btn btn-primary"
-            :disabled="loading"
-          >
-            应用筛选
-          </button>
-          <button @click="clearDateRange" class="btn btn-secondary">
-            清除筛选
-          </button>
+        
+        <!-- 分类筛选部件 -->
+        <div class="p-4">
+          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">账户分类</h4>
+          <div class="flex flex-col md:flex-row gap-4">
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账户类型</label>
+              <select v-model="filters.type"
+                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors">
+                <option value="">全部类型</option>
+                <option value="Assets">资产</option>
+                <option value="Liabilities">负债</option>
+                <option value="Income">收入</option>
+                <option value="Expenses">支出</option>
+                <option value="Equity">权益</option>
+              </select>
+            </div>
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">二级分类</label>
+              <select v-model="filters.subtype"
+                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
+                :disabled="!filters.type">
+                <option value="">全部分类</option>
+                <option v-for="(name, key) in subtypeOptions" :key="key" :value="key">
+                  {{ name }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-4">
+            <button @click="resetFilters" class="btn btn-secondary w-full">
+              重置分类筛选
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -109,19 +129,16 @@
 
     <div class="card">
       <div v-if="loading" class="text-center py-8">
-        <div
-          class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
-        ></div>
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
 
-      <div v-else-if="accountList.length === 0"
-        class="text-center py-8 text-gray-500 dark:text-gray-400">
+      <div v-else-if="accountList.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
         <p>暂无账户</p>
       </div>
 
       <div v-else class="space-y-6">
         <!-- 按账户类型分组显示 -->
-        <div v-for="(accountGroup, type) in groupedAccounts" :key="type">
+        <div v-for="(typeGroup, type) in groupedAccounts" :key="type" class="space-y-4">
           <div class="flex justify-between items-center mb-3">
             <h3 class="text-lg font-semibold text-gray-700 dark:text-white">
               {{ getAccountTypeName(type) }}
@@ -130,50 +147,70 @@
               {{ formatCurrency(getGroupTotal(type)) }}
             </span>
           </div>
-          <div class="space-y-2">
-            <div
-              v-for="account in accountGroup"
-              :key="account.name"
-              class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800/70 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-              @click="showAccountDetails(account)"
-            >
-              <div class="flex items-center">
-                <div
-                  class="w-8 h-8 rounded-full flex items-center justify-center mr-3"
-                  :class="getAccountTypeColor(type)"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="h-4 w-4 text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-                    />
+
+          <!-- 二级分类折叠面板 -->
+          <div class="space-y-3 ml-4">
+            <div v-for="(subtypeGroup, subtype) in typeGroup" :key="subtype"
+              class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <!-- 折叠面板头部 -->
+              <div
+                class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800/70 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                @click="toggleSubtypePanel(type, subtype)">
+                <div class="flex items-center gap-2">
+                  <div :class="[
+                    'w-3 h-3 rounded-full',
+                    getAccountTypeColor(type)
+                  ]"></div>
+                  <h4 class="text-md font-medium text-gray-600 dark:text-gray-300">
+                    {{ getAccountSubtypeName(type, subtype) }}
+                  </h4>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-sm text-gray-500 dark:text-gray-400">
+                    {{ formatCurrency(getSubtypeTotal(type, subtype)) }}
+                  </span>
+                  <!-- 展开/折叠图标 -->
+                  <svg class="w-4 h-4 text-gray-500 transition-transform" :class="{
+                    'rotate-90': expandedPanels[type]?.[subtype] || false,
+                    'rotate-0': !(expandedPanels[type]?.[subtype] || false)
+                  }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                   </svg>
                 </div>
-                <div>
-                  <div class="font-medium">{{ account.name }}</div>
-                  <div class="text-xs text-gray-500">
-                    {{ account.note || account.type }}
+              </div>
+
+              <!-- 折叠面板内容 -->
+              <div v-if="expandedPanels[type]?.[subtype] || false"
+                class="border-t border-gray-200 dark:border-gray-700">
+                <div class="space-y-1">
+                  <div v-for="account in subtypeGroup" :key="account.name"
+                    class="flex justify-between items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-800/70 transition-colors cursor-pointer"
+                    @click="showAccountDetails(account)">
+                    <div class="flex items-center gap-3">
+                      <div :class="[
+                        'w-2 h-2 rounded-full',
+                        getAccountTypeColor(type)
+                      ]"></div>
+                      <div>
+                        <div class="font-medium">
+                          {{ account.name.split(":").pop() }}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                          {{ account.note || "无备注" }}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex flex-col items-end">
+                      <div :class="[
+                        'font-medium',
+                        account.balance >= 0 ? 'text-green-600' : 'text-red-600'
+                      ]">
+                        {{ formatCurrency(account.balance) }}
+                      </div>
+                      <div class="text-xs text-gray-500">{{ account.currency }}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div class="text-right">
-                <div
-                  class="font-medium"
-                  :class="
-                    account.balance >= 0 ? 'text-green-600' : 'text-red-600'
-                  "
-                >
-                  {{ formatCurrency(account.balance) }}
-                </div>
-                <div class="text-xs text-gray-500">{{ account.currency }}</div>
               </div>
             </div>
           </div>
@@ -182,33 +219,17 @@
     </div>
 
     <!-- 账户详情弹窗 -->
-    <div
-      v-if="selectedAccount"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-    >
+    <div v-if="selectedAccount" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div
-        class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto transition-colors"
-      >
+        class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto transition-colors">
         <div class="p-6">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-xl font-bold dark:text-white">账户详情</h3>
-            <button
-              @click="selectedAccount = null"
-              class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
+            <button @click="selectedAccount = null"
+              class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
@@ -236,14 +257,10 @@
               </div>
               <div class="col-span-2">
                 <div class="text-sm text-gray-500 mb-1">当前余额</div>
-                <div
-                  class="text-2xl font-bold"
-                  :class="
-                    selectedAccount.balance >= 0
-                      ? 'text-green-600'
-                      : 'text-red-600'
-                  "
-                >
+                <div class="text-2xl font-bold" :class="selectedAccount.balance >= 0
+                    ? 'text-green-600'
+                    : 'text-red-600'
+                  ">
                   {{ formatCurrency(selectedAccount.balance) }}
                   {{ selectedAccount.currency }}
                 </div>
@@ -252,41 +269,30 @@
             <!-- 交易记录部分 -->
             <div class="pt-4 border-t border-gray-200">
               <h4 class="text-lg font-semibold mb-4">交易记录</h4>
-              
+
               <!-- 交易记录筛选 -->
               <div class="flex flex-col md:flex-row gap-3 mb-4">
                 <div class="flex-1">
-                  <input
-                    v-model="accountEntriesDateRange.startDate"
-                    type="date"
+                  <input v-model="accountEntriesDateRange.startDate" type="date"
                     class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
-                    placeholder="开始日期"
-                  />
+                    placeholder="开始日期" />
                 </div>
                 <div class="flex-1">
-                  <input
-                    v-model="accountEntriesDateRange.endDate"
-                    type="date"
+                  <input v-model="accountEntriesDateRange.endDate" type="date"
                     class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
-                    placeholder="结束日期"
-                  />
+                    placeholder="结束日期" />
                 </div>
-                <button
-                  @click="loadAccountEntries(accountEntriesPagination.page)"
-                  class="btn btn-primary whitespace-nowrap"
-                  :disabled="loadingAccountEntries"
-                >
-                  <span v-if="loadingAccountEntries" class="inline-block animate-spin rounded-full h-4 w-4 mr-2 border-b-2 border-white"></span>
+                <button @click="loadAccountEntries(accountEntriesPagination.page)"
+                  class="btn btn-primary whitespace-nowrap" :disabled="loadingAccountEntries">
+                  <span v-if="loadingAccountEntries"
+                    class="inline-block animate-spin rounded-full h-4 w-4 mr-2 border-b-2 border-white"></span>
                   筛选
                 </button>
-                <button
-                  @click="clearAccountEntriesDateRange"
-                  class="btn btn-secondary whitespace-nowrap"
-                >
+                <button @click="clearAccountEntriesDateRange" class="btn btn-secondary whitespace-nowrap">
                   清除
                 </button>
               </div>
-              
+
               <!-- 交易记录列表 -->
               <div v-if="loadingAccountEntries" class="text-center py-4">
                 <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
@@ -295,11 +301,8 @@
                 暂无交易记录
               </div>
               <div v-else class="space-y-2 max-h-[300px] overflow-y-auto">
-                <div
-                  v-for="entry in accountEntries"
-                  :key="JSON.stringify(entry)"
-                  class="border border-gray-200 rounded-lg p-3 hover:bg-gray-50"
-                >
+                <div v-for="entry in accountEntries" :key="JSON.stringify(entry)"
+                  class="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
                   <div class="flex justify-between items-start">
                     <div class="font-medium text-gray-800">
                       {{ entry.date }}
@@ -308,15 +311,13 @@
                     <div class="text-sm text-gray-500">{{ entry.type }}</div>
                   </div>
                   <div v-if="entry.postings" class="mt-2 space-y-1">
-                    <div
-                      v-for="(posting, idx) in entry.postings"
-                      :key="idx"
-                      class="flex justify-between items-center text-sm"
-                    >
+                    <div v-for="(posting, idx) in entry.postings" :key="idx"
+                      class="flex justify-between items-center text-sm">
                       <div class="font-medium" :class="posting.account === selectedAccount.name ? 'text-primary' : ''">
                         {{ posting.account }}
                       </div>
-                      <div v-if="posting.units" class="font-medium" :class="posting.units.number >= 0 ? 'text-green-600' : 'text-red-600'">
+                      <div v-if="posting.units" class="font-medium"
+                        :class="posting.units.number >= 0 ? 'text-green-600' : 'text-red-600'">
                         {{ posting.units.number }} {{ posting.units.currency }}
                       </div>
                     </div>
@@ -326,73 +327,46 @@
                   </div>
                 </div>
               </div>
-              
+
               <!-- 分页 -->
               <div v-if="accountEntriesPagination.total > 0" class="mt-4 flex justify-between items-center">
                 <div class="text-sm text-gray-500">
                   共 {{ accountEntriesPagination.total }} 条记录
                 </div>
                 <div class="flex gap-2">
-                  <button
-                    @click="loadAccountEntries(accountEntriesPagination.page - 1)"
+                  <button @click="loadAccountEntries(accountEntriesPagination.page - 1)"
                     class="btn btn-sm btn-secondary"
-                    :disabled="accountEntriesPagination.page === 1 || loadingAccountEntries"
-                  >
+                    :disabled="accountEntriesPagination.page === 1 || loadingAccountEntries">
                     上一页
                   </button>
                   <span class="text-sm px-2">
                     第 {{ accountEntriesPagination.page }} / {{ accountEntriesPagination.pages }} 页
                   </span>
-                  <button
-                    @click="loadAccountEntries(accountEntriesPagination.page + 1)"
+                  <button @click="loadAccountEntries(accountEntriesPagination.page + 1)"
                     class="btn btn-sm btn-secondary"
-                    :disabled="accountEntriesPagination.page === accountEntriesPagination.pages || loadingAccountEntries"
-                  >
+                    :disabled="accountEntriesPagination.page === accountEntriesPagination.pages || loadingAccountEntries">
                     下一页
                   </button>
                 </div>
               </div>
             </div>
-            
+
             <!-- 操作按钮 -->
             <div class="pt-4 border-t border-gray-200 space-y-2">
-              <button
-                @click="showSetBalanceModal = true"
-                class="btn btn-primary w-full flex items-center justify-center"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-5 w-5 mr-1"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                  />
+              <button @click="showSetBalanceModal = true"
+                class="btn btn-primary w-full flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
                 设置余额
               </button>
-              <button
-                @click="showCloseAccountModal = true"
-                class="btn btn-danger w-full flex items-center justify-center"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-5 w-5 mr-1"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
+              <button @click="showCloseAccountModal = true"
+                class="btn btn-danger w-full flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
                 关闭账户
               </button>
@@ -403,92 +377,71 @@
     </div>
 
     <!-- 新增账户弹窗 -->
-    <div
-      v-if="showAddAccountModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-    >
+    <div v-if="showAddAccountModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 transition-colors duration-200">
         <div class="p-6">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-xl font-bold text-gray-900 dark:text-white">新增账户</h3>
-            <button
-              @click="showAddAccountModal = false"
-              class="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 transition-colors"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
+            <button @click="showAddAccountModal = false"
+              class="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
           <form @submit.prevent="handleAddAccount">
             <div class="space-y-4">
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                  >账户名称</label
-                >
-                <input
-                  v-model="newAccount.account"
-                  type="text"
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账户类型</label>
+                <select v-model="newAccount.type"
                   class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
-                  placeholder="例如：Assets:Cash"
-                  required
-                />
+                  required>
+                  <option value="Assets">资产账户</option>
+                  <option value="Liabilities">负债账户</option>
+                  <option value="Income">收入账户</option>
+                  <option value="Expenses">支出账户</option>
+                  <option value="Equity">权益账户</option>
+                </select>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                  >账户说明</label
-                >
-                <input
-                  v-model="newAccount.note"
-                  type="text"
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">二级分类</label>
+                <select v-model="newAccount.subtype"
                   class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
-                  placeholder="例如：钱包现金"
-                />
+                  required>
+                  <option v-for="(name, key) in accountConfig[newAccount.type]" :key="key" :value="key">
+                    {{ name }}
+                  </option>
+                </select>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                  >货币单位</label
-                >
-                <input
-                  v-model="newAccount.currency"
-                  type="text"
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账户名称</label>
+                <input v-model="newAccount.account" type="text"
                   class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
-                  placeholder="例如：CNY"
-                  required
-                />
+                  placeholder="请输入账户名称（如：银行存款）" required />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                  >日期</label
-                >
-                <input
-                  v-model="newAccount.date"
-                  type="date"
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账户说明</label>
+                <input v-model="newAccount.note" type="text"
                   class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
-                  required
-                />
+                  placeholder="请输入账户说明（可选）" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">货币单位</label>
+                <input v-model="newAccount.currency" type="text"
+                  class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
+                  placeholder="请输入货币单位（如：CNY）" required />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">开户日期</label>
+                <input v-model="newAccount.date" type="date"
+                  class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
+                  required />
               </div>
               <div class="pt-4">
-                <button
-                  type="submit"
-                  class="btn btn-primary w-full"
-                  :disabled="submitting"
-                >
-                  <span
-                    v-if="submitting"
-                    class="inline-block animate-spin rounded-full h-4 w-4 mr-2 border-b-2 border-white"
-                  ></span>
+                <button type="submit" class="btn btn-primary w-full" :disabled="submitting">
+                  <span v-if="submitting"
+                    class="inline-block animate-spin rounded-full h-4 w-4 mr-2 border-b-2 border-white"></span>
                   新增账户
                 </button>
               </div>
@@ -499,31 +452,17 @@
     </div>
 
     <!-- 关闭账户弹窗 -->
-    <div
-      v-if="showCloseAccountModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-    >
+    <div v-if="showCloseAccountModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 transition-colors duration-200">
         <div class="p-6">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-xl font-bold text-gray-900 dark:text-white">关闭账户</h3>
-            <button
-              @click="showCloseAccountModal = false"
-              class="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 transition-colors"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
+            <button @click="showCloseAccountModal = false"
+              class="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
@@ -533,32 +472,18 @@
               <span class="font-medium">{{ selectedAccount?.name }}</span> 吗？
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >日期</label
-              >
-              <input
-                v-model="closeAccountData.date"
-                type="date"
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">日期</label>
+              <input v-model="closeAccountData.date" type="date"
                 class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary transition-colors"
-                required
-              />
+                required />
             </div>
             <div class="pt-4 flex gap-3">
-              <button
-                @click="showCloseAccountModal = false"
-                class="btn btn-secondary flex-1"
-              >
+              <button @click="showCloseAccountModal = false" class="btn btn-secondary flex-1">
                 取消
               </button>
-              <button
-                @click="handleCloseAccount"
-                class="btn btn-danger flex-1"
-                :disabled="submitting"
-              >
-                <span
-                  v-if="submitting"
-                  class="inline-block animate-spin rounded-full h-4 w-4 mr-2 border-b-2 border-white"
-                ></span>
+              <button @click="handleCloseAccount" class="btn btn-danger flex-1" :disabled="submitting">
+                <span v-if="submitting"
+                  class="inline-block animate-spin rounded-full h-4 w-4 mr-2 border-b-2 border-white"></span>
                 确认关闭
               </button>
             </div>
@@ -568,31 +493,15 @@
     </div>
 
     <!-- 设置账户余额弹窗 -->
-    <div
-      v-if="showSetBalanceModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-    >
+    <div v-if="showSetBalanceModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
         <div class="p-6">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-xl font-bold">设置账户余额</h3>
-            <button
-              @click="showSetBalanceModal = false"
-              class="text-gray-500 hover:text-gray-700"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
+            <button @click="showSetBalanceModal = false" class="text-gray-500 hover:text-gray-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
@@ -604,45 +513,24 @@
                 设置余额
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1"
-                  >日期</label
-                >
-                <input
-                  v-model="setBalanceData.date"
-                  type="date"
+                <label class="block text-sm font-medium text-gray-700 mb-1">日期</label>
+                <input v-model="setBalanceData.date" type="date"
                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
-                  required
-                />
+                  required />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1"
-                  >余额</label
-                >
-                <input
-                  v-model="setBalanceData.amount"
-                  type="number"
-                  step="0.01"
+                <label class="block text-sm font-medium text-gray-700 mb-1">余额</label>
+                <input v-model="setBalanceData.amount" type="number" step="0.01"
                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
-                  placeholder="输入金额"
-                  required
-                />
+                  placeholder="输入金额" required />
               </div>
               <div class="pt-4 flex gap-3">
-                <button
-                  @click="showSetBalanceModal = false"
-                  class="btn btn-secondary flex-1"
-                >
+                <button @click="showSetBalanceModal = false" class="btn btn-secondary flex-1">
                   取消
                 </button>
-                <button
-                  type="submit"
-                  class="btn btn-primary flex-1"
-                  :disabled="submitting"
-                >
-                  <span
-                    v-if="submitting"
-                    class="inline-block animate-spin rounded-full h-4 w-4 mr-2 border-b-2 border-white"
-                  ></span>
+                <button type="submit" class="btn btn-primary flex-1" :disabled="submitting">
+                  <span v-if="submitting"
+                    class="inline-block animate-spin rounded-full h-4 w-4 mr-2 border-b-2 border-white"></span>
                   确认设置
                 </button>
               </div>
@@ -655,7 +543,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from "vue";
 import { useNuxtApp } from '#app';
 
 const { $api } = useNuxtApp();
@@ -679,6 +567,8 @@ const accountEntriesDateRange = ref({ startDate: "", endDate: "" });
 // 新增账户表单数据
 const newAccount = ref({
   account: "",
+  type: "Assets",
+  subtype: "Current",
   note: "",
   currency: "CNY",
   date: new Date().toISOString().split("T")[0],
@@ -695,20 +585,134 @@ const setBalanceData = ref({
   amount: 0,
 });
 
-// 按账户类型分组
-const groupedAccounts = computed(() => {
-  const groups: Record<string, any[]> = {};
+// 账户配置
+const accountConfig = ref<Record<string, Record<string, string>>>({
+  Assets: {},
+  Liabilities: {},
+  Equity: {},
+  Income: {},
+  Expenses: {}
+});
 
-  accountList.value.forEach((account) => {
+// 折叠面板状态管理
+const expandedPanels = ref<Record<string, Record<string, boolean>>>({});
+
+// 筛选面板控制
+const isFilterPanelOpen = ref(false);
+
+// 切换筛选面板显示
+const toggleFilterPanel = () => {
+  isFilterPanelOpen.value = !isFilterPanelOpen.value;
+};
+
+// 筛选条件
+const filters = ref({
+  type: '',
+  subtype: ''
+});
+
+// 计算筛选后的账户列表
+const filteredAccounts = computed(() => {
+  let filtered = accountList.value;
+
+  // 按类型筛选
+  if (filters.value.type) {
+    filtered = filtered.filter(account => account.type === filters.value.type);
+  }
+
+  // 按二级分类筛选
+  if (filters.value.subtype) {
+    filtered = filtered.filter(account => account.subtype === filters.value.subtype);
+  }
+
+  return filtered;
+});
+
+// 按账户类型和二级分类分组（使用筛选后的数据）
+const groupedAccounts = computed(() => {
+  const groups: Record<string, Record<string, any[]>> = {};
+
+  filteredAccounts.value.forEach((account) => {
     const type = account.type;
+    const subtype = account.subtype;
+
+    // 初始化一级分类
     if (!groups[type]) {
-      groups[type] = [];
+      groups[type] = {};
     }
-    groups[type].push(account);
+
+    // 初始化二级分类
+    if (!groups[type][subtype]) {
+      groups[type][subtype] = [];
+    }
+
+    groups[type][subtype].push(account);
   });
 
   return groups;
 });
+
+// 初始化所有面板为展开状态
+const initializeExpandedPanels = () => {
+  const types = Object.keys(groupedAccounts.value);
+  const newExpandedPanels: Record<string, Record<string, boolean>> = {};
+
+  types.forEach(type => {
+    newExpandedPanels[type] = {};
+    const subtypes = Object.keys(groupedAccounts.value[type]);
+    subtypes.forEach(subtype => {
+      newExpandedPanels[type][subtype] = false; // 默认展开
+    });
+  });
+
+  expandedPanels.value = newExpandedPanels;
+};
+
+// 切换二级分类面板的展开/折叠状态
+const toggleSubtypePanel = (type: string, subtype: string) => {
+  if (!expandedPanels.value[type]) {
+    expandedPanels.value[type] = {};
+  }
+
+  expandedPanels.value[type][subtype] = !expandedPanels.value[type][subtype];
+};
+
+// 当筛选条件变化时，重新初始化面板状态
+watch(
+  [() => filters.value.type, () => filters.value.subtype],
+  () => {
+    nextTick(() => {
+      initializeExpandedPanels();
+    });
+  }
+);
+
+// 当账户列表变化时，重新初始化面板状态
+watch(
+  accountList,
+  () => {
+    nextTick(() => {
+      initializeExpandedPanels();
+    });
+  },
+  { deep: true }
+);
+
+// 重置筛选条件
+const resetFilters = () => {
+  filters.value = {
+    type: '',
+    subtype: ''
+  };
+};
+
+// 二级分类选项（根据选中的类型动态变化）
+const subtypeOptions = computed(() => {
+  if (!filters.value.type) return {};
+  return accountConfig.value[filters.value.type] || {};
+});
+
+
 
 // 获取账户类型名称
 const getAccountTypeName = (type: string): string => {
@@ -724,8 +728,27 @@ const getAccountTypeName = (type: string): string => {
     case "Expenses":
       return "支出账户";
     default:
-      return type;
+      return "其他账户";
   }
+};
+
+// 获取账户二级分类名称
+const getAccountSubtypeName = (type: string, subtype: string): string => {
+  // 如果找到对应的二级分类名称则返回，否则返回原始名称
+  return accountConfig.value[type]?.[subtype] || subtype || "未分类";
+};
+
+// 计算二级分类的总余额
+const getSubtypeTotal = (type: string, subtype: string): number => {
+  let total = 0;
+
+  accountList.value.forEach((account) => {
+    if (account.type === type && account.subtype === subtype) {
+      total += account.balance;
+    }
+  });
+
+  return total;
 };
 
 // 获取账户类型颜色
@@ -748,8 +771,16 @@ const getAccountTypeColor = (type: string): string => {
 
 // 获取分组总额
 const getGroupTotal = (type: string): number => {
-  const group = groupedAccounts.value[type] || [];
-  return group.reduce((total, account) => total + account.balance, 0);
+  const subtypeGroups = groupedAccounts.value[type] || {};
+  let total = 0;
+
+  // 遍历所有二级分类
+  for (const subtype in subtypeGroups) {
+    const accounts = subtypeGroups[subtype];
+    total += accounts.reduce((subtotal, account) => subtotal + account.balance, 0);
+  }
+
+  return total;
 };
 
 // 计算统计数据
@@ -776,16 +807,16 @@ const showAccountDetails = async (account: any) => {
 // 加载账户交易记录
 const loadAccountEntries = async (page = 1) => {
   if (!selectedAccount.value) return;
-  
+
   try {
     loadingAccountEntries.value = true;
-    
+
     const params: any = {
       page: page,
       page_size: accountEntriesPagination.value.page_size,
       account: selectedAccount.value.name
     };
-    
+
     // 添加日期筛选
     if (accountEntriesDateRange.value.startDate) {
       params.start_date = accountEntriesDateRange.value.startDate;
@@ -793,7 +824,7 @@ const loadAccountEntries = async (page = 1) => {
     if (accountEntriesDateRange.value.endDate) {
       params.end_date = accountEntriesDateRange.value.endDate;
     }
-    
+
     const response = await getEntries(params);
     accountEntries.value = response.entries;
     // 更新分页信息，包括当前页码
@@ -821,10 +852,13 @@ const handleAddAccount = async () => {
   try {
     submitting.value = true;
 
+    // 构建完整的账户路径（类型:二级分类:账户名称）
+    const fullAccountPath = `${newAccount.value.type}:${newAccount.value.subtype}:${newAccount.value.account}`;
+
     const accountData = {
       type: "Open",
       date: newAccount.value.date,
-      account: newAccount.value.account,
+      account: fullAccountPath,
       note: newAccount.value.note,
       currency: newAccount.value.currency,
     };
@@ -834,6 +868,8 @@ const handleAddAccount = async () => {
     // 重置表单
     newAccount.value = {
       account: "",
+      type: "Assets",
+      subtype: "Current",
       note: "",
       currency: "CNY",
       date: new Date().toISOString().split("T")[0],
@@ -932,6 +968,22 @@ const refreshData = async () => {
 };
 
 onMounted(async () => {
+  const { $api } = useNuxtApp();
+  // 加载账户配置
+  try {
+    accountConfig.value = await $api.accounts.getAccountConfig();
+  } catch (error) {
+    console.error("Error loading account config:", error);
+    // 如果加载失败，使用默认配置
+    accountConfig.value = {
+      Assets: {},
+      Liabilities: {},
+      Equity: {},
+      Income: {},
+      Expenses: {}
+    };
+  }
+
   await loadAccounts();
 
   // 监听全局SSE事件

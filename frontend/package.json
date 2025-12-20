@@ -20,7 +20,7 @@
     "TailwindCSS"
   ],
   "scripts": {
-    "build": "nuxt build",
+    "build": "nuxt build --prod",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",

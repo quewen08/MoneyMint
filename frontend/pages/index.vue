@@ -4,17 +4,12 @@
     <h1 class="text-2xl font-bold mb-6 dark:text-white">首页</h1>
 
     <!-- 错误信息显示 -->
-    <div
-      v-if="ledger.errors && ledger.errors.length > 0"
-      class="card bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 mb-6"
-    >
+    <div v-if="ledger.errors && ledger.errors.length > 0"
+      class="card bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 mb-6">
       <h2 class="text-xl font-semibold mb-3 text-red-800 dark:text-red-300">账本错误</h2>
       <div class="space-y-3 max-h-60 overflow-y-auto">
-        <div
-          v-for="(error, index) in ledger.errors"
-          :key="index"
-          class="bg-white dark:bg-gray-700 p-3 rounded shadow-sm border-l-4 border-red-500"
-        >
+        <div v-for="(error, index) in ledger.errors" :key="index"
+          class="bg-white dark:bg-gray-700 p-3 rounded shadow-sm border-l-4 border-red-500">
           <div class="flex justify-between items-start mb-1">
             <span class="font-medium text-red-700 dark:text-red-300">错误 {{ index + 1 }}</span>
             <span class="text-xs bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-200 px-2 py-1 rounded">{{
@@ -80,25 +75,15 @@
       <div class="card mb-8">
         <h2 class="text-xl font-semibold mb-4 dark:text-white">分类支出</h2>
         <div class="space-y-3">
-          <div
-            v-for="(category, index) in dashboardStats.expenseByCategory"
-            :key="index"
-            class="flex justify-between items-center"
-          >
+          <div v-for="(category, index) in dashboardStats.expenseByCategory" :key="index"
+            class="flex justify-between items-center">
             <div class="flex items-center">
-              <div
-                class="w-3 h-3 rounded-full mr-2"
-                :style="{ backgroundColor: getCategoryColor(index) }"
-              ></div>
+              <div class="w-3 h-3 rounded-full mr-2" :style="{ backgroundColor: getCategoryColor(index) }"></div>
               <span class="text-gray-700 dark:text-gray-300">{{ category.name }}</span>
             </div>
             <div class="text-right">
-              <span class="font-medium dark:text-gray-200"
-                >{{ category.amount }} {{ ledger.currency }}</span
-              >
-              <span class="text-sm text-gray-500 dark:text-gray-400 ml-2"
-                >({{ category.percentage }}%)</span
-              >
+              <span class="font-medium dark:text-gray-200">{{ category.amount }} {{ ledger.currency }}</span>
+              <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">({{ category.percentage }}%)</span>
             </div>
           </div>
         </div>
@@ -110,9 +95,7 @@
           <div class="card mb-6">
             <h2 class="text-xl font-semibold mb-4 dark:text-white">账本信息</h2>
             <div v-if="loading" class="text-center py-4">
-              <div
-                class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
-              ></div>
+              <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
             <div v-else class="space-y-3">
               <div class="flex justify-between items-center">
@@ -137,24 +120,15 @@
           </div>
 
           <div class="grid grid-cols-2 gap-4">
-            <button
-              @click="showAddModal = true"
-              class="btn btn-primary flex flex-col items-center p-6"
-            >
+            <button @click="showAddModal = true" class="btn btn-primary flex flex-col items-center p-6">
               <span class="text-3xl mb-2">📝</span>
               <span>添加记录</span>
             </button>
-            <button
-              @click="$router.push('/entries')"
-              class="btn btn-secondary flex flex-col items-center p-6"
-            >
+            <button @click="$router.push('/entries')" class="btn btn-secondary flex flex-col items-center p-6">
               <span class="text-3xl mb-2">📋</span>
               <span>查看记录</span>
             </button>
-            <button
-              @click="$router.push('/stats')"
-              class="btn btn-secondary flex flex-col items-center p-6"
-            >
+            <button @click="$router.push('/stats')" class="btn btn-secondary flex flex-col items-center p-6">
               <span class="text-3xl mb-2">📊</span>
               <span>查看统计</span>
             </button>
@@ -166,112 +140,77 @@
           <div class="card">
             <h2 class="text-xl font-semibold mb-4 dark:text-white">最近记录</h2>
             <div v-if="loading" class="text-center py-4">
-              <div
-                class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
-              ></div>
+              <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-            <div
-              v-else-if="entries.length === 0"
-              class="text-center py-8 text-gray-500 dark:text-gray-400"
-            >
+            <div v-else-if="entries.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
               <p>暂无记账记录</p>
             </div>
             <div v-else class="space-y-4">
-              <div
-                v-for="entry in entries
-                  .filter((e) => e.type === 'Transaction')
-                  .slice(0, 5)"
-                :key="entry.meta.filename + entry.meta.lineno"
-                class="border-b pb-3 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/70 p-2 rounded transition-colors"
-              >
+              <div v-for="entry in entries
+                .filter((e) => e.type === 'Transaction')
+                .slice(0, 5)" :key="entry.meta.filename + entry.meta.lineno"
+                class="border-b pb-3 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/70 p-2 rounded transition-colors">
                 <div class="flex flex-col space-y-1">
                   <!-- 日期和类型 -->
                   <div class="flex justify-between items-center">
                     <span class="font-medium dark:text-gray-300">{{ entry.date }}</span>
                     <span
-                      class="text-sm px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                      >{{ entry.type }}</span
-                    >
+                      class="text-sm px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">{{
+                      entry.type }}</span>
                   </div>
 
                   <!-- 交易描述 -->
-                  <div
-                    v-if="entry.type === 'Transaction' && entry.narration"
-                    class="text-sm text-gray-700 dark:text-gray-300 ml-2"
-                  >
+                  <div v-if="entry.type === 'Transaction' && entry.narration"
+                    class="text-sm text-gray-700 dark:text-gray-300 ml-2">
                     {{ entry.narration }}
                   </div>
 
                   <!-- 标签 -->
-                  <div
-                    v-if="entry.tags && entry.tags.length > 0"
-                    class="flex flex-wrap gap-1 ml-2"
-                  >
-                    <span
-                      v-for="(tag, index) in entry.tags"
-                      :key="index"
-                      class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded"
-                    >
+                  <div v-if="entry.tags && entry.tags.length > 0" class="flex flex-wrap gap-1 ml-2">
+                    <span v-for="(tag, index) in entry.tags" :key="index"
+                      class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded">
                       #{{ tag }}
                     </span>
                   </div>
 
                   <!-- 操作按钮 -->
                   <div class="ml-2 mt-1">
-                    <button
-                      @click="
-                        openEditModal({
-                          ...entry,
-                          id: `${entry.meta?.filename}:${entry.meta?.lineno}`,
-                        })
+                    <button @click="
+                      openEditModal({
+                        ...entry,
+                        id: `${entry.meta?.filename}:${entry.meta?.lineno}`,
+                      })
                       "
-                      class="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-                    >
+                      class="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors">
                       编辑
                     </button>
                   </div>
 
                   <!-- 收支信息 -->
-                  <div
-                    v-if="entry.type === 'Transaction' && entry.postings"
-                    class="ml-2 space-y-1"
-                  >
-                    <div
-                      v-for="(posting, index) in entry.postings.slice(0, 2)"
-                      :key="index"
-                      class="flex justify-between text-sm"
-                    >
+                  <div v-if="entry.type === 'Transaction' && entry.postings" class="ml-2 space-y-1">
+                    <div v-for="(posting, index) in entry.postings.slice(0, 2)" :key="index"
+                      class="flex justify-between text-sm">
                       <span class="text-gray-600 dark:text-gray-400 truncate max-w-[200px]">{{
                         posting.account
                       }}</span>
-                      <span
-                        class="font-medium"
-                        :class="
-                          posting.units?.number > 0
-                            ? 'text-green-600'
-                            : posting.units?.number < 0
+                      <span class="font-medium" :class="posting.units?.number > 0
+                          ? 'text-green-600'
+                          : posting.units?.number < 0
                             ? 'text-red-600'
                             : ''
-                        "
-                      >
+                        ">
                         {{ posting.units?.number || 0 }}
                         {{ posting.units?.currency || "" }}
                       </span>
                     </div>
                     <!-- 显示更多记账行 -->
-                    <div
-                      v-if="entry.postings.length > 2"
-                      class="text-xs text-gray-500 dark:text-gray-400"
-                    >
+                    <div v-if="entry.postings.length > 2" class="text-xs text-gray-500 dark:text-gray-400">
                       +{{ entry.postings.length - 2 }} 更多记账行
                     </div>
                   </div>
 
                   <!-- 开户信息 -->
-                  <div
-                    v-if="entry.type === 'Open'"
-                    class="text-sm text-gray-600 dark:text-gray-400 ml-2"
-                  >
+                  <div v-if="entry.type === 'Open'" class="text-sm text-gray-600 dark:text-gray-400 ml-2">
                     打开账户: {{ entry.account }}
                   </div>
                 </div>
@@ -281,18 +220,11 @@
         </div>
       </div>
 
-      <div
-        v-if="showAddModal || showEditModal"
-        class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center overflow-y-auto"
-      >
+      <div v-if="showAddModal || showEditModal"
+        class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center overflow-y-auto">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl my-8">
-          <AddEntryModal
-            @close="closeModal"
-            @entry-added="handleEntryAdded"
-            @entry-updated="handleEntryUpdated"
-            @entry-deleted="handleEntryDeleted"
-            :entry="editingEntry"
-          />
+          <AddEntryModal @close="closeModal" @entry-added="handleEntryAdded" @entry-updated="handleEntryUpdated"
+            @entry-deleted="handleEntryDeleted" :entry="editingEntry" />
         </div>
       </div>
     </div>

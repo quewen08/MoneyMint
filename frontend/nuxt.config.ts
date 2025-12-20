@@ -35,5 +35,15 @@ export default defineNuxtConfig({
         { name: 'description', content: 'MoneyMint 是一个基于 Vue 3 和 Nuxt 3 的个人记账系统' }
       ]
     }
-  }
+  },
+  // 编译时删除 console.log 语句
+  vite: {
+    esbuild: {
+      drop: ['debugger'],
+      pure: process.env.NODE_ENV === 'production' ? ['console.log'] : [],
+    },
+    build: {
+      minify: true,
+    },
+  },
 })

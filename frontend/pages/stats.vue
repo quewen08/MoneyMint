@@ -8,21 +8,11 @@
       <div class="flex flex-wrap gap-4 items-center">
         <div class="flex items-center gap-2">
           <label for="startDate" class="text-gray-700 dark:text-gray-300">开始日期:</label>
-          <input
-            type="date"
-            id="startDate"
-            v-model="dateRange.startDate"
-            class="input"
-          />
+          <input type="date" id="startDate" v-model="dateRange.startDate" class="input" />
         </div>
         <div class="flex items-center gap-2">
           <label for="endDate" class="text-gray-700 dark:text-gray-300">结束日期:</label>
-          <input
-            type="date"
-            id="endDate"
-            v-model="dateRange.endDate"
-            class="input"
-          />
+          <input type="date" id="endDate" v-model="dateRange.endDate" class="input" />
         </div>
         <button @click="refreshStats" class="btn btn-primary">刷新数据</button>
         <button @click="resetDateRange" class="btn btn-secondary">
@@ -33,7 +23,8 @@
 
     <!-- 统计概览 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-      <div class="card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/40 p-6 transition-colors">
+      <div
+        class="card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/40 p-6 transition-colors">
         <div class="flex justify-between items-center">
           <div>
             <p class="text-sm text-blue-700 dark:text-blue-300 font-medium">总收入</p>
@@ -47,7 +38,8 @@
         </div>
       </div>
 
-      <div class="card bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/40 dark:to-red-800/40 p-6 transition-colors">
+      <div
+        class="card bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/40 dark:to-red-800/40 p-6 transition-colors">
         <div class="flex justify-between items-center">
           <div>
             <p class="text-sm text-red-700 dark:text-red-300 font-medium">总支出</p>
@@ -61,7 +53,8 @@
         </div>
       </div>
 
-      <div class="card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/40 dark:to-green-800/40 p-6 transition-colors">
+      <div
+        class="card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/40 dark:to-green-800/40 p-6 transition-colors">
         <div class="flex justify-between items-center">
           <div>
             <p class="text-sm text-green-700 dark:text-green-300 font-medium">净收入</p>
@@ -75,7 +68,8 @@
         </div>
       </div>
 
-      <div class="card bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/40 dark:to-purple-800/40 p-6 transition-colors">
+      <div
+        class="card bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/40 dark:to-purple-800/40 p-6 transition-colors">
         <div class="flex justify-between items-center">
           <div>
             <p class="text-sm text-purple-700 dark:text-purple-300 font-medium">交易笔数</p>
@@ -96,36 +90,21 @@
       <div class="card">
         <h2 class="text-xl font-semibold mb-4">收入分类统计</h2>
         <div v-if="loading" class="text-center py-8">
-          <div
-            class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
-          ></div>
+          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
-        <div
-          v-else-if="stats.incomeByCategory.length === 0"
-          class="text-center py-8 text-gray-500 dark:text-gray-400"
-        >
+        <div v-else-if="stats.incomeByCategory.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
           <p>暂无收入数据</p>
         </div>
         <div v-else class="space-y-3">
-          <div
-            v-for="(category, index) in stats.incomeByCategory"
-            :key="index"
-            class="flex justify-between items-center"
-          >
+          <div v-for="(category, index) in stats.incomeByCategory" :key="index"
+            class="flex justify-between items-center">
             <div class="flex items-center">
-              <div
-                class="w-3 h-3 rounded-full mr-2"
-                :style="{ backgroundColor: getCategoryColor(index) }"
-              ></div>
+              <div class="w-3 h-3 rounded-full mr-2" :style="{ backgroundColor: getCategoryColor(index) }"></div>
               <span class="text-gray-700 dark:text-gray-300">{{ category.name }}</span>
             </div>
             <div class="text-right">
-              <span class="font-medium dark:text-gray-200"
-                >{{ category.amount }} {{ ledger.currency }}</span
-              >
-              <span class="text-sm text-gray-500 dark:text-gray-400 ml-2"
-                >({{ category.percentage }}%)</span
-              >
+              <span class="font-medium dark:text-gray-200">{{ category.amount }} {{ ledger.currency }}</span>
+              <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">({{ category.percentage }}%)</span>
             </div>
           </div>
         </div>
@@ -135,36 +114,21 @@
       <div class="card">
         <h2 class="text-xl font-semibold mb-4">支出分类统计</h2>
         <div v-if="loading" class="text-center py-8">
-          <div
-            class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
-          ></div>
+          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
-        <div
-          v-else-if="stats.expenseByCategory.length === 0"
-          class="text-center py-8 text-gray-500 dark:text-gray-400"
-        >
+        <div v-else-if="stats.expenseByCategory.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
           <p>暂无支出数据</p>
         </div>
         <div v-else class="space-y-3">
-          <div
-            v-for="(category, index) in stats.expenseByCategory"
-            :key="index"
-            class="flex justify-between items-center"
-          >
+          <div v-for="(category, index) in stats.expenseByCategory" :key="index"
+            class="flex justify-between items-center">
             <div class="flex items-center">
-              <div
-                class="w-3 h-3 rounded-full mr-2"
-                :style="{ backgroundColor: getCategoryColor(index + 10) }"
-              ></div>
+              <div class="w-3 h-3 rounded-full mr-2" :style="{ backgroundColor: getCategoryColor(index + 10) }"></div>
               <span class="text-gray-700 dark:text-gray-300">{{ category.name }}</span>
             </div>
             <div class="text-right">
-              <span class="font-medium dark:text-gray-200"
-                >{{ category.amount }} {{ ledger.currency }}</span
-              >
-              <span class="text-sm text-gray-500 dark:text-gray-400 ml-2"
-                >({{ category.percentage }}%)</span
-              >
+              <span class="font-medium dark:text-gray-200">{{ category.amount }} {{ ledger.currency }}</span>
+              <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">({{ category.percentage }}%)</span>
             </div>
           </div>
         </div>
@@ -175,16 +139,11 @@
     <div class="card mb-8">
       <h2 class="text-xl font-semibold mb-4">账户统计</h2>
       <div v-if="loading" class="text-center py-8">
-        <div
-          class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
-        ></div>
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
-      <div
-          v-else-if="stats.accounts.length === 0"
-          class="text-center py-8 text-gray-500 dark:text-gray-400"
-        >
-          <p>暂无账户数据</p>
-        </div>
+      <div v-else-if="stats.accounts.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+        <p>暂无账户数据</p>
+      </div>
       <div v-else class="overflow-x-auto">
         <table class="w-full">
           <thead>
@@ -195,20 +154,14 @@
             </tr>
           </thead>
           <tbody class="dark:text-gray-300">
-            <tr
-              v-for="(account, index) in stats.accounts"
-              :key="index"
-              class="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/70"
-            >
+            <tr v-for="(account, index) in stats.accounts" :key="index"
+              class="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/70">
               <td class="px-4 py-2">{{ account.name }}</td>
               <td class="px-4 py-2 text-right font-medium">
                 {{ account.balance }} {{ ledger.currency }}
               </td>
               <td class="px-4 py-2 text-right">
-                <span
-                  class="px-2 py-1 rounded text-xs"
-                  :class="getAccountTypeClass(account.type) + ' dark:opacity-80'"
-                >
+                <span class="px-2 py-1 rounded text-xs" :class="getAccountTypeClass(account.type) + ' dark:opacity-80'">
                   {{ account.type }}
                 </span>
               </td>
@@ -222,43 +175,28 @@
     <div class="card">
       <h2 class="text-xl font-semibold mb-4">月度收支趋势</h2>
       <div v-if="loading" class="text-center py-8">
-        <div
-          class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
-        ></div>
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
-      <div
-          v-else-if="stats.monthlyTrend.length === 0"
-          class="text-center py-8 text-gray-500 dark:text-gray-400"
-        >
-          <p>暂无月度趋势数据</p>
-        </div>
+      <div v-else-if="stats.monthlyTrend.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+        <p>暂无月度趋势数据</p>
+      </div>
       <div v-else class="space-y-4">
-          <div
-            v-for="(month, index) in stats.monthlyTrend"
-            :key="index"
-            class="flex flex-col"
-          >
-            <div class="flex justify-between items-center mb-1">
-              <span class="font-medium dark:text-gray-200">{{ month.month }}</span>
-              <span class="text-sm text-gray-500 dark:text-gray-400">
-                收入: {{ month.income }} | 支出: {{ month.expense }} | 结余:
-                {{ month.balance }}
-              </span>
-            </div>
-            <div class="flex gap-1 h-6">
-              <div
-                class="bg-green-500 dark:bg-green-600 rounded-l"
-                :style="{ width: month.incomePercentage + '%' }"
-                title="收入"
-              ></div>
-              <div
-                class="bg-red-500 dark:bg-red-600 rounded-r"
-                :style="{ width: month.expensePercentage + '%' }"
-                title="支出"
-              ></div>
-            </div>
+        <div v-for="(month, index) in stats.monthlyTrend" :key="index" class="flex flex-col">
+          <div class="flex justify-between items-center mb-1">
+            <span class="font-medium dark:text-gray-200">{{ month.month }}</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">
+              收入: {{ month.income }} | 支出: {{ month.expense }} | 结余:
+              {{ month.balance }}
+            </span>
+          </div>
+          <div class="flex gap-1 h-6">
+            <div class="bg-green-500 dark:bg-green-600 rounded-l" :style="{ width: month.incomePercentage + '%' }"
+              title="收入"></div>
+            <div class="bg-red-500 dark:bg-red-600 rounded-r" :style="{ width: month.expensePercentage + '%' }"
+              title="支出"></div>
           </div>
         </div>
+      </div>
     </div>
   </div>
 </template>

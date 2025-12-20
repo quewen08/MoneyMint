@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import json
+import os
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from datetime import datetime
@@ -96,8 +98,6 @@ def get_account_balances():
                     if account not in balances:
                         balances[account] = 0.0
                     balances[account] += amount
-                    
-    print(closed_accounts)
 
     # 只返回未关闭的账户
     active_accounts = open_accounts - closed_accounts
@@ -109,13 +109,16 @@ def get_account_balances():
         if account not in active_accounts:
             continue
             
-        # 提取账户类型
-        account_type = account.split(':')[0] if ':' in account else 'Other'
+        # 提取账户类型和二级分类
+        account_parts = account.split(':')
+        account_type = account_parts[0] if len(account_parts) > 0 else 'Other'
+        account_subtype = account_parts[1] if len(account_parts) > 1 else ''
 
         account_details.append(
             {
                 'name': account,
                 'type': account_type,
+                'subtype': account_subtype,
                 'balance': float(balance),  # 确保balance是float类型
                 'currency': account_currencies.get(account, currency),
                 'note': account_notes.get(account, ''),
@@ -126,3 +129,17 @@ def get_account_balances():
     account_details.sort(key=lambda x: (x['type'], x['name']))
 
     return jsonify(account_details)
+
+
+@accounts_bp.route('/config', methods=['GET'])
+@jwt_required()
+def get_account_config():
+    """获取账户分类配置"""
+    # 获取配置文件路径
+    config_file_path = os.path.join(os.path.dirname(__file__), 'config', 'account_config.json')
+    
+    # 读取配置文件
+    with open(config_file_path, 'r', encoding='utf-8') as f:
+        account_config = json.load(f)
+    
+    return jsonify(account_config)

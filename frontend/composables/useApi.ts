@@ -236,6 +236,7 @@ export const useApi = () => {
         const endpoint = `/accounts/balances?${queryParams.toString()}`
         return fetchApi(endpoint)
       },
+      getAccountConfig: () => fetchApi('/accounts/config'),
       openAccount: (entry: any) => fetchApi('/entries', {
         method: 'POST',
         body: JSON.stringify(entry)

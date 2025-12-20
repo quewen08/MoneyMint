@@ -88,7 +88,7 @@
     </header>
     
     <!-- 主内容区 -->
-    <main class="flex-1 container mx-auto px-4 py-4 md:py-6">
+    <main class="flex-1 container mx-auto px-4 py-4 md:py-6 pb-16 md:pb-6">
       <NuxtPage />
     </main>
     
