@@ -220,13 +220,15 @@
         </div>
       </div>
 
-      <div v-if="showAddModal || showEditModal"
-        class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center overflow-y-auto">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl my-8">
-          <AddEntryModal @close="closeModal" @entry-added="handleEntryAdded" @entry-updated="handleEntryUpdated"
-            @entry-deleted="handleEntryDeleted" :entry="editingEntry" />
-        </div>
-      </div>
+      <!-- Add Entry Drawer -->
+      <AddEntryModal
+        v-if="showAddModal || showEditModal"
+        @close="closeModal"
+        @entry-added="handleEntryAdded"
+        @entry-updated="handleEntryUpdated"
+        @entry-deleted="handleEntryDeleted"
+        :entry="editingEntry"
+      />
     </div>
   </div>
 </template>

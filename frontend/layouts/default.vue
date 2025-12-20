@@ -130,15 +130,12 @@
       </div>
     </nav>
     
-    <!-- 全局添加交易记录弹窗 -->
-    <div v-if="showAddModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center overflow-y-auto">
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl my-8 mx-4 transition-colors duration-200">
-        <AddEntryModal 
-          @close="showAddModal = false" 
-          @entry-added="handleEntryAdded"
-        />
-      </div>
-    </div>
+    <!-- Add Entry Drawer -->
+    <AddEntryModal
+      v-if="showAddModal"
+      @close="showAddModal = false"
+      @entry-added="handleEntryAdded"
+    />
   </div>
 </template>
 

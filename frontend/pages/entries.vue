@@ -186,21 +186,15 @@
       </div>
     </div>
   </div>
-    <!-- 新增/编辑记账记录的模态框 -->
-    <div
+    <!-- Add Entry Drawer -->
+    <AddEntryModal
       v-if="showAddModal || showEditModal"
-      class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center overflow-y-auto"
-    >
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl my-8 transition-colors duration-200">
-        <AddEntryModal
-          @close="closeModal"
-          @entry-added="handleEntryAdded"
-          @entry-updated="handleEntryUpdated"
-          @entry-deleted="handleEntryDeleted"
-          :entry="editingEntry"
-        />
-      </div>
-    </div>
+      @close="closeModal"
+      @entry-added="handleEntryAdded"
+      @entry-updated="handleEntryUpdated"
+      @entry-deleted="handleEntryDeleted"
+      :entry="editingEntry"
+    />
 </template>
 
 <script setup lang="ts">
