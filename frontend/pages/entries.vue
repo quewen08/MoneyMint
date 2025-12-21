@@ -7,55 +7,40 @@
       </button>
     </div>
 
-      <div class="card">
+    <div class="card">
       <!-- 筛选条件 -->
       <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <!-- 开始日期 -->
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">开始日期</label>
-            <input
-              type="date"
-              v-model="filters.start_date"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            />
+            <input type="date" v-model="filters.start_date"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
-          
+
           <!-- 结束日期 -->
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">结束日期</label>
-            <input
-              type="date"
-              v-model="filters.end_date"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            />
+            <input type="date" v-model="filters.end_date"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
           </div>
-          
-          <!-- 排序方式 -->
+
+          <!-- 类型筛选 -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">排序方式</label>
-            <select
-              v-model="filters.sort"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            >
-              <option value="date">日期</option>
-              <option value="narration">描述</option>
-            </select>
-          </div>
-          
-          <!-- 排序顺序 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">排序顺序</label>
-            <select
-              v-model="filters.order"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            >
-              <option value="desc">降序</option>
-              <option value="asc">升序</option>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">记录类型</label>
+            <select v-model="filters.type"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+              <option value="">全部类型</option>
+              <option value="Transaction">交易</option>
+              <option value="Open">开户</option>
+              <option value="Close">销户</option>
+              <option value="Balance">余额</option>
+              <option value="Pad">补账</option>
+              <option value="Note">备注</option>
             </select>
           </div>
         </div>
-        
+
         <!-- 操作按钮 -->
         <div class="flex flex-wrap gap-2">
           <button @click="applyFilters" class="btn btn-primary">应用筛选</button>
@@ -65,39 +50,28 @@
 
       <!-- 加载状态 -->
       <div v-if="loading" class="text-center py-8">
-        <div
-          class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
-        ></div>
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
 
       <!-- 无数据状态 -->
-      <div
-        v-else-if="entries.length === 0"
-        class="text-center py-8 text-gray-500 dark:text-gray-400"
-      >
+      <div v-else-if="entries.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
         <p>暂无记账记录</p>
       </div>
 
       <!-- 记账记录列表 -->
       <div v-else class="space-y-6">
-        <div
-          v-for="entry in entries"
-          :key="entry.meta?.filename + ':' + entry.meta?.lineno"
-          class="border-b pb-5 last:border-0"
-        >
+        <div v-for="entry in entries" :key="entry.meta?.filename + ':' + entry.meta?.lineno"
+          class="border-b pb-5 last:border-0">
           <div class="flex flex-col md:flex-row md:justify-between md:items-start mb-3">
             <div>
               <span class="font-medium text-lg">{{ entry.date }}</span>
               <span class="ml-2 text-sm text-gray-500">{{ entry.type }}</span>
             </div>
-            
+
             <!-- 标签显示 -->
             <div v-if="entry.tags && entry.tags.length > 0" class="mt-2 md:mt-0">
-              <span 
-                v-for="(tag, index) in entry.tags" 
-                :key="index"
-                class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded mr-1 mb-1"
-              >
+              <span v-for="(tag, index) in entry.tags" :key="index"
+                class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded mr-1 mb-1">
                 #{{ tag }}
               </span>
             </div>
@@ -110,15 +84,11 @@
 
           <!-- 交易记录详情 -->
           <div v-if="entry.type === 'Transaction'" class="ml-4 space-y-2">
-            <div
-              v-for="(posting, index) in entry.postings"
-              :key="index"
-              class="flex justify-between items-center p-2 rounded bg-gray-50 dark:bg-gray-800/70 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
+            <div v-for="(posting, index) in entry.postings" :key="index"
+              class="flex justify-between items-center p-2 rounded bg-gray-50 dark:bg-gray-800/70 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
               <span class="text-sm font-medium dark:text-gray-300">{{ posting.account }}</span>
               <span class="text-sm font-medium"
-                :class="posting.units?.number > 0 ? 'text-success' : posting.units?.number < 0 ? 'text-danger' : ''"
-              >
+                :class="posting.units?.number > 0 ? 'text-success' : posting.units?.number < 0 ? 'text-danger' : ''">
                 {{ posting.units?.number || "" }}
                 {{ posting.units?.currency || "" }}
               </span>
@@ -127,16 +97,12 @@
 
           <!-- 操作按钮 -->
           <div class="ml-4 mt-3 flex space-x-2">
-            <button
-              @click="openEditModal({ ...entry, id: `${entry.meta?.filename}:${entry.meta?.lineno}` })"
-              class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-            >
+            <button @click="openEditModal({ ...entry, id: `${entry.meta?.filename}:${entry.meta?.lineno}` })"
+              class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors">
               编辑
             </button>
-            <button
-              @click="openCopyModal({ ...entry, id: `${entry.meta?.filename}:${entry.meta?.lineno}` })"
-              class="px-3 py-1 text-sm bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
-            >
+            <button @click="openCopyModal({ ...entry, id: `${entry.meta?.filename}:${entry.meta?.lineno}` })"
+              class="px-3 py-1 text-sm bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded hover:bg-green-200 dark:hover:bg-green-800 transition-colors">
               复制
             </button>
           </div>
@@ -151,56 +117,38 @@
       <!-- 分页控件 -->
       <div v-if="!loading && pagination.total > 0" class="mt-6 flex flex-wrap justify-between items-center">
         <div class="text-sm text-gray-600 dark:text-gray-400">
-          显示第 {{ ((filters.page || 1) - 1) * (filters.page_size || 20) + 1 }}-{{ Math.min((filters.page || 1) * (filters.page_size || 20), pagination.total) }} 条，共 {{ pagination.total }} 条记录
+          显示第 {{ ((filters.page || 1) - 1) * (filters.page_size || 20) + 1 }}-{{ Math.min((filters.page || 1) *
+            (filters.page_size || 20), pagination.total) }} 条，共 {{ pagination.total }} 条记录
         </div>
         <div class="flex gap-2">
-          <button 
-            @click="goToPage(1)" 
-            class="btn btn-secondary"
-            :disabled="filters.page <= 1"
-          >
+          <button @click="goToPage(1)" class="btn btn-secondary" :disabled="filters.page <= 1">
             首页
           </button>
-          <button 
-            @click="goToPage(filters.page - 1)" 
-            class="btn btn-secondary"
-            :disabled="filters.page <= 1"
-          >
+          <button @click="goToPage(filters.page - 1)" class="btn btn-secondary" :disabled="filters.page <= 1">
             上一页
           </button>
-          <button 
-            @click="goToPage(filters.page + 1)" 
-            class="btn btn-secondary"
-            :disabled="filters.page >= pagination.pages"
-          >
+          <button @click="goToPage(filters.page + 1)" class="btn btn-secondary"
+            :disabled="filters.page >= pagination.pages">
             下一页
           </button>
-          <button 
-            @click="goToPage(pagination.pages)" 
-            class="btn btn-secondary"
-            :disabled="filters.page >= pagination.pages"
-          >
+          <button @click="goToPage(pagination.pages)" class="btn btn-secondary"
+            :disabled="filters.page >= pagination.pages">
             末页
           </button>
         </div>
       </div>
     </div>
   </div>
-    <!-- Add Entry Drawer -->
-    <AddEntryModal
-      v-if="showAddModal || showEditModal"
-      @close="closeModal"
-      @entry-added="handleEntryAdded"
-      @entry-updated="handleEntryUpdated"
-      @entry-deleted="handleEntryDeleted"
-      :entry="editingEntry"
-    />
+  <!-- Add Entry Drawer -->
+  <AddEntryModal v-if="showAddModal || showEditModal" @close="closeModal" @entry-added="handleEntryAdded"
+    @entry-updated="handleEntryUpdated" @entry-deleted="handleEntryDeleted" :entry="editingEntry" />
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import AddEntryModal from "~/components/AddEntryModal.vue";
 import { useApi } from "~/composables/useApi";
+import dayjs from "dayjs";
 
 const { getEntries } = useApi();
 
@@ -222,6 +170,7 @@ const editingEntry = ref<any>(null);
 const filters = ref({
   start_date: '',
   end_date: '',
+  type: 'Transaction', // 默认显示Transaction类型
   page: 1,
   page_size: 20,
   sort: 'date',
@@ -258,6 +207,7 @@ const resetFilters = () => {
   filters.value = {
     start_date: '',
     end_date: '',
+    type: 'Transaction', // 默认显示Transaction类型
     page: 1,
     page_size: 20,
     sort: 'date',
@@ -312,7 +262,7 @@ const openCopyModal = (entry: any) => {
   const copiedEntry = {
     ...entry,
     id: '', // 清空ID，使其成为新条目
-    date: new Date().toISOString().split('T')[0] // 默认使用当前日期
+    date: dayjs().format('YYYY-MM-DD') // 默认使用当前日期
   };
   editingEntry.value = copiedEntry;
   showAddModal.value = true; // 使用添加模态框而不是编辑模态框

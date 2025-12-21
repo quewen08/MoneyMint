@@ -192,10 +192,10 @@
                         getAccountTypeColor(type)
                       ]"></div>
                       <div>
-                        <div class="font-medium">
+                        <div class="font-medium text-gray-900 dark:text-white">
                           {{ account.name.split(":").pop() }}
                         </div>
-                        <div class="text-xs text-gray-500">
+                        <div class="text-xs text-gray-500 dark:text-gray-400">
                           {{ account.note || "无备注" }}
                         </div>
                       </div>
@@ -207,7 +207,7 @@
                       ]">
                         {{ formatCurrency(account.balance) }}
                       </div>
-                      <div class="text-xs text-gray-500">{{ account.currency }}</div>
+                      <div class="text-xs text-gray-500 dark:text-gray-400">{{ account.currency }}</div>
                     </div>
                   </div>
                 </div>
@@ -236,27 +236,27 @@
           <div class="space-y-4">
             <div class="grid grid-cols-2 gap-4">
               <div>
-                <div class="text-sm text-gray-500 mb-1">账户名称</div>
-                <div class="font-medium">{{ selectedAccount.name }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400 mb-1">账户名称</div>
+                <div class="font-medium text-gray-900 dark:text-white">{{ selectedAccount.name }}</div>
               </div>
               <div>
-                <div class="text-sm text-gray-500 mb-1">账户类型</div>
-                <div class="font-medium">
+                <div class="text-sm text-gray-500 dark:text-gray-400 mb-1">账户类型</div>
+                <div class="font-medium text-gray-900 dark:text-white">
                   {{ getAccountTypeName(selectedAccount.type) }}
                 </div>
               </div>
               <div>
-                <div class="text-sm text-gray-500 mb-1">账户说明</div>
-                <div class="font-medium">
+                <div class="text-sm text-gray-500 dark:text-gray-400 mb-1">账户说明</div>
+                <div class="font-medium text-gray-900 dark:text-white">
                   {{ selectedAccount.note || "无" }}
                 </div>
               </div>
               <div>
-                <div class="text-sm text-gray-500 mb-1">货币单位</div>
-                <div class="font-medium">{{ selectedAccount.currency }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400 mb-1">货币单位</div>
+                <div class="font-medium text-gray-900 dark:text-white">{{ selectedAccount.currency }}</div>
               </div>
               <div class="col-span-2">
-                <div class="text-sm text-gray-500 mb-1">当前余额</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400 mb-1">当前余额</div>
                 <div class="text-2xl font-bold" :class="selectedAccount.balance >= 0
                     ? 'text-green-600'
                     : 'text-red-600'
@@ -267,19 +267,19 @@
               </div>
             </div>
             <!-- 交易记录部分 -->
-            <div class="pt-4 border-t border-gray-200">
-              <h4 class="text-lg font-semibold mb-4">交易记录</h4>
+            <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <h4 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">交易记录</h4>
 
               <!-- 交易记录筛选 -->
               <div class="flex flex-col md:flex-row gap-3 mb-4">
                 <div class="flex-1">
                   <input v-model="accountEntriesDateRange.startDate" type="date"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary"
                     placeholder="开始日期" />
                 </div>
                 <div class="flex-1">
                   <input v-model="accountEntriesDateRange.endDate" type="date"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary"
                     placeholder="结束日期" />
                 </div>
                 <button @click="loadAccountEntries(accountEntriesPagination.page)"
@@ -297,18 +297,18 @@
               <div v-if="loadingAccountEntries" class="text-center py-4">
                 <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
               </div>
-              <div v-else-if="accountEntries.length === 0" class="text-center py-4 text-gray-500">
+              <div v-else-if="accountEntries.length === 0" class="text-center py-4 text-gray-500 dark:text-gray-400">
                 暂无交易记录
               </div>
               <div v-else class="space-y-2 max-h-[300px] overflow-y-auto">
                 <div v-for="entry in accountEntries" :key="JSON.stringify(entry)"
-                  class="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
+                  class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:bg-gray-50 dark:hover:bg-gray-800/70">
                   <div class="flex justify-between items-start">
-                    <div class="font-medium text-gray-800">
+                    <div class="font-medium text-gray-800 dark:text-gray-200">
                       {{ entry.date }}
                       <span v-if="entry.narration" class="ml-2 text-sm">{{ entry.narration }}</span>
                     </div>
-                    <div class="text-sm text-gray-500">{{ entry.type }}</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">{{ entry.type }}</div>
                   </div>
                   <div v-if="entry.postings" class="mt-2 space-y-1">
                     <div v-for="(posting, idx) in entry.postings" :key="idx"
@@ -322,7 +322,7 @@
                       </div>
                     </div>
                   </div>
-                  <div v-else-if="entry.account" class="mt-2 text-sm text-gray-700">
+                  <div v-else-if="entry.account" class="mt-2 text-sm text-gray-700 dark:text-gray-300">
                     账户: {{ entry.account }}
                   </div>
                 </div>
@@ -330,7 +330,7 @@
 
               <!-- 分页 -->
               <div v-if="accountEntriesPagination.total > 0" class="mt-4 flex justify-between items-center">
-                <div class="text-sm text-gray-500">
+                <div class="text-sm text-gray-500 dark:text-gray-400">
                   共 {{ accountEntriesPagination.total }} 条记录
                 </div>
                 <div class="flex gap-2">
@@ -339,7 +339,7 @@
                     :disabled="accountEntriesPagination.page === 1 || loadingAccountEntries">
                     上一页
                   </button>
-                  <span class="text-sm px-2">
+                  <span class="text-sm px-2 text-gray-700 dark:text-gray-300">
                     第 {{ accountEntriesPagination.page }} / {{ accountEntriesPagination.pages }} 页
                   </span>
                   <button @click="loadAccountEntries(accountEntriesPagination.page + 1)"
@@ -352,7 +352,7 @@
             </div>
 
             <!-- 操作按钮 -->
-            <div class="pt-4 border-t border-gray-200 space-y-2">
+            <div class="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
               <button @click="showSetBalanceModal = true"
                 class="btn btn-primary w-full flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
@@ -494,11 +494,11 @@
 
     <!-- 设置账户余额弹窗 -->
     <div v-if="showSetBalanceModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 transition-colors duration-200">
         <div class="p-6">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xl font-bold">设置账户余额</h3>
-            <button @click="showSetBalanceModal = false" class="text-gray-500 hover:text-gray-700">
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white">设置账户余额</h3>
+            <button @click="showSetBalanceModal = false" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -507,21 +507,21 @@
           </div>
           <form @submit.prevent="handleSetBalance">
             <div class="space-y-4">
-              <div class="text-sm text-gray-600">
+              <div class="text-sm text-gray-600 dark:text-gray-300">
                 为账户
                 <span class="font-medium">{{ selectedAccount?.name }}</span>
                 设置余额
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">日期</label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">日期</label>
                 <input v-model="setBalanceData.date" type="date"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                  class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary"
                   required />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">余额</label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">余额</label>
                 <input v-model="setBalanceData.amount" type="number" step="0.01"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                  class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg focus:ring-primary focus:border-primary"
                   placeholder="输入金额" required />
               </div>
               <div class="pt-4 flex gap-3">
@@ -545,6 +545,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from "vue";
 import { useNuxtApp } from '#app';
+import dayjs from "dayjs";
 
 const { $api } = useNuxtApp();
 const { accounts, getEntries } = $api;
@@ -576,12 +577,12 @@ const newAccount = ref({
 
 // 关闭账户表单数据
 const closeAccountData = ref({
-  date: new Date().toISOString().split("T")[0],
+  date: dayjs().format("YYYY-MM-DD"),
 });
 
 // 设置余额表单数据
 const setBalanceData = ref({
-  date: new Date().toISOString().split("T")[0],
+  date: dayjs().format("YYYY-MM-DD"),
   amount: 0,
 });
 
@@ -872,7 +873,7 @@ const handleAddAccount = async () => {
       subtype: "Current",
       note: "",
       currency: "CNY",
-      date: new Date().toISOString().split("T")[0],
+      date: dayjs().format("YYYY-MM-DD"),
     };
 
     showAddAccountModal.value = false;

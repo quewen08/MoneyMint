@@ -190,18 +190,28 @@ export const useApi = () => {
 
     // Ledger endpoints
     getLedger: () => fetchApi('/ledger'),
-    getEntries: (params: { start_date?: string, end_date?: string, account?: string, page?: number, page_size?: number, sort?: string, order?: string } = {}) => {
+    getEntries: (params: { start_date?: string, end_date?: string, account?: string, type?: string, page?: number, page_size?: number, sort?: string, order?: string } = {}) => {
       // 构建查询参数
       const queryParams = new URLSearchParams()
       if (params.start_date) queryParams.append('start_date', params.start_date)
       if (params.end_date) queryParams.append('end_date', params.end_date)
       if (params.account) queryParams.append('account', params.account)
+      if (params.type) queryParams.append('type', params.type)
       if (params.page) queryParams.append('page', params.page.toString())
       if (params.page_size) queryParams.append('page_size', params.page_size.toString())
       if (params.sort) queryParams.append('sort', params.sort)
       if (params.order) queryParams.append('order', params.order)
 
       const endpoint = `/entries?${queryParams.toString()}`
+      return fetchApi(endpoint)
+    },
+    getCategoryStats: (params: { start_date?: string, end_date?: string } = {}) => {
+      // 构建查询参数
+      const queryParams = new URLSearchParams()
+      if (params.start_date) queryParams.append('start_date', params.start_date)
+      if (params.end_date) queryParams.append('end_date', params.end_date)
+
+      const endpoint = `/stats/category-stats?${queryParams.toString()}`
       return fetchApi(endpoint)
     },
     runQuery: (query: string) => fetchApi('/query', {

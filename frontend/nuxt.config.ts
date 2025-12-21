@@ -8,7 +8,11 @@ export default defineNuxtConfig({
   ],
   runtimeConfig: {
     public: {
-      apiBaseUrl: '/api'
+      apiBaseUrl: '/api',
+      version: process.env.npm_package_version || '1.0.0',
+      buildDate: process.env.BUILD_DATE || new Date().toISOString(),
+      buildHash: process.env.BUILD_HASH || 'dev',
+      gitBranch: process.env.GIT_BRANCH || 'dev'
     }
   },
   css: [

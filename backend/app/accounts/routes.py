@@ -125,8 +125,17 @@ def get_account_balances():
             }
         )
 
-    # 按账户类型和名称排序
-    account_details.sort(key=lambda x: (x['type'], x['name']))
+    # 定义账户类型优先级，确保Equity（权益）类账户排在最后
+    account_type_priority = {
+        'Assets': 0,        # 资产
+        'Liabilities': 1,   # 负债
+        'Income': 2,        # 收入
+        'Expenses': 3,      # 支出
+        'Equity': 4         # 权益（排在最后）
+    }
+    
+    # 按账户类型优先级和名称排序
+    account_details.sort(key=lambda x: (account_type_priority.get(x['type'], 5), x['name']))
 
     return jsonify(account_details)
 
@@ -142,4 +151,18 @@ def get_account_config():
     with open(config_file_path, 'r', encoding='utf-8') as f:
         account_config = json.load(f)
     
-    return jsonify(account_config)
+    # 定义账户类型的期望顺序，确保Equity（权益）类账户排在最后
+    desired_order = ['Assets', 'Liabilities', 'Income', 'Expenses', 'Equity']
+    
+    # 按照期望顺序重新构建账户配置字典
+    ordered_account_config = {}
+    for account_type in desired_order:
+        if account_type in account_config:
+            ordered_account_config[account_type] = account_config[account_type]
+    
+    # 添加任何可能存在的其他账户类型（如果有的话）
+    for account_type in account_config:
+        if account_type not in ordered_account_config:
+            ordered_account_config[account_type] = account_config[account_type]
+
+    return jsonify(ordered_account_config)

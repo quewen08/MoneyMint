@@ -203,11 +203,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import dayjs from 'dayjs';
 import { useRouter } from "vue-router";
 import { useApi } from "~/composables/useApi";
 
 const router = useRouter();
-const { getLedger, getEntries, accounts } = useApi();
+const { getLedger, getEntries, getCategoryStats, accounts } = useApi();
 
 const loading = ref(true);
 const ledger = ref({
@@ -218,13 +219,15 @@ const ledger = ref({
 });
 const entries = ref([] as any[]);
 const accountBalances = ref([] as any[]);
+const accountConfig = ref<any>({
+  Income: {},
+  Expenses: {}
+});
 
 // 日期范围
 const dateRange = ref({
-  startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    .toISOString()
-    .split("T")[0],
-  endDate: new Date().toISOString().split("T")[0],
+  startDate: dayjs().startOf('month').format("YYYY-MM-DD"),
+  endDate: dayjs().format("YYYY-MM-DD"),
 });
 
 // 统计数据
@@ -290,14 +293,8 @@ const getAccountTypeClass = (type: string) => {
 
 // 重置日期范围
 const resetDateRange = () => {
-  dateRange.value.startDate = new Date(
-    new Date().getFullYear(),
-    new Date().getMonth(),
-    1
-  )
-    .toISOString()
-    .split("T")[0];
-  dateRange.value.endDate = new Date().toISOString().split("T")[0];
+  dateRange.value.startDate = dayjs().startOf('month').format("YYYY-MM-DD");
+  dateRange.value.endDate = dayjs().format("YYYY-MM-DD");
 };
 
 // 刷新统计数据
@@ -308,21 +305,25 @@ const refreshStats = async () => {
     // 获取数据
     ledger.value = await getLedger();
     const entriesResult = await getEntries({
-      start_date: dateRange.value.startDate,
-      end_date: dateRange.value.endDate,
+      start_date: dayjs(dateRange.value.startDate).format("YYYY-MM-DD"),
+      end_date: dayjs(dateRange.value.endDate).format("YYYY-MM-DD"),
     });
     entries.value = entriesResult.entries
       ? entriesResult.entries
       : entriesResult;
 
     const balancesResult = await accounts.getAccountBalances({
-      start_date: dateRange.value.startDate,
-      end_date: dateRange.value.endDate,
+      start_date: dayjs(dateRange.value.startDate).format("YYYY-MM-DD"),
+      end_date: dayjs(dateRange.value.endDate).format("YYYY-MM-DD"),
     });
     accountBalances.value = balancesResult;
 
+    // 获取账户配置信息
+    const configResult = await accounts.getAccountConfig();
+    accountConfig.value = configResult;
+
     // 计算统计数据
-    calculateStats();
+    await calculateStats();
   } catch (error) {
     console.error("Error refreshing stats:", error);
   } finally {
@@ -331,67 +332,87 @@ const refreshStats = async () => {
 };
 
 // 计算统计数据
-const calculateStats = () => {
-  let totalIncome = 0;
-  let totalExpense = 0;
-  const incomeByCategory: Record<string, number> = {};
-  const expenseByCategory: Record<string, number> = {};
+const calculateStats = async () => {
+  try {
+    // 使用后端API获取分类统计数据
+    const stats = await getCategoryStats({
+      start_date: dateRange.value.startDate,
+      end_date: dateRange.value.endDate
+    });
+    
+    let totalIncome = Math.abs(parseFloat(stats.income.total) || 0);
+    let totalExpense = Math.abs(parseFloat(stats.expense.total) || 0);
 
-  // 计算总收入和总支出
-  entries.value
-    .filter((e: any) => e.type === "Transaction")
-    .forEach((entry: any) => {
-      if (entry.postings) {
-        entry.postings.forEach((posting: any) => {
-          if (posting.units && posting.units.number) {
-            const amount = posting.units.number;
-            const account = posting.account;
+    // 按后端配置的分类统计，初始化所有配置的分类
+    const incomeByCategory: Record<string, number> = {};
+    const expenseByCategory: Record<string, number> = {};
 
-            // 判断是收入还是支出
-            if (account.startsWith("Income")) {
-              totalIncome += Math.abs(amount);
+    // 初始化所有配置的收入分类为0
+    if (accountConfig.value && accountConfig.value.Income) {
+      Object.keys(accountConfig.value.Income).forEach(category => {
+        incomeByCategory[category] = 0;
+      });
+    }
 
-              // 按分类统计收入
-              const categoryParts = account.split(":");
-              if (categoryParts.length >= 2) {
-                const category = categoryParts[1];
-                incomeByCategory[category] =
-                  (incomeByCategory[category] || 0) + Math.abs(amount);
-              }
-            } else if (account.startsWith("Expenses")) {
-              totalExpense += Math.abs(amount);
-
-              // 按分类统计支出
-              const categoryParts = account.split(":");
-              if (categoryParts.length >= 2) {
-                const category = categoryParts[1];
-                expenseByCategory[category] =
-                  (expenseByCategory[category] || 0) + Math.abs(amount);
-              }
-            }
+    // 初始化所有配置的支出分类为0
+    if (accountConfig.value && accountConfig.value.Expenses) {
+      Object.keys(accountConfig.value.Expenses).forEach(category => {
+        expenseByCategory[category] = 0;
+      });
+    }
+    
+    // 处理收入分类统计
+    stats.income.categories.forEach((item: any) => {
+      if (item.account && item.total) {
+        // 提取分类名称
+        const categoryParts = item.account.split(":");
+        if (categoryParts.length >= 2) {
+          const category = categoryParts[1];
+          // 只统计在配置中存在的分类
+          if (incomeByCategory.hasOwnProperty(category)) {
+            incomeByCategory[category] = Math.abs(parseFloat(item.total));
+          } else {
+            incomeByCategory[category] = Math.abs(parseFloat(item.total));
           }
-        });
+        }
+      }
+    });
+    
+    // 处理支出分类统计
+    stats.expense.categories.forEach((item: any) => {
+      if (item.account && item.total) {
+        // 提取分类名称
+        const categoryParts = item.account.split(":");
+        if (categoryParts.length >= 2) {
+          const category = categoryParts[1];
+          // 只统计在配置中存在的分类
+          if (expenseByCategory.hasOwnProperty(category)) {
+            expenseByCategory[category] = Math.abs(parseFloat(item.total));
+          } else {
+            expenseByCategory[category] = Math.abs(parseFloat(item.total));
+          }
+        }
       }
     });
 
-  // 转换为数组并计算百分比
-  const incomeCategories = Object.entries(incomeByCategory)
-    .map(([name, amount]) => ({
-      name,
-      amount: Number(amount.toFixed(2)),
-      percentage:
-        totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0,
-    }))
-    .sort((a, b) => b.amount - a.amount);
+    // 转换为数组并计算百分比
+    const incomeCategories = Object.entries(incomeByCategory)
+      .map(([name, amount]) => ({
+        name: accountConfig.value?.Income?.[name] || name, // 使用中文名称，如果没有则使用英文名称
+        amount: Number(amount.toFixed(2)),
+        percentage:
+          totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0
+      }))
+      .sort((a, b) => b.amount - a.amount);
 
-  const expenseCategories = Object.entries(expenseByCategory)
-    .map(([name, amount]) => ({
-      name,
-      amount: Number(amount.toFixed(2)),
-      percentage:
-        totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0,
-    }))
-    .sort((a, b) => b.amount - a.amount);
+    const expenseCategories = Object.entries(expenseByCategory)
+      .map(([name, amount]) => ({
+        name: accountConfig.value?.Expenses?.[name] || name, // 使用中文名称，如果没有则使用英文名称
+        amount: Number(amount.toFixed(2)),
+        percentage:
+          totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0
+      }))
+      .sort((a, b) => b.amount - a.amount);
 
   // 处理账户统计
   const accountStats = accountBalances.value.map((account: any) => {
@@ -425,6 +446,124 @@ const calculateStats = () => {
     accounts: accountStats,
     monthlyTrend,
   };
+  } catch (error) {
+    console.error("Error calculating stats:", error);
+    // 出错时回退到前端计算
+    let totalIncome = 0;
+    let totalExpense = 0;
+    // 按后端配置的分类统计，初始化所有配置的分类
+    const incomeByCategory: Record<string, number> = {};
+    const expenseByCategory: Record<string, number> = {};
+
+    // 初始化所有配置的收入分类为0
+    if (accountConfig.value && accountConfig.value.Income) {
+      Object.keys(accountConfig.value.Income).forEach(category => {
+        incomeByCategory[category] = 0;
+      });
+    }
+
+    // 初始化所有配置的支出分类为0
+    if (accountConfig.value && accountConfig.value.Expenses) {
+      Object.keys(accountConfig.value.Expenses).forEach(category => {
+        expenseByCategory[category] = 0;
+      });
+    }
+
+    // 计算总收入和总支出
+    entries.value
+      .filter((e: any) => e.type === "Transaction")
+      .forEach((entry: any) => {
+        if (entry.postings) {
+          entry.postings.forEach((posting: any) => {
+            if (posting.units && posting.units.number) {
+              const amount = posting.units.number;
+              const account = posting.account;
+
+              // 判断是收入还是支出
+              if (account.startsWith("Income")) {
+                totalIncome += Math.abs(amount);
+
+                // 按分类统计收入
+                const categoryParts = account.split(":");
+                if (categoryParts.length >= 2) {
+                  const category = categoryParts[1];
+                  // 只统计在配置中存在的分类
+                  if (incomeByCategory.hasOwnProperty(category)) {
+                    incomeByCategory[category] = 
+                      (incomeByCategory[category] || 0) + Math.abs(amount);
+                  }
+                }
+              } else if (account.startsWith("Expenses")) {
+                totalExpense += Math.abs(amount);
+
+                // 按分类统计支出
+                const categoryParts = account.split(":");
+                if (categoryParts.length >= 2) {
+                  const category = categoryParts[1];
+                  // 只统计在配置中存在的分类
+                  if (expenseByCategory.hasOwnProperty(category)) {
+                    expenseByCategory[category] = 
+                      (expenseByCategory[category] || 0) + Math.abs(amount);
+                  }
+                }
+              }
+            }
+          });
+        }
+      });
+
+    // 转换为数组并计算百分比
+    const incomeCategories = Object.entries(incomeByCategory)
+      .map(([name, amount]) => ({
+        name: accountConfig.value?.Income?.[name] || name, // 使用中文名称，如果没有则使用英文名称
+        amount: Number(amount.toFixed(2)),
+        percentage:
+          totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    const expenseCategories = Object.entries(expenseByCategory)
+      .map(([name, amount]) => ({
+        name: accountConfig.value?.Expenses?.[name] || name, // 使用中文名称，如果没有则使用英文名称
+        amount: Number(amount.toFixed(2)),
+        percentage:
+          totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    // 处理账户统计
+    const accountStats = accountBalances.value.map((account: any) => {
+      let type = "Unknown";
+      if (account.name.startsWith("Assets")) type = "Assets";
+      else if (account.name.startsWith("Liabilities")) type = "Liabilities";
+      else if (account.name.startsWith("Equity")) type = "Equity";
+      else if (account.name.startsWith("Income")) type = "Income";
+      else if (account.name.startsWith("Expenses")) type = "Expenses";
+
+      return {
+        name: account.name,
+        balance: Number(account.balance.toFixed(2)),
+        type,
+      };
+    });
+
+    // 计算月度趋势
+    const monthlyTrend = calculateMonthlyTrend();
+
+    // 更新统计数据
+    stats.value = {
+      totalIncome: Number(totalIncome.toFixed(2)),
+      totalExpense: Number(totalExpense.toFixed(2)),
+      netIncome: Number((totalIncome - totalExpense).toFixed(2)),
+      totalTransactions: entries.value.filter(
+        (e: any) => e.type === "Transaction"
+      ).length,
+      incomeByCategory: incomeCategories,
+      expenseByCategory: expenseCategories,
+      accounts: accountStats,
+      monthlyTrend,
+    };
+  }
 };
 
 // 计算月度趋势
@@ -435,7 +574,7 @@ const calculateMonthlyTrend = () => {
   entries.value
     .filter((e: any) => e.type === "Transaction")
     .forEach((entry: any) => {
-      const month = entry.date.substring(0, 7); // YYYY-MM
+      const month = dayjs(entry.date).format("YYYY-MM"); // YYYY-MM
 
       if (!monthlyData[month]) {
         monthlyData[month] = { income: 0, expense: 0 };

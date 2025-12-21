@@ -84,52 +84,51 @@
               <!-- 交易类型表单 -->
               <div v-if="!isEditMode">
                 <!-- 交易类型说明 -->
-                <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div
+                  class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <p class="text-sm text-blue-800 dark:text-blue-200">
-                    {{ transactionType === 'expense' ? '支出：从资产账户扣除金额到支出账户' : 
-                       transactionType === 'income' ? '收入：从收入账户增加金额到资产账户' : 
-                       '转账：从一个账户转移金额到另一个账户' }}
+                    {{ transactionType === 'expense' ? '支出：从资产账户扣除金额到支出账户' :
+                      transactionType === 'income' ? '收入：从收入账户增加金额到资产账户' :
+                        '转账：从一个账户转移金额到另一个账户' }}
                   </p>
                 </div>
-                
+
                 <!-- 记账行列表 -->
                 <div class="space-y-4">
                   <div v-for="(posting, index) in formData.postings" :key="index" class="space-y-2">
                     <div class="relative">
                       <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        {{ index === 0 ? 
-                           (transactionType === 'expense' ? '支出账户' : 
-                            transactionType === 'income' ? '收入账户' : '转出账户') : 
-                           (index === 1 ? 
-                            (transactionType === 'expense' ? '支出类别' : 
-                             transactionType === 'income' ? '收入类别' : '转入账户') : 
+                        {{ index === 0 ?
+                          (transactionType === 'expense' ? '支出账户' :
+                            transactionType === 'income' ? '收入账户' : '转出账户') :
+                          (index === 1 ?
+                            (transactionType === 'expense' ? '支出类别' :
+                              transactionType === 'income' ? '收入类别' : '转入账户') :
                             `账户 ${index + 1}`) }}
                       </label>
                       <!-- 使用自定义账户选择组件 -->
-                      <AccountSelect
-                        v-model="posting.account"
-                        :accounts="accountsStore.list"
+                      <AccountSelect v-model="posting.account" :accounts="accountsStore.list"
                         :account-type="index === 1 ? (transactionType === 'expense' ? 'expenses' : transactionType === 'income' ? 'income' : '') : ''"
-                        placeholder="选择或搜索账户..."
-                      />
+                        placeholder="选择或搜索账户..." />
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                       <input type="number" v-model="posting.amount" placeholder="金额" step="0.01"
                         class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         required />
-                      <button type="button" @click="removePosting(index)" 
+                      <button type="button" @click="removePosting(index)"
                         class="bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-300 px-4 py-2 rounded-lg hover:bg-red-200 dark:hover:bg-red-800"
                         :disabled="formData.postings.length <= 2">
                         删除
                       </button>
                     </div>
                   </div>
-                  
+
                   <!-- 添加记账行按钮 -->
                   <div class="flex justify-center mt-2">
-                    <button type="button" @click="addPosting" 
+                    <button type="button" @click="addPosting"
                       class="text-sm text-primary hover:text-primary/80 flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                       </svg>
                       添加账户行
@@ -138,30 +137,74 @@
                 </div>
               </div>
 
-              <!-- 通用记账行（编辑模式或自定义模式） -->
+              <!-- 编辑模式下根据记录类型显示不同的表单 -->
               <div v-if="isEditMode">
-                <div class="flex justify-between items-center mb-2">
-                  <label class="block text-sm font-medium text-gray-700">记账行</label>
-                  <button type="button" @click="addPosting" class="text-sm text-primary hover:text-primary/80">
-                    + 添加行
-                  </button>
+                <!-- Transaction类型记录 -->
+                <div v-if="editingEntry?.type === 'Transaction'">
+                  <div class="flex justify-between items-center mb-2">
+                    <label class="block text-sm font-medium text-gray-700">记账行</label>
+                    <button type="button" @click="addPosting" class="text-sm text-primary hover:text-primary/80">
+                      + 添加行
+                    </button>
+                  </div>
+
+                  <div v-for="(posting, index) in formData.postings" :key="index" class="space-y-2 mb-3">
+                    <!-- 使用自定义账户选择组件 -->
+                    <AccountSelect v-model="posting.account" :accounts="accountsStore.list" placeholder="选择或搜索账户..." />
+                    <div class="grid grid-cols-2 gap-2">
+                      <input type="number" v-model="posting.amount" placeholder="金额" step="0.01"
+                        class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        required />
+                      <button type="button" @click="removePosting(index)"
+                        class="bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-300 px-4 py-2 rounded-lg hover:bg-red-200 dark:hover:bg-red-800">
+                        删除
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                <div v-for="(posting, index) in formData.postings" :key="index" class="space-y-2 mb-3">
-                  <!-- 使用自定义账户选择组件 -->
-                  <AccountSelect
-                    v-model="posting.account"
-                    :accounts="accountsStore.list"
-                    placeholder="选择或搜索账户..."
-                  />
-                  <div class="grid grid-cols-2 gap-2">
-                    <input type="number" v-model="posting.amount" placeholder="金额" step="0.01"
-                      class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      required />
-                    <button type="button" @click="removePosting(index)"
-                      class="bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-300 px-4 py-2 rounded-lg hover:bg-red-200 dark:hover:bg-red-800">
-                      删除
-                    </button>
+                <!-- Open/Close类型记录 -->
+                <div v-else-if="editingEntry?.type === 'Open' || editingEntry?.type === 'Close'">
+                  <div class="space-y-4">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账户</label>
+                      <AccountSelect v-model="formData.postings[0].account" :accounts="accountsStore.list"
+                        placeholder="选择或搜索账户..." />
+                    </div>
+
+                    <div v-if="editingEntry?.type === 'Open'">
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">初始余额</label>
+                      <input type="number" v-model="formData.postings[0].amount" placeholder="金额" step="0.01"
+                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Balance类型记录 -->
+                <div v-else-if="editingEntry?.type === 'Balance'">
+                  <div class="space-y-4">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账户</label>
+                      <AccountSelect v-model="formData.postings[0].account" :accounts="accountsStore.list"
+                        placeholder="选择或搜索账户..." />
+                    </div>
+
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">余额</label>
+                      <input type="number" v-model="formData.postings[0].amount" placeholder="金额" step="0.01"
+                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        required />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 其他类型记录 -->
+                <div v-else>
+                  <div
+                    class="p-4 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <p class="text-sm text-yellow-800 dark:text-yellow-200">
+                      当前不支持编辑 {{ editingEntry?.type }} 类型的记录
+                    </p>
                   </div>
                 </div>
               </div>
@@ -186,6 +229,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch } from "vue";
 import { useApi } from "~/composables/useApi";
 import { useAccountsStore } from "~/stores/accounts";
+import dayjs from "dayjs";
 
 interface EntryWithId {
   id: string;
@@ -214,12 +258,13 @@ const emit = defineEmits([
 const submitting = ref(false);
 const isEditMode = ref(false);
 const editingEntryId = ref<string>("");
+const editingEntry = ref<any>(null);
 
 // 交易类型
 const transactionType = ref('expense');
 
 const formData = reactive({
-  date: new Date().toISOString().split("T")[0],
+  date: dayjs().format("YYYY-MM-DD"),
   narration: "",
   tagsInput: "",
   postings: [
@@ -263,31 +308,45 @@ onMounted(async () => {
 });
 
 // 将entry数据加载到表单
-const loadEntryToForm = (entry: EntryWithId) => {
+const loadEntryToForm = (entry: any) => {
   formData.date = entry.date;
-  formData.narration = entry.narration;
-  formData.tagsInput =
-    entry.tags && entry.tags.length ? entry.tags.join(",") : "";
-  // 解析金额数据，兼容不同的数据结构
-  formData.postings = entry.postings.map((p: any) => {
-    let amount = "";
-    if (p.amount) {
-      // 旧格式：金额包含货币单位
-      amount = p.amount.replace(" CNY", "").trim();
-    } else if (p.units) {
-      // 新格式：金额和货币分开
-      amount = p.units.number?.toString() || "";
-    }
-    return {
-      account: p.account,
-      amount: amount,
-    };
-  });
+
+  // 根据记录类型加载不同的字段
+  if (entry.type === 'Transaction') {
+    formData.narration = entry.narration;
+    formData.tagsInput = entry.tags && entry.tags.length ? entry.tags.join(",") : "";
+    // 解析金额数据，兼容不同的数据结构
+    formData.postings = entry.postings.map((p: any) => {
+      let amount = "";
+      if (p.amount) {
+        // 旧格式：金额包含货币单位
+        amount = p.amount.replace(" CNY", "").trim();
+      } else if (p.units) {
+        // 新格式：金额和货币分开
+        amount = p.units.number?.toString() || "";
+      }
+      return {
+        account: p.account,
+        amount: amount,
+      };
+    });
+  } else {
+    // 非Transaction类型，设置默认值
+    formData.narration = entry.narration || "";
+    formData.tagsInput = entry.tags && entry.tags.length ? entry.tags.join(",") : "";
+    formData.postings = [];
+
+    // 确保至少有一个记账行
+    formData.postings.push({
+      account: entry.account || "",
+      amount: ""
+    });
+  }
 };
 
 // 重置表单
 const resetForm = () => {
-  formData.date = new Date().toISOString().split("T")[0];
+  formData.date = dayjs().format("YYYY-MM-DD");
   formData.narration = "";
   formData.tagsInput = "";
   formData.postings = [
@@ -295,6 +354,10 @@ const resetForm = () => {
     { account: "", amount: "" }
   ];
   transactionType.value = 'expense';
+  // 确保重置所有与编辑模式相关的变量
+  isEditMode.value = false;
+  editingEntryId.value = "";
+  editingEntry.value = null;
 };
 
 const handleSubmit = async () => {
@@ -307,49 +370,147 @@ const handleSubmit = async () => {
       .map((tag) => tag.trim())
       .filter((tag) => tag);
 
-    // 准备提交数据
-    const entry = {
-      date: formData.date,
-      narration: formData.narration,
-      tags: tags,
-      postings: [] as any[],
-    };
+    let entry: any;
 
-    // 根据交易类型处理金额符号
-    if (!isEditMode.value) {
-      const amount = parseFloat(formData.postings[0].amount) || 0;
-
-      if (transactionType.value === 'expense') {
-        // 支出：资产账户减少，支出账户增加
-        entry.postings = [
-          { account: formData.postings[0].account, amount: `${-amount} CNY` },
-          { account: formData.postings[1].account, amount: `${amount} CNY` }
-        ];
-      } else if (transactionType.value === 'income') {
-        // 收入：资产账户增加，收入账户增加
-        entry.postings = [
-          { account: formData.postings[0].account, amount: `${amount} CNY` },
-          { account: formData.postings[1].account, amount: `${-amount} CNY` }
-        ];
-      } else if (transactionType.value === 'transfer') {
-        // 转账：转出账户减少，转入账户增加
-        entry.postings = [
-          { account: formData.postings[0].account, amount: `${-amount} CNY` },
-          { account: formData.postings[1].account, amount: `${amount} CNY` }
-        ];
-      }
-    } else {
-      // 编辑模式：保持原有的金额结构
-      entry.postings = formData.postings.map((p) => ({
-        account: p.account,
-        amount: `${p.amount} CNY`, // 使用默认货币
-      }));
+    // 验证记账行数据
+    const validPostings = formData.postings.filter(p => p.account && p.amount);
+    if (validPostings.length < 2) {
+      alert('根据Beancount记账规则，每笔交易至少需要两个记账行');
+      submitting.value = false;
+      return;
     }
 
-    if (isEditMode.value && editingEntryId.value) {
+    // 检查账户是否重复
+    const accounts = validPostings.map(p => p.account);
+    const uniqueAccounts = new Set(accounts);
+    if (accounts.length !== uniqueAccounts.size) {
+      alert('同一交易中不能使用相同的账户');
+      submitting.value = false;
+      return;
+    }
+
+    // 新增模式
+    if (!isEditMode.value) {
+      // 新增模式目前只支持Transaction类型
+      entry = {
+        date: formData.date,
+        narration: formData.narration,
+        tags: tags,
+        postings: [] as any[],
+      };
+
+      if (transactionType.value === 'expense' || transactionType.value === 'income' || transactionType.value === 'transfer') {
+        // 对于基本交易类型，使用自动平衡逻辑
+        if (validPostings.length === 2) {
+          // 两笔记账行的情况，自动计算平衡
+          const firstAmount = parseFloat(formData.postings[0].amount) || 0;
+          const secondAmount = parseFloat(formData.postings[1].amount) || 0;
+
+          // 根据交易类型确定金额符号
+          if (transactionType.value === 'expense') {
+            // 支出：资产账户减少，支出账户增加
+            entry.postings = [
+              { account: formData.postings[0].account, amount: `${-firstAmount} CNY` },
+              { account: formData.postings[1].account, amount: `${firstAmount} CNY` }
+            ];
+          } else if (transactionType.value === 'income') {
+            // 收入：资产账户增加，收入账户增加
+            entry.postings = [
+              { account: formData.postings[0].account, amount: `${firstAmount} CNY` },
+              { account: formData.postings[1].account, amount: `${-firstAmount} CNY` }
+            ];
+          } else if (transactionType.value === 'transfer') {
+            // 转账：转出账户减少，转入账户增加
+            entry.postings = [
+              { account: formData.postings[0].account, amount: `${-firstAmount} CNY` },
+              { account: formData.postings[1].account, amount: `${firstAmount} CNY` }
+            ];
+          }
+        } else {
+          // 多记账行的情况，要求用户确保借贷平衡
+          let total = 0;
+          const postings = validPostings.map(p => {
+            const amount = parseFloat(p.amount) || 0;
+            total += amount;
+            return {
+              account: p.account,
+              amount: `${amount} CNY`
+            };
+          });
+
+          // 验证借贷平衡
+          if (Math.abs(total) > 0.01) {
+            alert('多记账行时，金额之和必须为零（借贷平衡）');
+            submitting.value = false;
+            return;
+          }
+
+          entry.postings = postings;
+        }
+      }
+    }
+    // 编辑模式
+    else {
+      // 根据记录类型构建不同的提交数据
+      if (editingEntry.value?.type === 'Transaction') {
+        // 验证借贷平衡
+        const total = validPostings.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+        if (Math.abs(total) > 0.01) { // 允许0.01的误差
+          alert('记账行金额之和必须为零（借贷平衡）');
+          submitting.value = false;
+          return;
+        }
+
+        entry = {
+          date: formData.date,
+          narration: formData.narration,
+          tags: tags,
+          postings: validPostings.map((p) => ({
+            account: p.account,
+            amount: `${p.amount} CNY`, // 使用默认货币
+          })),
+        };
+      } else if (editingEntry.value?.type === 'Open') {
+        entry = {
+          date: formData.date,
+          account: formData.postings[0]?.account,
+          tags: tags,
+        };
+        // 添加初始余额（如果有）
+        const amount = parseFloat(formData.postings[0]?.amount);
+        if (!isNaN(amount)) {
+          entry.postings = [{
+            account: formData.postings[0]?.account,
+            amount: `${amount} CNY`
+          }];
+        }
+      } else if (editingEntry.value?.type === 'Close') {
+        entry = {
+          date: formData.date,
+          account: formData.postings[0]?.account,
+          tags: tags,
+        };
+      } else if (editingEntry.value?.type === 'Balance') {
+        entry = {
+          date: formData.date,
+          account: formData.postings[0]?.account,
+          balance: `${parseFloat(formData.postings[0]?.amount)} CNY`,
+          tags: tags,
+        };
+      } else {
+        // 其他类型暂时不支持编辑
+        console.error("Unsupported entry type for editing:", editingEntry.value?.type);
+        return;
+      }
+    }
+
+    // 确保只有在明确的编辑模式下才调用updateEntry
+    if (isEditMode.value && editingEntryId.value && props.entry) {
+      console.log('编辑模式：更新记录', editingEntryId.value);
       await updateEntry(editingEntryId.value, entry);
       emit("entryUpdated");
     } else {
+      console.log('添加模式：创建新记录');
       await addEntry(entry);
       emit("entryAdded");
     }
@@ -395,13 +556,17 @@ const handleDelete = async () => {
 watch(
   () => props.entry,
   (newValue) => {
-    if (newValue) {
+    if (newValue && newValue.id && newValue.id.trim() !== '') {
+      // 只有当entry包含有效的id时才进入编辑模式
       isEditMode.value = true;
       editingEntryId.value = newValue.id;
+      editingEntry.value = newValue;
       loadEntryToForm(newValue);
     } else {
+      // 否则进入添加模式
       isEditMode.value = false;
       editingEntryId.value = "";
+      editingEntry.value = null;
       resetForm();
     }
   },

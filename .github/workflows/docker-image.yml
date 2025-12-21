@@ -31,6 +31,22 @@ jobs:
         id: release_version
         run: |
           echo ::set-output name=version::$(node -p "require('./frontend/package.json').version")
+      
+      - name: Generate build info
+        id: build_info
+        run: |
+          echo "::set-output name=build_date::$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "::set-output name=build_hash::$(git rev-parse --short HEAD)"
+          echo "::set-output name=git_branch::${GITHUB_REF#refs/heads/}"
+      
+      - name: Build frontend with build info
+        run: |
+          cd frontend
+          npm install
+          export BUILD_DATE=${{ steps.build_info.outputs.build_date }}
+          export BUILD_HASH=${{ steps.build_info.outputs.build_hash }}
+          export GIT_BRANCH=${{ steps.build_info.outputs.git_branch }}
+          npm run build
 
       - name: Build the Docker image and Push to DockerHub Current Tag
         uses: docker/build-push-action@v6
@@ -43,3 +59,41 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/money-mint:${{ steps.release_version.outputs.version }}
             ${{ secrets.DOCKER_USERNAME }}/money-mint:latest
+      
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.release_version.outputs.version }}
+          name: Release v${{ steps.release_version.outputs.version }}
+          body: |
+            ## 版本更新说明
+            
+            - 构建版本: ${{ steps.release_version.outputs.version }}
+            - 构建日期: ${{ steps.build_info.outputs.build_date }}
+            - 构建哈希: ${{ steps.build_info.outputs.build_hash }}
+            - 构建分支: ${{ steps.build_info.outputs.git_branch }}
+            
+            ## 更新内容
+            
+            请参考本次提交记录获取详细更新内容
+          draft: false
+          prerelease: false
+      
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y zip
+      
+      - name: Compress frontend build
+        run: |
+          cd frontend
+          zip -r money-mint-frontend-${{ steps.release_version.outputs.version }}.zip .nuxt/dist/client
+      
+      - name: Upload frontend build to release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.release_version.outputs.version }}
+          files: ./frontend/money-mint-frontend-${{ steps.release_version.outputs.version }}.zip

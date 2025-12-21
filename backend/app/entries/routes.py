@@ -24,6 +24,7 @@ def get_entries():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     account = request.args.get('account')  # 添加账户筛选条件
+    entry_type = request.args.get('type')  # 添加类型筛选条件
     page = int(request.args.get('page', 1))
     page_size = int(request.args.get('page_size', 20))
     sort = request.args.get('sort', 'date')  # 默认按日期排序
@@ -57,7 +58,22 @@ def get_entries():
             meta_dict = {}
             if hasattr(entry, 'meta'):
                 meta_dict = ensure_string_keys(dict(entry.meta))
-            entry_data = {'type': type(entry).__name__, 'date': entry.date.isoformat(), 'meta': meta_dict}
+            
+            # 创建条目ID：filename:lineno
+            entry_id = ''
+            if hasattr(entry, 'meta') and 'filename' in entry.meta and 'lineno' in entry.meta:
+                # 获取相对路径（去掉主文件所在目录）
+                filename = entry.meta['filename']
+                main_dir = os.path.dirname(LEDGER_FILE)
+                if filename.startswith(main_dir):
+                    filename = filename[len(main_dir)+1:]
+                entry_id = f"{filename}:{entry.meta['lineno']}"
+            
+            entry_data = {'type': type(entry).__name__, 'id': entry_id, 'date': entry.date.isoformat(), 'meta': meta_dict}
+
+            # 类型筛选
+            if entry_type and entry_data['type'] != entry_type:
+                continue
 
             # 添加交易描述
             if hasattr(entry, 'narration'):

@@ -23,6 +23,14 @@
               <!-- 用户菜单 -->
               <div v-if="showUserMenu" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl py-1 z-50 transition-colors duration-200">
                 <div class="px-4 py-2 border-b dark:border-gray-700">
+                  <span class="text-xs font-semibold text-gray-500 dark:text-gray-400">账户</span>
+                </div>
+                <div class="px-2 py-1">
+                  <NuxtLink to="/profile" class="block w-full text-left px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                    <span class="text-sm text-gray-700 dark:text-gray-300">个人资料</span>
+                  </NuxtLink>
+                </div>
+                <div class="px-4 py-2 border-b dark:border-gray-700">
                   <span class="text-xs font-semibold text-gray-500 dark:text-gray-400">设置</span>
                 </div>
                 <div class="px-2 py-1">

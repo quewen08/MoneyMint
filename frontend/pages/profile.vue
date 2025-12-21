@@ -81,8 +81,14 @@
         <div class="px-6 py-6">
           <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300 mb-4 transition-colors duration-200">关于
             MoneyMint</h3>
-          <p class="text-gray-600 dark:text-gray-400 mb-4 transition-colors duration-200">版本: {{ appVersion }}</p>
-          <p class="text-gray-600 dark:text-gray-400 transition-colors duration-200">{{ APP_DESCRIPTION }}</p>
+          <p class="text-gray-600 dark:text-gray-400 mb-2 transition-colors duration-200">版本: {{ appVersion }}</p>
+          <p class="text-gray-600 dark:text-gray-400 mb-2 transition-colors duration-200">{{ APP_DESCRIPTION }}</p>
+          <div class="mt-4 text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-4">
+            <p class="mb-1">构建版本: {{ buildInfo.version }}</p>
+            <p class="mb-1">构建日期: {{ new Date(buildInfo.buildDate).toLocaleString() }}</p>
+            <p class="mb-1">构建哈希: {{ buildInfo.buildHash }}</p>
+            <p>分支: {{ buildInfo.gitBranch }}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -94,6 +100,7 @@ import { useNuxtApp } from '#app'
 import { useRouter } from 'vue-router'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useSse } from '~/composables/useSse'
+import { useRuntimeConfig } from '#app'
 // 应用信息
 import { APP_NAME, APP_DESCRIPTION, fetchVersionInfo } from '~/config/version'
 
@@ -111,6 +118,15 @@ const { connect: connectSse, disconnect: disconnectSse, isConnected } = useSse()
 // 应用信息
 const appVersion = ref('加载中...')
 const appDescription = ref(APP_DESCRIPTION)
+
+// 获取构建信息
+const runtimeConfig = useRuntimeConfig()
+const buildInfo = computed(() => ({
+  version: runtimeConfig.public.version,
+  buildDate: runtimeConfig.public.buildDate,
+  buildHash: runtimeConfig.public.buildHash,
+  gitBranch: runtimeConfig.public.gitBranch
+}))
 
 // 检查localStorage可用性
 const isLocalStorageAvailable = () => {

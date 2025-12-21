@@ -1,5 +1,7 @@
 # MoneyMint 记账系统 中文|[ENGLISH](README.md) [![docker image size](https://img.shields.io/docker/image-size/quewen08/money-mint/latest?label=docker-image)](https://hub.docker.com/repository/docker/quewen08/money-mint/general) ![docker pulls](https://img.shields.io/docker/pulls/quewen08/money-mint)
 
+[![](frontend/public/favicon.ico)](https://github.com/QueWen08/money-mint)
+
 一个基于 Beancount 和 Nuxt.js 构建的现代化的个人记账系统，提供强大的后端服务和移动端友好的前端界面，帮助用户轻松管理个人财务。
 
 ## 🚀 项目简介

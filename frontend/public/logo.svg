@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- 背景圆形 -->
+  <circle cx="64" cy="64" r="60" fill="#4ade80"/>
+  <!-- 硬币形状 -->
+  <circle cx="64" cy="64" r="40" fill="#facc15" stroke="#eab308" stroke-width="4"/>
+  <!-- 硬币内部细节 -->
+  <circle cx="64" cy="64" r="30" fill="#facc15" stroke="#eab308" stroke-width="2"/>
+  <!-- 薄荷叶片 -->
+  <path d="M90,38 C85,30 75,26 64,26 C53,26 43,30 38,38 C32,46 30,56 30,66 C30,76 34,86 42,92 C42,92 44,88 50,88 C56,88 58,92 58,92 C66,86 70,76 70,66 C70,56 68,46 62,38 C68,42 74,44 80,44 C86,44 92,42 90,38 Z" fill="#10b981" opacity="0.8"/>
+  <!-- 薄荷茎 -->
+  <path d="M64,26 L64,44" stroke="#059669" stroke-width="3"/>
+  <!-- 硬币上的货币符号 -->
+  <text x="64" y="72" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#78350f" text-anchor="middle">¥</text>
+</svg>

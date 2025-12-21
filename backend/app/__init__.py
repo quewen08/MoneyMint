@@ -34,6 +34,7 @@ from app.ledger.routes import ledger_bp
 from app.entries.routes import entries_bp
 from app.accounts.routes import accounts_bp
 from app.events.routes import events_bp
+from app.stats.routes import stats_bp
 
 # 注册蓝图
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -41,6 +42,7 @@ app.register_blueprint(ledger_bp, url_prefix='/api/ledger')
 app.register_blueprint(entries_bp, url_prefix='/api/entries')
 app.register_blueprint(accounts_bp, url_prefix='/api/accounts')
 app.register_blueprint(events_bp, url_prefix='/api/events')
+app.register_blueprint(stats_bp, url_prefix='/api/stats')
 
 
 @app.route('/api/version', methods=['GET'])
