@@ -19,14 +19,14 @@ def get_accounts():
     # 收集所有Open和Close的账户
     open_accounts = set()
     closed_accounts = set()
-    
+
     for entry in entries:
         if hasattr(entry, 'account'):
             if type(entry).__name__ == 'Open':
                 open_accounts.add(entry.account)
             elif type(entry).__name__ == 'Close':
                 closed_accounts.add(entry.account)
-    
+
     # 只返回未关闭的账户
     active_accounts = open_accounts - closed_accounts
 
@@ -45,8 +45,29 @@ def get_account_balances():
     end_date = request.args.get('end_date')
 
     # 转换为日期对象用于比较
-    start_date_obj = datetime.fromisoformat(start_date).date() if start_date else None
-    end_date_obj = datetime.fromisoformat(end_date).date() if end_date else None
+    start_date_obj = None
+    end_date_obj = None
+    if start_date:
+        # 尝试解析多种日期格式
+        try:
+            # 解析 ISO 格式日期
+            start_date_obj = datetime.fromisoformat(start_date).date()
+        except ValueError:
+            try:
+                # 解析 YYYY-MM-DD 格式日期
+                start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+    if end_date:
+        try:
+            # 解析 ISO 格式日期
+            end_date_obj = datetime.fromisoformat(end_date).date()
+        except ValueError:
+            try:
+                # 解析 YYYY-MM-DD 格式日期
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            except ValueError:
+                pass
 
     # 计算账户余额
     balances = {}
@@ -101,14 +122,14 @@ def get_account_balances():
 
     # 只返回未关闭的账户
     active_accounts = open_accounts - closed_accounts
-    
+
     # 构建账户详情
     account_details = []
     for account, balance in balances.items():
         # 只包含活跃账户
         if account not in active_accounts:
             continue
-            
+
         # 提取账户类型和二级分类
         account_parts = account.split(':')
         account_type = account_parts[0] if len(account_parts) > 0 else 'Other'
@@ -127,13 +148,13 @@ def get_account_balances():
 
     # 定义账户类型优先级，确保Equity（权益）类账户排在最后
     account_type_priority = {
-        'Assets': 0,        # 资产
-        'Liabilities': 1,   # 负债
-        'Income': 2,        # 收入
-        'Expenses': 3,      # 支出
-        'Equity': 4         # 权益（排在最后）
+        'Assets': 0,  # 资产
+        'Liabilities': 1,  # 负债
+        'Income': 2,  # 收入
+        'Expenses': 3,  # 支出
+        'Equity': 4,  # 权益（排在最后）
     }
-    
+
     # 按账户类型优先级和名称排序
     account_details.sort(key=lambda x: (account_type_priority.get(x['type'], 5), x['name']))
 
@@ -146,20 +167,20 @@ def get_account_config():
     """获取账户分类配置"""
     # 获取配置文件路径
     config_file_path = os.path.join(os.path.dirname(__file__), 'config', 'account_config.json')
-    
+
     # 读取配置文件
     with open(config_file_path, 'r', encoding='utf-8') as f:
         account_config = json.load(f)
-    
+
     # 定义账户类型的期望顺序，确保Equity（权益）类账户排在最后
     desired_order = ['Assets', 'Liabilities', 'Income', 'Expenses', 'Equity']
-    
+
     # 按照期望顺序重新构建账户配置字典
     ordered_account_config = {}
     for account_type in desired_order:
         if account_type in account_config:
             ordered_account_config[account_type] = account_config[account_type]
-    
+
     # 添加任何可能存在的其他账户类型（如果有的话）
     for account_type in account_config:
         if account_type not in ordered_account_config:

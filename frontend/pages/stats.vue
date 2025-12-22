@@ -7,12 +7,26 @@
     <div class="card mb-6">
       <div class="flex flex-wrap gap-4 items-center">
         <div class="flex items-center gap-2">
-          <label for="startDate" class="text-gray-700 dark:text-gray-300">开始日期:</label>
-          <input type="date" id="startDate" v-model="dateRange.startDate" class="input" />
+          <label for="startDate" class="text-gray-700 dark:text-gray-300">
+            开始日期:
+          </label>
+          <input
+            type="date"
+            id="startDate"
+            v-model="dateRange.startDate"
+            class="input"
+          />
         </div>
         <div class="flex items-center gap-2">
-          <label for="endDate" class="text-gray-700 dark:text-gray-300">结束日期:</label>
-          <input type="date" id="endDate" v-model="dateRange.endDate" class="input" />
+          <label for="endDate" class="text-gray-700 dark:text-gray-300">
+            结束日期:
+          </label>
+          <input
+            type="date"
+            id="endDate"
+            v-model="dateRange.endDate"
+            class="input"
+          />
         </div>
         <button @click="refreshStats" class="btn btn-primary">刷新数据</button>
         <button @click="resetDateRange" class="btn btn-secondary">
@@ -24,12 +38,15 @@
     <!-- 统计概览 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
       <div
-        class="card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/40 p-6 transition-colors">
+        class="card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/40 p-6 transition-colors"
+      >
         <div class="flex justify-between items-center">
           <div>
-            <p class="text-sm text-blue-700 dark:text-blue-300 font-medium">总收入</p>
+            <p class="text-sm text-blue-700 dark:text-blue-300 font-medium">
+              总收入
+            </p>
             <p class="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-1">
-              {{ stats.totalIncome }} {{ ledger.currency }}
+              {{ stats.totalIncome }} {{ getCurrency() }}
             </p>
           </div>
           <div class="bg-blue-200 dark:bg-blue-700/50 rounded-full p-3">
@@ -39,12 +56,15 @@
       </div>
 
       <div
-        class="card bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/40 dark:to-red-800/40 p-6 transition-colors">
+        class="card bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/40 dark:to-red-800/40 p-6 transition-colors"
+      >
         <div class="flex justify-between items-center">
           <div>
-            <p class="text-sm text-red-700 dark:text-red-300 font-medium">总支出</p>
+            <p class="text-sm text-red-700 dark:text-red-300 font-medium">
+              总支出
+            </p>
             <p class="text-2xl font-bold text-red-900 dark:text-red-100 mt-1">
-              {{ stats.totalExpense }} {{ ledger.currency }}
+              {{ stats.totalExpense }} {{ getCurrency() }}
             </p>
           </div>
           <div class="bg-red-200 dark:bg-red-700/50 rounded-full p-3">
@@ -54,12 +74,17 @@
       </div>
 
       <div
-        class="card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/40 dark:to-green-800/40 p-6 transition-colors">
+        class="card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/40 dark:to-green-800/40 p-6 transition-colors"
+      >
         <div class="flex justify-between items-center">
           <div>
-            <p class="text-sm text-green-700 dark:text-green-300 font-medium">净收入</p>
-            <p class="text-2xl font-bold text-green-900 dark:text-green-100 mt-1">
-              {{ stats.netIncome }} {{ ledger.currency }}
+            <p class="text-sm text-green-700 dark:text-green-300 font-medium">
+              净收入
+            </p>
+            <p
+              class="text-2xl font-bold text-green-900 dark:text-green-100 mt-1"
+            >
+              {{ stats.netIncome }} {{ getCurrency() }}
             </p>
           </div>
           <div class="bg-green-200 dark:bg-green-700/50 rounded-full p-3">
@@ -69,16 +94,82 @@
       </div>
 
       <div
-        class="card bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/40 dark:to-purple-800/40 p-6 transition-colors">
+        class="card bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/40 dark:to-purple-800/40 p-6 transition-colors"
+      >
         <div class="flex justify-between items-center">
           <div>
-            <p class="text-sm text-purple-700 dark:text-purple-300 font-medium">交易笔数</p>
-            <p class="text-2xl font-bold text-purple-900 dark:text-purple-100 mt-1">
+            <p class="text-sm text-purple-700 dark:text-purple-300 font-medium">
+              交易笔数
+            </p>
+            <p
+              class="text-2xl font-bold text-purple-900 dark:text-purple-100 mt-1"
+            >
               {{ stats.totalTransactions }}
             </p>
           </div>
           <div class="bg-purple-200 dark:bg-purple-700/50 rounded-full p-3">
             <span class="text-xl">📋</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 资产负债概览 -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div
+        class="card bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/40 dark:to-indigo-800/40 p-6 transition-colors"
+      >
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-sm text-indigo-700 dark:text-indigo-300 font-medium">
+              总资产
+            </p>
+            <p
+              class="text-2xl font-bold text-indigo-900 dark:text-indigo-100 mt-1"
+            >
+              {{ stats.assetsTotal }} {{ getCurrency() }}
+            </p>
+          </div>
+          <div class="bg-indigo-200 dark:bg-indigo-700/50 rounded-full p-3">
+            <span class="text-xl">🏦</span>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="card bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/40 dark:to-orange-800/40 p-6 transition-colors"
+      >
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-sm text-orange-700 dark:text-orange-300 font-medium">
+              总负债
+            </p>
+            <p
+        class="text-2xl font-bold text-orange-900 dark:text-orange-100 mt-1"
+      >
+        {{ stats.liabilitiesTotal }} {{ getCurrency() }}
+      </p>
+          </div>
+          <div class="bg-orange-200 dark:bg-orange-700/50 rounded-full p-3">
+            <span class="text-xl">💳</span>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="card bg-gradient-to-br from-teal-50 to-teal-100 dark:from-teal-900/40 dark:to-teal-800/40 p-6 transition-colors"
+      >
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-sm text-teal-700 dark:text-teal-300 font-medium">
+              净资产
+            </p>
+            <p class="text-2xl font-bold text-teal-900 dark:text-teal-100 mt-1">
+        {{ stats.netWorth }} {{ getCurrency() }}
+      </p>
+          </div>
+          <div class="bg-teal-200 dark:bg-teal-700/50 rounded-full p-3">
+            <span class="text-xl">📊</span>
           </div>
         </div>
       </div>
@@ -90,21 +181,38 @@
       <div class="card">
         <h2 class="text-xl font-semibold mb-4">收入分类统计</h2>
         <div v-if="loading" class="text-center py-8">
-          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div
+            class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+          ></div>
         </div>
-        <div v-else-if="stats.incomeByCategory.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+        <div
+          v-else-if="stats.incomeByCategory.length === 0"
+          class="text-center py-8 text-gray-500 dark:text-gray-400"
+        >
           <p>暂无收入数据</p>
         </div>
         <div v-else class="space-y-3">
-          <div v-for="(category, index) in stats.incomeByCategory" :key="index"
-            class="flex justify-between items-center">
+          <div
+            v-for="(category, index) in stats.incomeByCategory"
+            :key="index"
+            class="flex justify-between items-center"
+          >
             <div class="flex items-center">
-              <div class="w-3 h-3 rounded-full mr-2" :style="{ backgroundColor: getCategoryColor(index) }"></div>
-              <span class="text-gray-700 dark:text-gray-300">{{ category.name }}</span>
+              <div
+                class="w-3 h-3 rounded-full mr-2"
+                :style="{ backgroundColor: getCategoryColor(index) }"
+              ></div>
+              <span class="text-gray-700 dark:text-gray-300">{{
+                category.name
+              }}</span>
             </div>
             <div class="text-right">
-              <span class="font-medium dark:text-gray-200">{{ category.amount }} {{ ledger.currency }}</span>
-              <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">({{ category.percentage }}%)</span>
+              <span class="font-medium dark:text-gray-200"
+                >{{ category.amount }} {{ ledger.currency }}</span
+              >
+              <span class="text-sm text-gray-500 dark:text-gray-400 ml-2"
+                >({{ category.percentage }}%)</span
+              >
             </div>
           </div>
         </div>
@@ -114,21 +222,38 @@
       <div class="card">
         <h2 class="text-xl font-semibold mb-4">支出分类统计</h2>
         <div v-if="loading" class="text-center py-8">
-          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div
+            class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+          ></div>
         </div>
-        <div v-else-if="stats.expenseByCategory.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+        <div
+          v-else-if="stats.expenseByCategory.length === 0"
+          class="text-center py-8 text-gray-500 dark:text-gray-400"
+        >
           <p>暂无支出数据</p>
         </div>
         <div v-else class="space-y-3">
-          <div v-for="(category, index) in stats.expenseByCategory" :key="index"
-            class="flex justify-between items-center">
+          <div
+            v-for="(category, index) in stats.expenseByCategory"
+            :key="index"
+            class="flex justify-between items-center"
+          >
             <div class="flex items-center">
-              <div class="w-3 h-3 rounded-full mr-2" :style="{ backgroundColor: getCategoryColor(index + 10) }"></div>
-              <span class="text-gray-700 dark:text-gray-300">{{ category.name }}</span>
+              <div
+                class="w-3 h-3 rounded-full mr-2"
+                :style="{ backgroundColor: getCategoryColor(index + 10) }"
+              ></div>
+              <span class="text-gray-700 dark:text-gray-300">{{
+                category.name
+              }}</span>
             </div>
             <div class="text-right">
-              <span class="font-medium dark:text-gray-200">{{ category.amount }} {{ ledger.currency }}</span>
-              <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">({{ category.percentage }}%)</span>
+              <span class="font-medium dark:text-gray-200"
+                >{{ category.amount }} {{ ledger.currency }}</span
+              >
+              <span class="text-sm text-gray-500 dark:text-gray-400 ml-2"
+                >({{ category.percentage }}%)</span
+              >
             </div>
           </div>
         </div>
@@ -139,29 +264,48 @@
     <div class="card mb-8">
       <h2 class="text-xl font-semibold mb-4">账户统计</h2>
       <div v-if="loading" class="text-center py-8">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div
+          class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+        ></div>
       </div>
-      <div v-else-if="stats.accounts.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+      <div
+        v-else-if="stats.accounts.length === 0"
+        class="text-center py-8 text-gray-500 dark:text-gray-400"
+      >
         <p>暂无账户数据</p>
       </div>
       <div v-else class="overflow-x-auto">
         <table class="w-full">
           <thead>
             <tr class="bg-gray-50 dark:bg-gray-800">
-              <th class="px-4 py-2 text-left text-gray-700 dark:text-gray-300">账户名称</th>
-              <th class="px-4 py-2 text-right text-gray-700 dark:text-gray-300">余额</th>
-              <th class="px-4 py-2 text-right text-gray-700 dark:text-gray-300">类型</th>
+              <th class="px-4 py-2 text-left text-gray-700 dark:text-gray-300">
+                账户名称
+              </th>
+              <th class="px-4 py-2 text-right text-gray-700 dark:text-gray-300">
+                余额
+              </th>
+              <th class="px-4 py-2 text-right text-gray-700 dark:text-gray-300">
+                类型
+              </th>
             </tr>
           </thead>
           <tbody class="dark:text-gray-300">
-            <tr v-for="(account, index) in stats.accounts" :key="index"
-              class="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/70">
+            <tr
+              v-for="(account, index) in stats.accounts"
+              :key="index"
+              class="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/70"
+            >
               <td class="px-4 py-2">{{ account.name }}</td>
               <td class="px-4 py-2 text-right font-medium">
                 {{ account.balance }} {{ ledger.currency }}
               </td>
               <td class="px-4 py-2 text-right">
-                <span class="px-2 py-1 rounded text-xs" :class="getAccountTypeClass(account.type) + ' dark:opacity-80'">
+                <span
+                  class="px-2 py-1 rounded text-xs"
+                  :class="
+                    getAccountTypeClass(account.type) + ' dark:opacity-80'
+                  "
+                >
                   {{ account.type }}
                 </span>
               </td>
@@ -175,25 +319,42 @@
     <div class="card">
       <h2 class="text-xl font-semibold mb-4">月度收支趋势</h2>
       <div v-if="loading" class="text-center py-8">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div
+          class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+        ></div>
       </div>
-      <div v-else-if="stats.monthlyTrend.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+      <div
+        v-else-if="stats.monthlyTrend.length === 0"
+        class="text-center py-8 text-gray-500 dark:text-gray-400"
+      >
         <p>暂无月度趋势数据</p>
       </div>
       <div v-else class="space-y-4">
-        <div v-for="(month, index) in stats.monthlyTrend" :key="index" class="flex flex-col">
+        <div
+          v-for="(month, index) in stats.monthlyTrend"
+          :key="index"
+          class="flex flex-col"
+        >
           <div class="flex justify-between items-center mb-1">
-            <span class="font-medium dark:text-gray-200">{{ month.month }}</span>
+            <span class="font-medium dark:text-gray-200">{{
+              month.month
+            }}</span>
             <span class="text-sm text-gray-500 dark:text-gray-400">
               收入: {{ month.income }} | 支出: {{ month.expense }} | 结余:
               {{ month.balance }}
             </span>
           </div>
           <div class="flex gap-1 h-6">
-            <div class="bg-green-500 dark:bg-green-600 rounded-l" :style="{ width: month.incomePercentage + '%' }"
-              title="收入"></div>
-            <div class="bg-red-500 dark:bg-red-600 rounded-r" :style="{ width: month.expensePercentage + '%' }"
-              title="支出"></div>
+            <div
+              class="bg-green-500 dark:bg-green-600 rounded-l"
+              :style="{ width: month.incomePercentage + '%' }"
+              title="收入"
+            ></div>
+            <div
+              class="bg-red-500 dark:bg-red-600 rounded-r"
+              :style="{ width: month.expensePercentage + '%' }"
+              title="支出"
+            ></div>
           </div>
         </div>
       </div>
@@ -203,12 +364,23 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import dayjs from 'dayjs';
+import dayjs from "dayjs";
 import { useRouter } from "vue-router";
 import { useApi } from "~/composables/useApi";
+import { useSystemConfig } from "~/composables/useSystemConfig";
 
 const router = useRouter();
-const { getLedger, getEntries, getCategoryStats, accounts } = useApi();
+const {
+  getLedger,
+  getEntries,
+  getMonthlyIncomeExpense,
+  getMonthlyExpenses,
+  getAccountStatistics,
+  accounts,
+} = useApi();
+
+// 系统配置
+const { config, initConfig, getCurrency } = useSystemConfig();
 
 const loading = ref(true);
 const ledger = ref({
@@ -221,12 +393,12 @@ const entries = ref([] as any[]);
 const accountBalances = ref([] as any[]);
 const accountConfig = ref<any>({
   Income: {},
-  Expenses: {}
+  Expenses: {},
 });
 
 // 日期范围
 const dateRange = ref({
-  startDate: dayjs().startOf('month').format("YYYY-MM-DD"),
+  startDate: dayjs().startOf("month").format("YYYY-MM-DD"),
   endDate: dayjs().format("YYYY-MM-DD"),
 });
 
@@ -236,6 +408,9 @@ const stats = ref({
   totalExpense: 0,
   netIncome: 0,
   totalTransactions: 0,
+  assetsTotal: 0,
+  liabilitiesTotal: 0,
+  netWorth: 0,
   incomeByCategory: [] as {
     name: string;
     amount: number;
@@ -255,7 +430,7 @@ const stats = ref({
     incomePercentage: number;
     expensePercentage: number;
   }[],
-});
+} as any);
 
 // 为分类生成不同颜色
 const getCategoryColor = (index: number) => {
@@ -293,7 +468,7 @@ const getAccountTypeClass = (type: string) => {
 
 // 重置日期范围
 const resetDateRange = () => {
-  dateRange.value.startDate = dayjs().startOf('month').format("YYYY-MM-DD");
+  dateRange.value.startDate = dayjs().startOf("month").format("YYYY-MM-DD");
   dateRange.value.endDate = dayjs().format("YYYY-MM-DD");
 };
 
@@ -334,14 +509,21 @@ const refreshStats = async () => {
 // 计算统计数据
 const calculateStats = async () => {
   try {
-    // 使用后端API获取分类统计数据
-    const stats = await getCategoryStats({
+    // 使用新的后端API获取月度收支统计数据
+    const monthlyIncomeExpense = await getMonthlyIncomeExpense({
       start_date: dateRange.value.startDate,
-      end_date: dateRange.value.endDate
+      end_date: dateRange.value.endDate,
     });
-    
-    let totalIncome = Math.abs(parseFloat(stats.income.total) || 0);
-    let totalExpense = Math.abs(parseFloat(stats.expense.total) || 0);
+
+    // 使用新的后端API获取月度消费统计数据
+    const monthlyExpenses = await getMonthlyExpenses({
+      start_date: dateRange.value.startDate,
+      end_date: dateRange.value.endDate,
+    });
+
+    // 获取总收入和总支出
+    let totalIncome = Math.abs(parseFloat(monthlyIncomeExpense.income) || 0);
+    let totalExpense = Math.abs(parseFloat(monthlyIncomeExpense.expense) || 0);
 
     // 按后端配置的分类统计，初始化所有配置的分类
     const incomeByCategory: Record<string, number> = {};
@@ -349,37 +531,20 @@ const calculateStats = async () => {
 
     // 初始化所有配置的收入分类为0
     if (accountConfig.value && accountConfig.value.Income) {
-      Object.keys(accountConfig.value.Income).forEach(category => {
+      Object.keys(accountConfig.value.Income).forEach((category) => {
         incomeByCategory[category] = 0;
       });
     }
 
     // 初始化所有配置的支出分类为0
     if (accountConfig.value && accountConfig.value.Expenses) {
-      Object.keys(accountConfig.value.Expenses).forEach(category => {
+      Object.keys(accountConfig.value.Expenses).forEach((category) => {
         expenseByCategory[category] = 0;
       });
     }
-    
-    // 处理收入分类统计
-    stats.income.categories.forEach((item: any) => {
-      if (item.account && item.total) {
-        // 提取分类名称
-        const categoryParts = item.account.split(":");
-        if (categoryParts.length >= 2) {
-          const category = categoryParts[1];
-          // 只统计在配置中存在的分类
-          if (incomeByCategory.hasOwnProperty(category)) {
-            incomeByCategory[category] = Math.abs(parseFloat(item.total));
-          } else {
-            incomeByCategory[category] = Math.abs(parseFloat(item.total));
-          }
-        }
-      }
-    });
-    
-    // 处理支出分类统计
-    stats.expense.categories.forEach((item: any) => {
+
+    // 处理支出分类统计（从monthlyExpenses获取）
+    monthlyExpenses.monthly_expenses.forEach((item: any) => {
       if (item.account && item.total) {
         // 提取分类名称
         const categoryParts = item.account.split(":");
@@ -401,7 +566,7 @@ const calculateStats = async () => {
         name: accountConfig.value?.Income?.[name] || name, // 使用中文名称，如果没有则使用英文名称
         amount: Number(amount.toFixed(2)),
         percentage:
-          totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0
+          totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0,
       }))
       .sort((a, b) => b.amount - a.amount);
 
@@ -410,42 +575,51 @@ const calculateStats = async () => {
         name: accountConfig.value?.Expenses?.[name] || name, // 使用中文名称，如果没有则使用英文名称
         amount: Number(amount.toFixed(2)),
         percentage:
-          totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0
+          totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0,
       }))
       .sort((a, b) => b.amount - a.amount);
 
-  // 处理账户统计
-  const accountStats = accountBalances.value.map((account: any) => {
-    let type = "Unknown";
-    if (account.name.startsWith("Assets")) type = "Assets";
-    else if (account.name.startsWith("Liabilities")) type = "Liabilities";
-    else if (account.name.startsWith("Equity")) type = "Equity";
-    else if (account.name.startsWith("Income")) type = "Income";
-    else if (account.name.startsWith("Expenses")) type = "Expenses";
+    // 处理账户统计
+    const accountStatistics = await getAccountStatistics({
+      start_date: dateRange.value.startDate,
+      end_date: dateRange.value.endDate,
+    });
 
-    return {
+    // 使用新接口返回的账户统计数据
+    const accountStats = accountStatistics.accounts.map((account: any) => ({
       name: account.name,
+      fullName: account.fullName,
       balance: Number(account.balance.toFixed(2)),
-      type,
+      type: account.type,
+      currency: account.currency || ledger.value.currency,
+    }));
+
+    // 添加总资产和总负债到统计数据
+    stats.value.assetsTotal = Number(accountStatistics.assets_total.toFixed(2));
+    stats.value.liabilitiesTotal = Number(
+      accountStatistics.liabilities_total.toFixed(2)
+    );
+    stats.value.netWorth = Number(accountStatistics.net_worth.toFixed(2));
+
+    // 计算月度趋势
+    const monthlyTrend = calculateMonthlyTrend();
+
+    // 更新统计数据
+    stats.value = {
+      totalIncome: Number(totalIncome.toFixed(2)),
+      totalExpense: Number(totalExpense.toFixed(2)),
+      netIncome: Number((totalIncome - totalExpense).toFixed(2)),
+      totalTransactions: entries.value.filter(
+        (e: any) => e.type === "Transaction"
+      ).length,
+      incomeByCategory: incomeCategories,
+      expenseByCategory: expenseCategories,
+      accounts: accountStats,
+      monthlyTrend,
+      assetsTotal: Number(accountStatistics.assets_total.toFixed(2)),
+      liabilitiesTotal: Number(accountStatistics.liabilities_total.toFixed(2)),
+      netWorth: Number(accountStatistics.net_worth.toFixed(2)),
     };
-  });
-
-  // 计算月度趋势
-  const monthlyTrend = calculateMonthlyTrend();
-
-  // 更新统计数据
-  stats.value = {
-    totalIncome: Number(totalIncome.toFixed(2)),
-    totalExpense: Number(totalExpense.toFixed(2)),
-    netIncome: Number((totalIncome - totalExpense).toFixed(2)),
-    totalTransactions: entries.value.filter(
-      (e: any) => e.type === "Transaction"
-    ).length,
-    incomeByCategory: incomeCategories,
-    expenseByCategory: expenseCategories,
-    accounts: accountStats,
-    monthlyTrend,
-  };
   } catch (error) {
     console.error("Error calculating stats:", error);
     // 出错时回退到前端计算
@@ -457,14 +631,14 @@ const calculateStats = async () => {
 
     // 初始化所有配置的收入分类为0
     if (accountConfig.value && accountConfig.value.Income) {
-      Object.keys(accountConfig.value.Income).forEach(category => {
+      Object.keys(accountConfig.value.Income).forEach((category) => {
         incomeByCategory[category] = 0;
       });
     }
 
     // 初始化所有配置的支出分类为0
     if (accountConfig.value && accountConfig.value.Expenses) {
-      Object.keys(accountConfig.value.Expenses).forEach(category => {
+      Object.keys(accountConfig.value.Expenses).forEach((category) => {
         expenseByCategory[category] = 0;
       });
     }
@@ -489,7 +663,7 @@ const calculateStats = async () => {
                   const category = categoryParts[1];
                   // 只统计在配置中存在的分类
                   if (incomeByCategory.hasOwnProperty(category)) {
-                    incomeByCategory[category] = 
+                    incomeByCategory[category] =
                       (incomeByCategory[category] || 0) + Math.abs(amount);
                   }
                 }
@@ -502,7 +676,7 @@ const calculateStats = async () => {
                   const category = categoryParts[1];
                   // 只统计在配置中存在的分类
                   if (expenseByCategory.hasOwnProperty(category)) {
-                    expenseByCategory[category] = 
+                    expenseByCategory[category] =
                       (expenseByCategory[category] || 0) + Math.abs(amount);
                   }
                 }
@@ -518,7 +692,7 @@ const calculateStats = async () => {
         name: accountConfig.value?.Income?.[name] || name, // 使用中文名称，如果没有则使用英文名称
         amount: Number(amount.toFixed(2)),
         percentage:
-          totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0
+          totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0,
       }))
       .sort((a, b) => b.amount - a.amount);
 
@@ -527,7 +701,7 @@ const calculateStats = async () => {
         name: accountConfig.value?.Expenses?.[name] || name, // 使用中文名称，如果没有则使用英文名称
         amount: Number(amount.toFixed(2)),
         percentage:
-          totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0
+          totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0,
       }))
       .sort((a, b) => b.amount - a.amount);
 
@@ -617,8 +791,9 @@ const calculateMonthlyTrend = () => {
     .sort((a, b) => a.month.localeCompare(b.month));
 };
 
-// 页面加载时刷新数据
-onMounted(() => {
+// 页面挂载时加载数据
+onMounted(async () => {
+  await initConfig();
   refreshStats();
 });
 </script>

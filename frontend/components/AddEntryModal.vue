@@ -562,6 +562,13 @@ watch(
       editingEntryId.value = newValue.id;
       editingEntry.value = newValue;
       loadEntryToForm(newValue);
+    } else if (newValue && Object.keys(newValue).length > 0) {
+      // 有数据但无ID，这是复制交易的情况
+      isEditMode.value = false;
+      editingEntryId.value = "";
+      editingEntry.value = null;
+      // 加载数据到表单但不重置
+      loadEntryToForm(newValue);
     } else {
       // 否则进入添加模式
       isEditMode.value = false;

@@ -44,7 +44,7 @@
               <div class="text-center">
                 <p class="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">总收入</p>
                 <p class="text-lg font-bold text-blue-900 dark:text-blue-200">
-                  {{ dashboardStats.totalIncome }} {{ ledger.currency }}
+                  {{ dashboardStats.totalIncome }} {{ getCurrency() }}
                 </p>
                 <div v-if="dashboardStats.changes.income !== 0" 
                      class="text-xs mt-1 flex items-center justify-center"
@@ -58,7 +58,7 @@
               <div class="text-center">
                 <p class="text-xs text-red-700 dark:text-red-300 font-medium mb-1">总支出</p>
                 <p class="text-lg font-bold text-red-900 dark:text-red-200">
-                  {{ dashboardStats.totalExpense }} {{ ledger.currency }}
+                  {{ dashboardStats.totalExpense }} {{ getCurrency() }}
                 </p>
                 <div v-if="dashboardStats.changes.expense !== 0" 
                      class="text-xs mt-1 flex items-center justify-center"
@@ -72,7 +72,7 @@
               <div class="text-center">
                 <p class="text-xs text-green-700 dark:text-green-300 font-medium mb-1">净收入</p>
                 <p class="text-lg font-bold text-green-900 dark:text-green-200">
-                  {{ dashboardStats.netIncome }} {{ ledger.currency }}
+                  {{ dashboardStats.netIncome }} {{ getCurrency() }}
                 </p>
                 <div v-if="dashboardStats.changes.net !== 0" 
                      class="text-xs mt-1 flex items-center justify-center"
@@ -123,7 +123,7 @@
             <span class="text-sm sm:text-base text-gray-700 dark:text-gray-300 truncate max-w-[120px] sm:max-w-none">{{ category.name }}</span>
           </div>
           <div class="text-right">
-            <span class="font-medium dark:text-gray-200 text-sm sm:text-base">{{ category.amount }} {{ ledger.currency }}</span>
+            <span class="font-medium dark:text-gray-200 text-sm sm:text-base">{{ category.amount }} {{ getCurrency() }}</span>
             <span class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 ml-2">({{ category.percentage }}%)</span>
           </div>
         </div>
@@ -244,10 +244,14 @@ import { ref, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useNuxtApp } from '#app';
 import dayjs from "dayjs";
+import { useSystemConfig } from "~/composables/useSystemConfig";
 
 const router = useRouter();
 const { $api } = useNuxtApp();
-const { getLedger, getEntries, user, accounts, getCategoryStats } = $api;
+const { getLedger, getEntries, user, accounts } = $api;
+
+// 系统配置
+const { config, initConfig, getCurrency } = useSystemConfig();
 
 const loading = ref(true);
 const showAddModal = ref(false);
@@ -339,70 +343,26 @@ const getCurrentAndPreviousMonthDates = () => {
 
 // 计算指定日期范围内的统计数据
 const calculateStatsForDateRange = async (dateRange: any) => {
-  try {
-    // 使用后端API获取分类统计数据
-    const stats = await getCategoryStats({
-      start_date: dayjs(dateRange.start).format("YYYY-MM-DD"),
-      end_date: dayjs(dateRange.end).format("YYYY-MM-DD")
-    });
-    
-    let totalIncome = 0;
-    let totalExpense = 0;
-    // 按后端配置的分类统计支出，初始化所有配置的分类
-    const categoryExpenses: Record<string, number> = {};
-    // 初始化所有配置的支出分类为0
-    if (accountConfig.value && accountConfig.value.Expenses) {
-      Object.keys(accountConfig.value.Expenses).forEach(category => {
-        categoryExpenses[category] = 0;
-      });
-    }
-    
-    // 处理支出分类统计
-    stats.expense.categories.forEach((item: any) => {
-      if (item.account && item.total) {
-        // 提取分类名称
-        const categoryParts = item.account.split(":");
-        if (categoryParts.length >= 2) {
-          const category = categoryParts[1];
-          // 只统计在配置中存在的分类
-          if (categoryExpenses.hasOwnProperty(category)) {
-            categoryExpenses[category] = Math.abs(parseFloat(item.total));
-          }
-        }
-      }
-    });
-    
-    // 计算总收入和总支出
-    totalIncome = Math.abs(parseFloat(stats.income.total) || 0);
-    totalExpense = Math.abs(parseFloat(stats.expense.total) || 0);
-    
-    // 获取当前日期范围内的交易记录
-    const transactions = entries.value.filter(
-      (e: any) => e.type === "Transaction" && 
-      (dayjs(e.date).isAfter(dateRange.start) || dayjs(e.date).isSame(dateRange.start, 'day')) && 
-      (dayjs(e.date).isBefore(dateRange.end) || dayjs(e.date).isSame(dateRange.end, 'day'))
-    );
-    
-    return { totalIncome, totalExpense, categoryExpenses, transactions };
-  } catch (error) {
-    console.error('获取分类统计数据失败:', error);
-    // 出错时回退到前端计算
-    const transactions = entries.value.filter(
-      (e: any) => e.type === "Transaction" && 
-      (dayjs(e.date).isAfter(dateRange.start) || dayjs(e.date).isSame(dateRange.start, 'day')) && 
-      (dayjs(e.date).isBefore(dateRange.end) || dayjs(e.date).isSame(dateRange.end, 'day'))
-    );
+  // 直接使用前端计算，不再调用已删除的getCategoryStats API
+  // 获取当前日期范围内的交易记录
+  const transactions = entries.value.filter(
+    (e: any) => e.type === "Transaction" && 
+    (dayjs(e.date).isAfter(dateRange.start) || dayjs(e.date).isSame(dateRange.start, 'day')) && 
+    (dayjs(e.date).isBefore(dateRange.end) || dayjs(e.date).isSame(dateRange.end, 'day'))
+  );
 
-    let totalIncome = 0;
-    let totalExpense = 0;
-    // 按后端配置的分类统计支出，初始化所有配置的分类
-    const categoryExpenses: Record<string, number> = {};
-    // 初始化所有配置的支出分类为0
-    if (accountConfig.value && accountConfig.value.Expenses) {
-      Object.keys(accountConfig.value.Expenses).forEach(category => {
-        categoryExpenses[category] = 0;
-      });
-    }
+  let totalIncome = 0;
+  let totalExpense = 0;
+  // 按后端配置的分类统计支出，初始化所有配置的分类
+  const categoryExpenses: Record<string, number> = {};
+  // 初始化所有配置的支出分类为0
+  if (accountConfig.value && accountConfig.value.Expenses) {
+    Object.keys(accountConfig.value.Expenses).forEach(category => {
+      categoryExpenses[category] = 0;
+    });
+  }
+
+    // 计算总收入和总支出
 
     // 计算总收入和总支出
     transactions.forEach((entry: any) => {
@@ -435,7 +395,6 @@ const calculateStatsForDateRange = async (dateRange: any) => {
     });
 
     return { totalIncome, totalExpense, categoryExpenses, transactions };
-  }
 };
 
 // 计算与上月比较的百分比变化
@@ -446,6 +405,92 @@ const calculatePercentageChange = (current: number, previous: number) => {
 
 // 计算仪表盘统计数据
 const calculateDashboardStats = async () => {
+  try {
+    const { current, previous } = getCurrentAndPreviousMonthDates();
+    
+    // 使用新的API获取本月收支统计
+    const currentMonthStats = await $api.getMonthlyIncomeExpense({
+      start_date: dayjs(current.start).format("YYYY-MM-DD"),
+      end_date: dayjs(current.end).format("YYYY-MM-DD")
+    });
+    
+    // 使用新的API获取上月收支统计
+    const previousMonthStats = await $api.getMonthlyIncomeExpense({
+      start_date: dayjs(previous.start).format("YYYY-MM-DD"),
+      end_date: dayjs(previous.end).format("YYYY-MM-DD")
+    });
+    
+    // 使用新的API获取本月分类支出统计
+    const monthlyExpenses = await $api.getMonthlyExpenses({
+      start_date: dayjs(current.start).format("YYYY-MM-DD"),
+      end_date: dayjs(current.end).format("YYYY-MM-DD")
+    });
+    
+    // 计算分类支出百分比
+    const totalExpense = parseFloat(currentMonthStats.expense) || 0;
+    const expenseByCategory = monthlyExpenses.monthly_expenses.map((item: any) => {
+      // 提取分类名称
+      const categoryParts = item.account.split(":");
+      const category = categoryParts.length >= 2 ? categoryParts[1] : item.account;
+      const amount = parseFloat(item.total) || 0;
+      
+      return {
+        name: accountConfig.value?.Expenses?.[category] || category, // 使用中文名称，如果没有则使用英文名称
+        amount,
+        percentage: totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0,
+      };
+    }).sort((a, b) => b.amount - a.amount);
+    
+    // 计算与上月比较的变化率
+    const incomeChange = calculatePercentageChange(
+      parseFloat(currentMonthStats.income) || 0,
+      parseFloat(previousMonthStats.income) || 0
+    );
+    const expenseChange = calculatePercentageChange(
+      parseFloat(currentMonthStats.expense) || 0,
+      parseFloat(previousMonthStats.expense) || 0
+    );
+    const netChange = calculatePercentageChange(
+      (parseFloat(currentMonthStats.income) || 0) - (parseFloat(currentMonthStats.expense) || 0),
+      (parseFloat(previousMonthStats.income) || 0) - (parseFloat(previousMonthStats.expense) || 0)
+    );
+    
+    // 更新统计数据
+    dashboardStats.value = {
+      totalIncome: parseFloat((parseFloat(currentMonthStats.income) || 0).toFixed(2)),
+      totalExpense: parseFloat((parseFloat(currentMonthStats.expense) || 0).toFixed(2)),
+      netIncome: parseFloat(((parseFloat(currentMonthStats.income) || 0) - (parseFloat(currentMonthStats.expense) || 0)).toFixed(2)),
+      previous: {
+        totalIncome: parseFloat((parseFloat(previousMonthStats.income) || 0).toFixed(2)),
+        totalExpense: parseFloat((parseFloat(previousMonthStats.expense) || 0).toFixed(2)),
+        netIncome: parseFloat(((parseFloat(previousMonthStats.income) || 0) - (parseFloat(previousMonthStats.expense) || 0)).toFixed(2))
+      },
+      changes: {
+        income: incomeChange,
+        expense: expenseChange,
+        net: netChange
+      },
+      expenseByCategory: expenseByCategory,
+      dateRange: {
+        current: {
+          start: current.start,
+          end: current.end
+        },
+        previous: {
+          start: previous.start,
+          end: previous.end
+        }
+      }
+    };
+  } catch (error) {
+    console.error('获取仪表盘统计数据失败:', error);
+    // 出错时使用本地计算作为回退
+    calculateDashboardStatsLocally();
+  }
+};
+
+// 本地计算仪表盘统计数据（作为API调用失败的回退）
+const calculateDashboardStatsLocally = async () => {
   const { current, previous } = getCurrentAndPreviousMonthDates();
   
   // 计算本月统计数据
@@ -489,21 +534,12 @@ const calculateDashboardStats = async () => {
       expense: expenseChange,
       net: netChange
     },
-    expenseByCategory,
+    expenseByCategory: expenseByCategory,
     dateRange: {
-      current: {
-        start: current.start.toISOString().split('T')[0],
-        end: current.end.toISOString().split('T')[0]
-      },
-      previous: {
-        start: previous.start.toISOString().split('T')[0],
-        end: previous.end.toISOString().split('T')[0]
-      }
+      current: `${dayjs(current.start).format('YYYY-MM')}`,
+      previous: `${dayjs(previous.start).format('YYYY-MM')}`
     }
   };
-
-  
-  console.log("dateRange:", dashboardStats.value.dateRange)
 };
 
 // 刷新数据的函数
@@ -540,10 +576,6 @@ const refreshData = async () => {
   }
 };
 
-// 检查登录状态
-if (!user.value) {
-  router.push("/login");
-}
 
 // 处理条目添加
 const handleEntryAdded = () => {
@@ -578,6 +610,7 @@ const closeModal = () => {
 
 // 监听全局SSE事件
 onMounted(async () => {
+  await initConfig();
   await refreshData();
 
   window.addEventListener("sse:data-updated", refreshData);

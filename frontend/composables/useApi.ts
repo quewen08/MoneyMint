@@ -205,13 +205,33 @@ export const useApi = () => {
       const endpoint = `/entries?${queryParams.toString()}`
       return fetchApi(endpoint)
     },
-    getCategoryStats: (params: { start_date?: string, end_date?: string } = {}) => {
+    getMonthlyExpenses: (params: { start_date?: string, end_date?: string } = {}) => {
       // 构建查询参数
       const queryParams = new URLSearchParams()
       if (params.start_date) queryParams.append('start_date', params.start_date)
       if (params.end_date) queryParams.append('end_date', params.end_date)
 
-      const endpoint = `/stats/category-stats?${queryParams.toString()}`
+      const endpoint = `/stats/monthly-expenses?${queryParams.toString()}`
+      return fetchApi(endpoint)
+    },
+    getMonthlyIncomeExpense: (params: { start_date?: string, end_date?: string } = {}) => {
+      // 构建查询参数
+      const queryParams = new URLSearchParams()
+      if (params.start_date) queryParams.append('start_date', params.start_date)
+      if (params.end_date) queryParams.append('end_date', params.end_date)
+
+      const endpoint = `/stats/monthly-income-expense?${queryParams.toString()}`
+      return fetchApi(endpoint)
+    },
+    /**
+     * 获取账户统计数据（包含Assets和负债）
+     */
+    getAccountStatistics: (params: { start_date?: string, end_date?: string } = {}) => {
+      const queryParams = new URLSearchParams()
+      if (params.start_date) queryParams.append('start_date', params.start_date)
+      if (params.end_date) queryParams.append('end_date', params.end_date)
+
+      const endpoint = `/stats/account-statistics?${queryParams.toString()}`
       return fetchApi(endpoint)
     },
     runQuery: (query: string) => fetchApi('/query', {

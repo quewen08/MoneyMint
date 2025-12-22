@@ -16,14 +16,36 @@ const createSseInstance = () => {
     const { user, authToken } = $api
 
     const connect = () => {
+        // 如果未登录，不执行连接
+        if (!user.value) {
+            return
+        }
+
         // 如果已经连接或正在连接，则不执行
         if (isConnected.value || isConnecting.value) {
             return
         }
-        
+
+        // 如果存在旧的连接，先关闭它
+        if (source) {
+            source.body?.cancel()
+            source = null
+        }
+
+        // 如果存在旧的读取器，先关闭它
+        if (reader) {
+            reader.cancel()
+            reader = undefined
+        }
+
+        // 如果存在旧的解码器，先关闭它
+        if (decoder) {
+            decoder = null
+        }
+
         // 设置连接中标志
         isConnecting.value = true
-        
+
 
         const config = useRuntimeConfig()
         const apiBaseUrl = config.public.apiBaseUrl
@@ -104,7 +126,7 @@ const createSseInstance = () => {
                             const parsedData = JSON.parse(data)
                             events.value.push(parsedData)
                             console.log('SSE event received:', parsedData)
-                            
+
                             // 触发全局SSE事件
                             const customEvent = new CustomEvent('sse:data-updated', { detail: parsedData })
                             window.dispatchEvent(customEvent)
@@ -183,7 +205,7 @@ export const useSse = () => {
     if (!sseInstance) {
         sseInstance = createSseInstance()
     }
-    
+
     // 返回单例实例
     return sseInstance
 }
