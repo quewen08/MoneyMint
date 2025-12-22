@@ -8,7 +8,7 @@ WORKDIR /app/frontend
 COPY frontend/ .
 
 # 安装依赖
-RUN npm install pnpm -g && pnpm install --frozen-lockfile
+RUN npm install pnpm -g && pnpm install
 
 # 构建前端
 RUN pnpm run build
