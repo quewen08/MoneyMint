@@ -4,14 +4,11 @@ FROM node:20-alpine as frontend-builder
 # 设置工作目录
 WORKDIR /app/frontend
 
-# 复制前端依赖文件
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
+# 复制前端项目到工作目录
+COPY frontend/ .
 
 # 安装依赖
 RUN npm install pnpm -g && pnpm install --frozen-lockfile
-
-# 复制前端代码
-COPY frontend/ .
 
 # 构建前端
 RUN pnpm run build
