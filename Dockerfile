@@ -117,14 +117,11 @@ FROM python:3.11-alpine
 #   && npm --version \
 #   && rm -rf /tmp/*
 
-# 安装nodejs
-RUN apk add --no-cache nodejs npm
+# 安装nodejs 和 pm2
+RUN apk add --no-cache nodejs npm && npm install pm2 -g && rm -rf /tmp/* && rm -rf /var/cache/apk/* && npm cache clean --force
 
 # 设置工作目录
 WORKDIR /app
-
-# 安装PM2
-RUN npm install pm2 -g
 
 # 复制后端代码和依赖
 COPY --from=backend-builder /app/backend ./backend
