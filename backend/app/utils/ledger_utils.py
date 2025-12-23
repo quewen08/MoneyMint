@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
+import hashlib
 import os
 import time
 import threading
 import beancount.loader
+import beanquery.query
 from datetime import datetime
 
 # 配置
@@ -11,9 +13,11 @@ PAD_EQUITY_ACCOUNT = os.getenv('PAD_EQUITY_ACCOUNT', 'Equity:Opening-Balances')
 
 # 缓存机制
 ledger_cache = {'entries': None, 'errors': None, 'options': None, 'last_modified': 0}
+query_cache = {}  # 查询结果缓存，键为查询哈希，值为(结果, 账本修改时间)
 
 # 锁用于线程安全
 cache_lock = threading.Lock()
+query_cache_lock = threading.Lock()
 
 # SSE订阅者
 sse_subscribers = []
@@ -82,6 +86,53 @@ def notify_subscribers(event="update", data=None):
         except Exception as e:
             # 移除失效的订阅者
             sse_subscribers.remove(subscriber)
+
+
+def run_query_with_cache(entries, options, query):
+    """运行查询并使用缓存（带线程安全）
+
+    Args:
+        entries: beancount条目列表
+        options: beancount选项
+        query: beanquery查询语句
+
+    Returns:
+        查询结果，如果查询失败返回None
+    """
+    # 查询计时
+    start_time = time.time()
+
+    global query_cache
+
+    # 生成查询的哈希值作为缓存键
+    query_hash = hashlib.md5((query + str(options)).encode('utf-8')).hexdigest()
+
+    with query_cache_lock:
+        # 检查缓存中是否有有效结果
+        current_mtime = ledger_cache['last_modified']
+        if query_hash in query_cache:
+            cached_result, cache_mtime = query_cache[query_hash]
+            if cache_mtime == current_mtime:
+                return cached_result
+
+    # 缓存不存在或已过期，执行查询
+
+    try:
+        result = beanquery.query.run_query(entries, options, query)
+    except Exception as e:
+        print(f"Query execution failed: {str(e)}")
+        return None
+
+    # 将结果存入缓存
+    with query_cache_lock:
+        query_cache[query_hash] = (result, current_mtime)
+
+    # 查询计时结束
+    end_time = time.time()
+    query_time = end_time - start_time
+    print(f"Query executed in {query_time:.4f} seconds")
+
+    return result
 
 
 def initialize_default_ledger():

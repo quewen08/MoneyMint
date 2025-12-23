@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
-import beanquery.query as beanquery
 import logging
 
 # 配置日志
@@ -13,7 +12,7 @@ logging.basicConfig(
     encoding="utf-8",
 )
 logger = logging.getLogger(__name__)
-from app.utils.ledger_utils import load_ledger
+from app.utils.ledger_utils import load_ledger, run_query_with_cache
 from datetime import datetime
 import re
 
@@ -130,7 +129,9 @@ def get_monthly_expenses():
         ORDER BY {order_by_clause}"""
 
         try:
-            result = beanquery.run_query(entries, options, query)
+            result = run_query_with_cache(entries, options, query)
+            if result is None:
+                return jsonify({"error": "查询执行失败", "details": "查询结果为空"}), 500
         except Exception as e:
             return jsonify({"error": "查询执行失败", "details": str(e)}), 500
 
@@ -240,7 +241,9 @@ def get_monthly_income_expense():
         ORDER BY year, month, account"""
 
         try:
-            result = beanquery.run_query(entries, options, query)
+            result = run_query_with_cache(entries, options, query)
+            if result is None:
+                return jsonify({"error": "查询执行失败", "details": "查询结果为空"}), 500
         except Exception as e:
             return jsonify({"error": "查询执行失败", "details": str(e)}), 500
 
@@ -353,7 +356,9 @@ def get_account_statistics():
         ORDER BY account"""
 
         try:
-            result = beanquery.run_query(entries, options, query)
+            result = run_query_with_cache(entries, options, query)
+            if result is None:
+                return jsonify({"error": "查询执行失败", "details": "查询结果为空"}), 500
         except Exception as e:
             return jsonify({"error": "查询执行失败", "details": str(e)}), 500
 

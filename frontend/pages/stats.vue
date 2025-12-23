@@ -145,10 +145,10 @@
               总负债
             </p>
             <p
-        class="text-2xl font-bold text-orange-900 dark:text-orange-100 mt-1"
-      >
-        {{ stats.liabilitiesTotal }} {{ getCurrency() }}
-      </p>
+              class="text-2xl font-bold text-orange-900 dark:text-orange-100 mt-1"
+            >
+              {{ stats.liabilitiesTotal }} {{ getCurrency() }}
+            </p>
           </div>
           <div class="bg-orange-200 dark:bg-orange-700/50 rounded-full p-3">
             <span class="text-xl">💳</span>
@@ -165,8 +165,8 @@
               净资产
             </p>
             <p class="text-2xl font-bold text-teal-900 dark:text-teal-100 mt-1">
-        {{ stats.netWorth }} {{ getCurrency() }}
-      </p>
+              {{ stats.netWorth }} {{ getCurrency() }}
+            </p>
           </div>
           <div class="bg-teal-200 dark:bg-teal-700/50 rounded-full p-3">
             <span class="text-xl">📊</span>
@@ -241,7 +241,9 @@
             <div class="flex items-center">
               <div
                 class="w-3 h-3 rounded-full mr-2"
-                :style="{ backgroundColor: getCategoryColor(index + 10) }"
+                :style="{
+                  backgroundColor: getCategoryColor(10 + Number(index)),
+                }"
               ></div>
               <span class="text-gray-700 dark:text-gray-300">{{
                 category.name
@@ -433,7 +435,8 @@ const stats = ref({
 } as any);
 
 // 为分类生成不同颜色
-const getCategoryColor = (index: number) => {
+const getCategoryColor = (index: number | string) => {
+  index = Number(index);
   const colors = [
     "#FF6B6B",
     "#4ECDC4",
