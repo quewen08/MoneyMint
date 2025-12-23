@@ -10,9 +10,10 @@ export default defineNuxtConfig({
     public: {
       apiBaseUrl: '/api',
       version: process.env.npm_package_version || '1.0.0',
-      buildDate: process.env.BUILD_DATE || new Date().toISOString(),
-      buildHash: process.env.BUILD_HASH || 'dev',
-      gitBranch: process.env.GIT_BRANCH || 'dev'
+      // 使用 NUXT_PUBLIC_ 前缀的环境变量会自动被添加，这里保留作为兼容
+      buildDate: process.env.NUXT_PUBLIC_BUILD_DATE || process.env.BUILD_DATE || new Date().toISOString(),
+      buildHash: process.env.NUXT_PUBLIC_BUILD_HASH || process.env.BUILD_HASH || 'dev',
+      gitBranch: process.env.NUXT_PUBLIC_GIT_BRANCH || process.env.GIT_BRANCH || 'dev'
     }
   },
   css: [

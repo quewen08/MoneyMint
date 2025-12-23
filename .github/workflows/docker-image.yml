@@ -30,14 +30,14 @@ jobs:
       - name: Release version
         id: release_version
         run: |
-          echo ::set-output name=version::$(node -p "require('./frontend/package.json').version")
+          echo "version=$(node -p "require('./frontend/package.json').version")" >> $GITHUB_OUTPUT
 
       - name: Generate build info
         id: build_info
         run: |
-          echo "::set-output name=build_date::$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          echo "::set-output name=build_hash::$(git rev-parse --short HEAD)"
-          echo "::set-output name=git_branch::${GITHUB_REF#refs/heads/}"
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+          echo "build_hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "git_branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
 
       - name: Build the Docker image and Push to DockerHub Current Tag
         uses: docker/build-push-action@v6
