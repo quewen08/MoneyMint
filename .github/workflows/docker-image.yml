@@ -39,14 +39,7 @@ jobs:
           echo "::set-output name=build_hash::$(git rev-parse --short HEAD)"
           echo "::set-output name=git_branch::${GITHUB_REF#refs/heads/}"
       
-      - name: Build frontend with build info
-        run: |
-          cd frontend
-          npm install
-          export BUILD_DATE=${{ steps.build_info.outputs.build_date }}
-          export BUILD_HASH=${{ steps.build_info.outputs.build_hash }}
-          export GIT_BRANCH=${{ steps.build_info.outputs.git_branch }}
-          npm run build
+
 
       - name: Build the Docker image and Push to DockerHub Current Tag
         uses: docker/build-push-action@v6
@@ -56,6 +49,10 @@ jobs:
           platforms: |
             linux/amd64
             linux/arm64
+          build-args:
+            BUILD_DATE=${{ steps.build_info.outputs.build_date }}
+            BUILD_HASH=${{ steps.build_info.outputs.build_hash }}
+            GIT_BRANCH=${{ steps.build_info.outputs.git_branch }}
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/money-mint:${{ steps.release_version.outputs.version }}
             ${{ secrets.DOCKER_USERNAME }}/money-mint:latest

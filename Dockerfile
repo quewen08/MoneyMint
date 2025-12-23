@@ -1,6 +1,16 @@
 # 多阶段构建：前端构建阶段
 FROM node:20-alpine as frontend-builder
 
+# 添加构建参数
+ARG BUILD_DATE
+ARG BUILD_HASH
+ARG GIT_BRANCH
+
+# 设置环境变量
+ENV BUILD_DATE=${BUILD_DATE}
+ENV BUILD_HASH=${BUILD_HASH}
+ENV GIT_BRANCH=${GIT_BRANCH}
+
 # 设置工作目录
 WORKDIR /app/frontend
 
