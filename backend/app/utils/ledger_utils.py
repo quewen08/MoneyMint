@@ -28,12 +28,11 @@ def get_file_modification_time():
     # 获取主文件的修改时间
     main_mtime = os.path.getmtime(LEDGER_FILE)
 
-    # 检查date目录下所有文件的修改时间
+    # 检查data目录下所有文件的修改时间
     data_dir = os.path.dirname(LEDGER_FILE)
-    date_dir = os.path.join(data_dir, 'date')
 
-    if os.path.exists(date_dir):
-        for root, dirs, files in os.walk(date_dir):
+    if os.path.exists(data_dir):
+        for root, dirs, files in os.walk(data_dir):
             for file in files:
                 if file.endswith('.bean'):
                     file_path = os.path.join(root, file)

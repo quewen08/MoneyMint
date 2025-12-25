@@ -238,18 +238,45 @@ def add_entry():
     with open(date_file, 'a', encoding='utf-8') as f:
         f.write('\n' + entry_str)
 
-    # 检查ledge.bean中是否已包含该月份文件
-    include_line = f'include \"{year}/{year}-{month}.bean\"'
+    # 检查年份文件是否存在并包含该月份文件
+    year_file = os.path.join(data_dir, f'date/{year}/{year}.bean')
+    year_include_line = f'include "{year}-{month}.bean"'
+    year_content = ''
+
+    print(f"Year file: {year_file}")
+
+    # 如果年份文件不存在，创建它
+    if not os.path.exists(year_file):
+        with open(year_file, 'w', encoding='utf-8') as f:
+            f.write(f';; Yearly file for {year}\n')
+    
+    # 读取年份文件内容
+    with open(year_file, 'r', encoding='utf-8') as f:
+        year_content = f.read()
+
+    # 如果年份文件中没有包含该月份文件，则添加
+    if year_include_line not in year_content:
+        print(f"Add include line: {year_include_line}")
+        with open(year_file, 'a', encoding='utf-8') as f:
+            f.write('\n' + year_include_line)
+
+    # 检查ledge.bean中是否已包含该年份文件
+    ledge_include_line = f'include "{year}/{year}.bean"'
     ledge_content = ''
 
-    if os.path.exists(ledge_file):
-        with open(ledge_file, 'r', encoding='utf-8') as f:
-            ledge_content = f.read()
+    # 如果ledge.bean不存在，创建它
+    if not os.path.exists(ledge_file):
+        with open(ledge_file, 'w', encoding='utf-8') as f:
+            f.write(';; Ledger file including all year files\n')
+    
+    # 读取ledge.bean内容
+    with open(ledge_file, 'r', encoding='utf-8') as f:
+        ledge_content = f.read()
 
-    # 如果没有包含，则添加到ledge.bean中
-    if include_line not in ledge_content:
+    # 如果ledge.bean中没有包含该年份文件，则添加
+    if ledge_include_line not in ledge_content:
         with open(ledge_file, 'a', encoding='utf-8') as f:
-            f.write('\n' + include_line)
+            f.write('\n' + f'{ledge_include_line} ;{year}年账本合集')
 
     # 通知SSE订阅者有新条目添加
     notify_subscribers("entry_added", data)
