@@ -9,8 +9,8 @@
 
     <div class="card">
       <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded">
-        
-        <div class="flex flex-row items-center justify-between gap-4">         
+
+        <div class="flex flex-row items-center justify-between gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">记录类型</label>
             <select v-model="filters.type"
@@ -24,13 +24,13 @@
               <option value="Note">备注</option>
             </select>
           </div>
-          
+
           <div class="flex gap-2">
             <button @click="applyFilters" class="btn btn-primary">应用筛选</button>
             <button @click="resetFilters" class="btn btn-secondary">重置</button>
           </div>
         </div>
-        
+
         <!-- 日历展示 -->
         <div class="mt-4">
           <div class="flex justify-between items-center mb-3">
@@ -42,32 +42,30 @@
               下一月 &gt;
             </button>
           </div>
-          
+
           <!-- 星期标题 -->
           <div class="grid grid-cols-7 gap-1 mb-1">
-            <div v-for="day in weekDays" :key="day" class="text-center text-sm font-medium text-gray-500 dark:text-gray-400 py-2">
+            <div v-for="day in weekDays" :key="day"
+              class="text-center text-sm font-medium text-gray-500 dark:text-gray-400 py-2">
               {{ day }}
             </div>
           </div>
-          
+
           <!-- 日历网格 -->
           <div class="grid grid-cols-7 gap-1">
-            <div 
-              v-for="day in calendarDays" 
-              :key="day.date"
+            <div v-for="day in calendarDays" :key="day.date"
               class="aspect-square flex flex-col items-center justify-center rounded cursor-pointer transition-colors p-1"
               :class="{
                 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400': !day.isCurrentMonth,
                 'hover:bg-primary/20 dark:hover:bg-primary/30': day.isCurrentMonth,
                 'bg-primary text-white font-medium': day.date === selectedDate
-              }"
-              @click="selectDate(day.date)"
-            >
+              }" @click="selectDate(day.date)">
               <div class="text-sm">{{ day.day }}</div>
               <!-- 农历日期 - 有收支记录时隐藏 -->
-              <div v-if="!dailyStats[day.date]?.income && !dailyStats[day.date]?.expense" class="text-[8px] md:text-xs opacity-70">{{ getLunarDay(day.date) }}</div>
+              <div v-if="!dailyStats[day.date]?.income && !dailyStats[day.date]?.expense"
+                class="text-[8px] md:text-xs opacity-70">{{ getLunarDay(day.date) }}</div>
               <!-- 每日收支 - 有收支记录时显示 -->
-              <div v-else class="flex gap-1 mt-1 text-[8px] md:text-xs">
+              <div v-else class="flex flex-col gap-1 mt-1 text-[8px] md:text-xs">
                 <div v-if="dailyStats[day.date]?.income > 0" class="text-green-600 dark:text-green-400">
                   +{{ dailyStats[day.date].income.toFixed(2) }}
                 </div>
@@ -81,15 +79,21 @@
 
         <!-- 当月统计信息 -->
         <div class="mt-4 p-4 bg-white dark:bg-gray-700 rounded-lg shadow-sm">
-          <div class="flex flex-wrap gap-4 justify-between">
+          <div class="flex flex-wrap gap-5 justify-between">
             <div>
               <div class="text-sm text-gray-500 dark:text-gray-400">总收入</div>
               <div class="text-xl font-bold text-green-600 dark:text-green-400">¥{{ monthlyStats.totalIncome.toFixed(2)
-                }}</div>
+              }}</div>
             </div>
             <div>
               <div class="text-sm text-gray-500 dark:text-gray-400">总支出</div>
               <div class="text-xl font-bold text-red-600 dark:text-red-400">¥{{ monthlyStats.totalExpense.toFixed(2) }}
+              </div>
+            </div>
+            <div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">总负债</div>
+              <div class="text-xl font-bold text-red-600 dark:text-red-400">¥{{ monthlyStats.totalLiabilities.toFixed(2)
+              }}
               </div>
             </div>
             <div>
@@ -199,6 +203,7 @@ const entries = ref([] as any[]);
 const monthlyStats = ref({
   totalIncome: 0,
   totalExpense: 0,
+  totalLiabilities: 0,
   netIncome: 0,
   averageDailyExpense: 0
 });
@@ -208,7 +213,7 @@ const showEditModal = ref(false);
 const editingEntry = ref<any>(null);
 
 // 每日收支数据
-const dailyStats = ref({} as Record<string, { income: number; expense: number }>);
+const dailyStats = ref({} as Record<string, { income: number, expense: number, liability: number }> | any);
 
 // 日期选择相关
 const selectedDate = ref(dayjs().format('YYYY-MM-DD'));
@@ -225,14 +230,15 @@ const filters = ref({
 
 // 计算当前月份和年份的显示
 const currentMonthYear = computed(() => {
-  return dayjs(currentDate.value).format('YYYY年MM月');
+  const monthYear = dayjs(currentDate.value).format('YYYY年MM月');
+  return monthYear;
 });
 
 // 生成日历天数
 const generateCalendar = () => {
   const year = currentDate.value.getFullYear();
   const month = currentDate.value.getMonth();
-  
+
   // 获取当月第一天
   const firstDay = new Date(year, month, 1);
   // 获取当月最后一天
@@ -241,9 +247,9 @@ const generateCalendar = () => {
   const startDay = firstDay.getDay();
   // 获取当月的天数
   const daysInMonth = lastDay.getDate();
-  
+
   const days = [];
-  
+
   // 添加上个月的日期
   for (let i = startDay - 1; i >= 0; i--) {
     const date = new Date(year, month, -i);
@@ -253,7 +259,7 @@ const generateCalendar = () => {
       isCurrentMonth: false
     });
   }
-  
+
   // 添加当月的日期
   for (let i = 1; i <= daysInMonth; i++) {
     const date = new Date(year, month, i);
@@ -263,7 +269,7 @@ const generateCalendar = () => {
       isCurrentMonth: true
     });
   }
-  
+
   // 添加下个月的日期，使日历完整
   const remainingDays = 42 - days.length; // 6行7列共42天
   for (let i = 1; i <= remainingDays; i++) {
@@ -274,7 +280,7 @@ const generateCalendar = () => {
       isCurrentMonth: false
     });
   }
-  
+
   calendarDays.value = days;
 };
 
@@ -286,56 +292,66 @@ const selectDate = (date: string) => {
 
 // 切换月份
 const changeMonth = (direction: number) => {
-  currentDate.value.setMonth(currentDate.value.getMonth() + direction);
+  const newDate = new Date(currentDate.value);
+  newDate.setMonth(newDate.getMonth() + direction);
+  currentDate.value = newDate;
   generateCalendar();
 };
 
 // 计算每月统计数据
 const calculateMonthlyStats = (entries: any[], targetMonth: string) => {
   // 使用传入的目标月份，而不是始终使用当前月份
-  
+
   let totalIncome = 0;
   let totalExpense = 0;
-  
+  let totalLiabilities = 0;
+
   // 重置每日统计
   dailyStats.value = {};
-  
+
   entries.forEach(entry => {
     const entryMonth = dayjs(entry.date).format('YYYY-MM');
     const entryDate = dayjs(entry.date).format('YYYY-MM-DD');
-    
+
     // 只处理目标月份的交易记录
     if (entryMonth === targetMonth && entry.type === 'Transaction') {
       entry.postings.forEach((posting: any) => {
         const amount = parseFloat(posting.units?.number || '0');
-        
+
         // 根据账户类型判断是收入还是支出
         if (posting.account.includes('Income')) {
-          totalIncome += amount;
+          totalIncome += Math.abs(amount); // 收入通常是负数，取绝对值
           // 更新每日收入
           if (!dailyStats.value[entryDate]) {
-            dailyStats.value[entryDate] = { income: 0, expense: 0 };
+            dailyStats.value[entryDate] = { income: 0, expense: 0, liability: 0 };
           }
-          dailyStats.value[entryDate].income += amount;
+          dailyStats.value[entryDate].income += Math.abs(amount);
         } else if (posting.account.includes('Expenses')) {
-          totalExpense += Math.abs(amount); // 支出通常是负数，取绝对值
+          totalExpense += Math.abs(amount); // 支出通常是正数，取绝对值
           // 更新每日支出
           if (!dailyStats.value[entryDate]) {
-            dailyStats.value[entryDate] = { income: 0, expense: 0 };
+            dailyStats.value[entryDate] = { income: 0, expense: 0, liability: 0 };
           }
           dailyStats.value[entryDate].expense += Math.abs(amount);
+        } else if (posting.account.includes('Liabilities')) {
+          totalLiabilities += amount; // 负债在增加时是负数，在还款时是正数
+          if (!dailyStats.value[entryDate]) {
+            dailyStats.value[entryDate] = { income: 0, expense: 0, liability: 0 };
+          }
+          dailyStats.value[entryDate].liability += amount;
         }
       });
     }
   });
-  
+
   const netIncome = totalIncome - totalExpense;
   const daysInMonth = dayjs(currentDate.value).daysInMonth();
   const averageDailyExpense = daysInMonth > 0 ? totalExpense / daysInMonth : 0;
-  
+
   monthlyStats.value = {
     totalIncome,
     totalExpense,
+    totalLiabilities,
     netIncome,
     averageDailyExpense
   };
@@ -345,27 +361,27 @@ const calculateMonthlyStats = (entries: any[], targetMonth: string) => {
 const loadEntries = async () => {
   try {
     loading.value = true;
-    
+
     // 加载当月所有数据
     const monthStart = dayjs(currentDate.value).startOf('month').format('YYYY-MM-DD');
     const monthEnd = dayjs(currentDate.value).endOf('month').format('YYYY-MM-DD');
-    
+
     const monthlyResponse = await getEntries({
       start_date: monthStart,
       end_date: monthEnd,
-      type: 'Transaction',
+      type: filters.value.type,
       sort: 'date',
       order: 'desc'
     });
-    
+
     // 计算统计信息 - 传入当前月份参数
     calculateMonthlyStats(monthlyResponse.entries || [], dayjs(currentDate.value).format('YYYY-MM'));
-    
+
     // 根据筛选条件过滤当日条目
     if (filters.value.start_date && filters.value.end_date) {
       // 确保日期格式一致
       const filterDate = dayjs(filters.value.start_date).format('YYYY-MM-DD');
-      entries.value = monthlyResponse.entries?.filter((entry: any) => 
+      entries.value = monthlyResponse.entries?.filter((entry: any) =>
         dayjs(entry.date).format('YYYY-MM-DD') === filterDate
       ) || [];
     } else {
@@ -392,7 +408,7 @@ const resetFilters = () => {
   selectedDate.value = dayjs().format('YYYY-MM-DD');
   currentDate.value = new Date();
   generateCalendar();
-  
+
   filters.value = {
     start_date: selectedDate.value,
     end_date: selectedDate.value,
@@ -404,10 +420,16 @@ const resetFilters = () => {
 
 
 // 初始加载数据
+let mounted = false;
 onMounted(async () => {
+  // 防止热重载导致的重复执行
+  if (mounted) return;
+  mounted = true;
+  
+  console.log("onMounted 加载数据")
   // 初始化日历
   generateCalendar();
-  
+
   // 默认筛选当前日期
   filters.value.start_date = selectedDate.value;
   filters.value.end_date = selectedDate.value;
@@ -488,11 +510,6 @@ const handleEntryDeleted = () => {
   closeModal();
   loadEntries();
 };
-
-// 监听月份变化，重新加载数据
-watch(() => currentDate.value.getMonth(), () => {
-  loadEntries();
-});
 
 // 组件卸载时移除事件监听
 onUnmounted(() => {

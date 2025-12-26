@@ -7,10 +7,6 @@ from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager
 import os
-from dotenv import load_dotenv
-
-# 加载环境变量
-load_dotenv()
 
 # 创建应用实例
 app = Flask(__name__)

@@ -4,7 +4,7 @@ from flask_jwt_extended import jwt_required
 import os
 import re
 from datetime import datetime, timedelta
-from app.utils.ledger_utils import load_ledger, notify_subscribers
+from app.utils.ledger_utils import load_ledger, notify_subscribers, find_suitable_include_file
 
 # 创建蓝图
 entries_bp = Blueprint('entries', __name__)
@@ -58,7 +58,7 @@ def get_entries():
             meta_dict = {}
             if hasattr(entry, 'meta'):
                 meta_dict = ensure_string_keys(dict(entry.meta))
-            
+
             # 创建条目ID：filename:lineno
             entry_id = ''
             if hasattr(entry, 'meta') and 'filename' in entry.meta and 'lineno' in entry.meta:
@@ -66,10 +66,15 @@ def get_entries():
                 filename = entry.meta['filename']
                 main_dir = os.path.dirname(LEDGER_FILE)
                 if filename.startswith(main_dir):
-                    filename = filename[len(main_dir)+1:]
+                    filename = filename[len(main_dir) + 1 :]
                 entry_id = f"{filename}:{entry.meta['lineno']}"
-            
-            entry_data = {'type': type(entry).__name__, 'id': entry_id, 'date': entry.date.isoformat(), 'meta': meta_dict}
+
+            entry_data = {
+                'type': type(entry).__name__,
+                'id': entry_id,
+                'date': entry.date.isoformat(),
+                'meta': meta_dict,
+            }
 
             # 类型筛选
             if entry_type and entry_data['type'] != entry_type:
@@ -118,6 +123,16 @@ def get_entries():
     start = (page - 1) * page_size
     end = start + page_size
     paginated_entries = entries_data[start:end]
+    pages = (total + page_size - 1) // page_size
+
+    # 如果包含date范围, 则取消分页
+    if start_date and end_date:
+        page = 1
+        page_size = total
+        start = (page - 1) * page_size
+        end = start + page_size
+        paginated_entries = entries_data[start:end]
+        pages = 1
 
     # 返回分页结果
     return jsonify(
@@ -127,7 +142,7 @@ def get_entries():
                 'total': total,
                 'page': page,
                 'page_size': page_size,
-                'pages': (total + page_size - 1) // page_size,
+                'pages': pages,
             },
         }
     )
@@ -249,7 +264,7 @@ def add_entry():
     if not os.path.exists(year_file):
         with open(year_file, 'w', encoding='utf-8') as f:
             f.write(f';; Yearly file for {year}\n')
-    
+
     # 读取年份文件内容
     with open(year_file, 'r', encoding='utf-8') as f:
         year_content = f.read()
@@ -268,7 +283,7 @@ def add_entry():
     if not os.path.exists(ledge_file):
         with open(ledge_file, 'w', encoding='utf-8') as f:
             f.write(';; Ledger file including all year files\n')
-    
+
     # 读取ledge.bean内容
     with open(ledge_file, 'r', encoding='utf-8') as f:
         ledge_content = f.read()
@@ -277,6 +292,32 @@ def add_entry():
     if ledge_include_line not in ledge_content:
         with open(ledge_file, 'a', encoding='utf-8') as f:
             f.write('\n' + f'{ledge_include_line} ;{year}年账本合集')
+
+    # 修改为：
+    # 自动找到适合包含年份文件的文件
+    include_file = find_suitable_include_file(LEDGER_FILE, f'date/{year}/{year}.bean')
+
+    # 构造相对路径
+    include_file_dir = os.path.dirname(include_file)
+    relative_path = os.path.relpath(f'date/{year}/{year}.bean', include_file_dir)
+
+    # 检查include文件中是否已包含该年份文件
+    include_line = f'include "{relative_path}"'
+    include_content = ''
+
+    # 如果include文件不存在，创建它
+    if not os.path.exists(include_file):
+        with open(include_file, 'w', encoding='utf-8') as f:
+            f.write(';; Auto-generated include file\n')
+
+    # 读取include文件内容
+    with open(include_file, 'r', encoding='utf-8') as f:
+        include_content = f.read()
+
+    # 如果include文件中没有包含该年份文件，则添加
+    if include_line not in include_content:
+        with open(include_file, 'a', encoding='utf-8') as f:
+            f.write('\n' + f'{include_line} ;{year}年账本合集')
 
     # 通知SSE订阅者有新条目添加
     notify_subscribers("entry_added", data)
