@@ -17,11 +17,8 @@ WORKDIR /app/frontend
 # 复制前端项目到工作目录
 COPY frontend/ .
 
-# 安装依赖
-RUN npm install pnpm -g && pnpm install
-
-# 构建前端
-RUN pnpm run build
+# 安装依赖 & 构建前端
+RUN npm install && npm run build
 
 # 后端构建阶段
 FROM python:3.11-alpine as backend-builder
