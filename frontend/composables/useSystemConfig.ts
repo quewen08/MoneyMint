@@ -6,15 +6,29 @@ export const useSystemConfig = () => {
   const config = ref({
     currency: 'CNY', // 默认货币
   })
+  
+  // 保存完整的账本信息
+  const ledger = ref<any>({
+    title: '',
+    currency: '',
+    entries_count: 0,
+    errors_count: 0,
+    errors: []
+  })
 
   const { getLedger } = useApi()
 
   // 初始化系统配置
   const initConfig = async () => {
     try {
-      const ledger = await getLedger()
-      if (ledger && ledger.currency) {
-        config.value.currency = ledger.currency
+      const ledgerData = await getLedger()
+      if (ledgerData) {
+        // 更新账本信息
+        ledger.value = ledgerData
+        // 更新货币配置
+        if (ledgerData.currency) {
+          config.value.currency = ledgerData.currency
+        }
       }
     } catch (error) {
       console.error('Failed to initialize system config:', error)
@@ -35,6 +49,7 @@ export const useSystemConfig = () => {
 
   return {
     config,
+    ledger,
     initConfig,
     updateConfig,
     getCurrency

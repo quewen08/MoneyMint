@@ -1,10 +1,10 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col transition-colors duration-200">
-    <!-- PC端布局 (md及以上屏幕) -->
-    <div v-if="user && $route.path !== '/login'" class="hidden md:flex flex-row min-h-screen">
-      <!-- 左侧菜单 -->
+    <!-- 用户已登录且非登录页面的布局 -->
+    <template v-if="user && $route.path !== '/login'">
+      <!-- PC端左侧菜单 (md及以上屏幕) -->
       <aside
-        class="w-64 bg-white dark:bg-gray-800 shadow-lg fixed h-screen overflow-y-auto z-50 transition-colors duration-200">
+        class="hidden md:block w-64 bg-white dark:bg-gray-800 shadow-lg fixed h-screen overflow-y-auto z-50 transition-colors duration-200">
         <div class="p-4 border-b dark:border-gray-700">
           <NuxtLink to="/" class="text-xl font-bold text-primary dark:text-white">MoneyMint</NuxtLink>
           <p class="text-xs text-gray-500 dark:text-gray-400">个人记账系统</p>
@@ -32,95 +32,16 @@
         </nav>
       </aside>
 
-      <!-- 右侧内容区域 -->
-      <div class="flex-1 ml-64">
-        <!-- 顶部导航栏 -->
-        <header class="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-40 transition-colors duration-200">
-          <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-
-            <!-- 桌面端用户菜单 -->
-            <div class="flex items-center gap-3">
-              <!-- 设置按钮 -->
-              <div class="flex items-center gap-2">
-                <button @click="toggleDarkMode"
-                  class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                  <svg v-if="!darkMode" class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none"
-                    stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z">
-                    </path>
-                  </svg>
-                  <svg v-else class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-                  </svg>
-                </button>
-                <button @click="toggleAutoSync"
-                  class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                  <svg v-if="!autoSync" class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none"
-                    stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
-                    </path>
-                  </svg>
-                  <svg v-else class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
-                    </path>
-                  </svg>
-                </button>
-              </div>
-
-              <!-- 用户菜单 -->
-              <div class="relative">
-                <button @click="showUserMenu = !showUserMenu"
-                  class="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-                  <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ user?.username }}</span>
-                  <svg class="w-4 h-4 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor"
-                    viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </button>
-                <!-- 用户菜单下拉 -->
-                <div v-if="showUserMenu"
-                  class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl py-1 z-50 transition-colors duration-200">
-                  <div class="px-4 py-2 border-b dark:border-gray-700">
-                    <span class="text-xs font-semibold text-gray-500 dark:text-gray-400">账户</span>
-                  </div>
-                  <div class="px-2 py-1">
-                    <NuxtLink to="/profile"
-                      class="block w-full text-left px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                      <span class="text-sm text-gray-700 dark:text-gray-300">个人资料</span>
-                    </NuxtLink>
-                  </div>
-                  <div class="px-2 py-1 mt-1">
-                    <button @click="logout"
-                      class="block w-full text-left px-2 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">退出登录</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <!-- 主内容区 -->
-        <main class="container mx-auto px-6 py-8">
-          <NuxtPage />
-        </main>
-      </div>
-    </div>
-
-    <!-- 移动端布局 (sm及以下屏幕) -->
-    <div v-if="user && $route.path !== '/login'" class="flex flex-col min-h-screen md:hidden">
       <!-- 顶部导航栏 -->
-      <header class="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-50 transition-colors duration-200">
+      <header class="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-40 transition-colors duration-200">
         <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-          <h1 class="text-xl font-bold text-primary">
+          <!-- 移动端标题 -->
+          <h1 class="md:hidden text-xl font-bold text-primary">
             <NuxtLink to="/" class="dark:text-white">MoneyMint</NuxtLink>
           </h1>
 
           <!-- 移动端菜单按钮 -->
-          <div>
+          <div class="md:hidden">
             <button @click="showMobileMenu = !showMobileMenu"
               class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
               <svg class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor"
@@ -132,78 +53,134 @@
               </svg>
             </button>
           </div>
+
+          <!-- 桌面端用户菜单 -->
+          <div class="hidden md:flex items-center gap-3">
+            <!-- 设置按钮 -->
+            <div class="flex items-center gap-2">
+              <button @click="toggleDarkMode"
+                class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <svg v-if="!darkMode" class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none"
+                  stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z">
+                  </path>
+                </svg>
+                <svg v-else class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                </svg>
+              </button>
+              <button @click="toggleAutoSync"
+                class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <svg v-if="!autoSync" class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none"
+                  stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                  </path>
+                </svg>
+                <svg v-else class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                  </path>
+                </svg>
+              </button>
+            </div>
+
+            <!-- 用户菜单 -->
+            <div class="relative">
+              <button @click="showUserMenu = !showUserMenu"
+                class="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ user?.username }}</span>
+                <svg class="w-4 h-4 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor"
+                  viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </button>
+              <!-- 用户菜单下拉 -->
+              <div v-if="showUserMenu"
+                class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl py-1 z-50 transition-colors duration-200">
+                <div class="px-4 py-2 border-b dark:border-gray-700">
+                  <span class="text-xs font-semibold text-gray-500 dark:text-gray-400">账户</span>
+                </div>
+                <div class="px-2 py-1">
+                  <NuxtLink to="/profile"
+                    class="block w-full text-left px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                    <span class="text-sm text-gray-700 dark:text-gray-300">个人资料</span>
+                  </NuxtLink>
+                </div>
+                <div class="px-2 py-1 mt-1">
+                  <button @click="logout"
+                    class="block w-full text-left px-2 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">退出登录</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 移动端导航菜单 -->
         <div v-if="showMobileMenu"
-          class="bg-white dark:bg-gray-800 border-t dark:border-gray-700 transition-colors duration-200">
+          class="bg-white dark:bg-gray-800 border-t dark:border-gray-700 transition-colors duration-200 md:hidden">
           <div class="container mx-auto px-4 py-3 space-y-3">
-            <template v-if="user">
-              <NuxtLink v-for="menuItem in menuItems" :key="menuItem.path" :to="menuItem.path"
-                class="block btn btn-secondary dark:text-white" @click="showMobileMenu = false">
-                {{ menuItem.name }}
-              </NuxtLink>
-              <button @click="showAddModal = true; showMobileMenu = false"
-                class="block w-full btn btn-primary dark:text-white">+ 添加记录</button>
-              <div class="border-t dark:border-gray-700 pt-3">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ user.username }}</span>
-                </div>
-                <div class="flex flex-col space-y-2">
-                  <div class="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                    <span class="text-sm text-gray-700 dark:text-gray-300">深色模式</span>
-                    <button @click="toggleDarkMode"
-                      class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                      <svg v-if="!darkMode" class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none"
-                        stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z">
-                        </path>
-                      </svg>
-                      <svg v-else class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z">
-                        </path>
-                      </svg>
-                    </button>
-                  </div>
-                  <div class="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                    <span class="text-sm text-gray-700 dark:text-gray-300">自动同步</span>
-                    <button @click="toggleAutoSync"
-                      class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                      <svg v-if="!autoSync" class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none"
-                        stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
-                        </path>
-                      </svg>
-                      <svg v-else class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
-                        </path>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <button @click="logout; showMobileMenu = false"
-                  class="block w-full mt-3 text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">退出登录</button>
-              </div>
-            </template>
-            <NuxtLink v-else to="/login" class="block btn btn-primary dark:text-white" @click="showMobileMenu = false">
-              登录
+            <NuxtLink v-for="menuItem in menuItems" :key="menuItem.path" :to="menuItem.path"
+              class="block btn btn-secondary dark:text-white" @click="showMobileMenu = false">
+              {{ menuItem.name }}
             </NuxtLink>
+            <button @click="showAddModal = true; showMobileMenu = false"
+              class="block w-full btn btn-primary dark:text-white">+ 添加记录</button>
+            <div class="border-t dark:border-gray-700 pt-3">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ user.username }}</span>
+              </div>
+              <div class="flex flex-col space-y-2">
+                <div class="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <span class="text-sm text-gray-700 dark:text-gray-300">深色模式</span>
+                  <button @click="toggleDarkMode"
+                    class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                    <svg v-if="!darkMode" class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none"
+                      stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z">
+                      </path>
+                    </svg>
+                    <svg v-else class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                    </svg>
+                  </button>
+                </div>
+                <div class="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <span class="text-sm text-gray-700 dark:text-gray-300">自动同步</span>
+                  <button @click="toggleAutoSync"
+                    class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                    <svg v-if="!autoSync" class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none"
+                      stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                      </path>
+                    </svg>
+                    <svg v-else class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                      </path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <button @click="logout; showMobileMenu = false"
+                class="block w-full mt-3 text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">退出登录</button>
+            </div>
           </div>
         </div>
       </header>
 
       <!-- 主内容区 -->
-      <main class="container mx-auto px-4 py-4 md:py-6 pb-16">
+      <main class="container mx-auto px-4 md:px-6 py-4 md:py-8 md:ml-64 pb-16">
         <NuxtPage />
       </main>
 
       <!-- 移动端底部导航 -->
-      <nav v-if="user"
-        class="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-lg z-40 transition-colors duration-200">
+      <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-lg z-40 transition-colors duration-200">
         <div class="flex justify-around items-center h-14">
           <NuxtLink v-for="menuItem in menuItems" :key="menuItem.path" :to="menuItem.path"
             class="flex flex-col items-center justify-center p-2 flex-1 text-gray-600 dark:text-gray-300 active:text-primary">
@@ -223,14 +200,14 @@
           </button>
         </div>
       </nav>
-    </div>
+    </template>
 
     <!-- 登录页面布局 -->
-    <div v-else>
+    <template v-else>
       <main class="container mx-auto px-4 py-8">
         <NuxtPage />
       </main>
-    </div>
+    </template>
 
     <!-- Add Entry Drawer -->
     <AddEntryModal v-if="showAddModal" @close="showAddModal = false" @entry-added="handleEntryAdded" />

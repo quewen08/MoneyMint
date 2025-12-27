@@ -285,18 +285,14 @@ const { $api } = useNuxtApp();
 const { getLedger, getEntries, user, accounts } = $api;
 
 // 系统配置
-const { config, initConfig, getCurrency } = useSystemConfig();
+const { config, ledger: systemLedger, initConfig, getCurrency } = useSystemConfig();
 
 const loading = ref(true);
 const showAddModal = ref(false);
 const showEditModal = ref(false);
 const editingEntry = ref<any>(null);
-const ledger: any = ref({
-  title: "",
-  currency: "",
-  entries_count: 0,
-  errors_count: 0,
-});
+// 使用系统配置中的ledger信息，避免重复请求
+const ledger = systemLedger;
 const entries = ref([] as any[]);
 const accountConfig = ref<any>({
   Expenses: {},
@@ -447,113 +443,12 @@ const calculatePercentageChange = (current: number, previous: number) => {
   return Math.round(((current - previous) / previous) * 100);
 };
 
-// 计算仪表盘统计数据
+// 计算仪表盘统计数据（统一使用本地计算）
 const calculateDashboardStats = async () => {
   try {
-    const { current, previous } = getCurrentAndPreviousMonthDates();
-
-    // 使用新的API获取本月收支统计
-    const currentMonthStats = await $api.getMonthlyIncomeExpense({
-      start_date: dayjs(current.start).format("YYYY-MM-DD"),
-      end_date: dayjs(current.end).format("YYYY-MM-DD"),
-    });
-
-    // 使用新的API获取上月收支统计
-    const previousMonthStats = await $api.getMonthlyIncomeExpense({
-      start_date: dayjs(previous.start).format("YYYY-MM-DD"),
-      end_date: dayjs(previous.end).format("YYYY-MM-DD"),
-    });
-
-    // 使用新的API获取本月分类支出统计
-    const monthlyExpenses = await $api.getMonthlyExpenses({
-      start_date: dayjs(current.start).format("YYYY-MM-DD"),
-      end_date: dayjs(current.end).format("YYYY-MM-DD"),
-    });
-
-    // 计算分类支出百分比
-    const totalExpense = parseFloat(currentMonthStats.expense) || 0;
-    const expenseByCategory = monthlyExpenses.monthly_expenses
-      .map((item: any) => {
-        // 提取分类名称
-        const categoryParts = item.account.split(":");
-        const category =
-          categoryParts.length >= 2 ? categoryParts[1] : item.account;
-        const amount = parseFloat(item.total) || 0;
-
-        return {
-          name: accountConfig.value?.Expenses?.[category] || category, // 使用中文名称，如果没有则使用英文名称
-          amount,
-          percentage:
-            totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0,
-        };
-      })
-      .sort((a: any, b: any) => b.amount - a.amount);
-
-    // 计算与上月比较的变化率
-    const incomeChange = calculatePercentageChange(
-      parseFloat(currentMonthStats.income) || 0,
-      parseFloat(previousMonthStats.income) || 0
-    );
-    const expenseChange = calculatePercentageChange(
-      parseFloat(currentMonthStats.expense) || 0,
-      parseFloat(previousMonthStats.expense) || 0
-    );
-    const netChange = calculatePercentageChange(
-      (parseFloat(currentMonthStats.income) || 0) -
-      (parseFloat(currentMonthStats.expense) || 0),
-      (parseFloat(previousMonthStats.income) || 0) -
-      (parseFloat(previousMonthStats.expense) || 0)
-    );
-
-    // 更新统计数据
-    dashboardStats.value = {
-      totalIncome: parseFloat(
-        (parseFloat(currentMonthStats.income) || 0).toFixed(2)
-      ),
-      totalExpense: parseFloat(
-        (parseFloat(currentMonthStats.expense) || 0).toFixed(2)
-      ),
-      netIncome: parseFloat(
-        (
-          (parseFloat(currentMonthStats.income) || 0) -
-          (parseFloat(currentMonthStats.expense) || 0)
-        ).toFixed(2)
-      ),
-      previous: {
-        totalIncome: parseFloat(
-          (parseFloat(previousMonthStats.income) || 0).toFixed(2)
-        ),
-        totalExpense: parseFloat(
-          (parseFloat(previousMonthStats.expense) || 0).toFixed(2)
-        ),
-        netIncome: parseFloat(
-          (
-            (parseFloat(previousMonthStats.income) || 0) -
-            (parseFloat(previousMonthStats.expense) || 0)
-          ).toFixed(2)
-        ),
-      },
-      changes: {
-        income: incomeChange,
-        expense: expenseChange,
-        net: netChange,
-      },
-      expenseByCategory: expenseByCategory,
-      dateRange: {
-        current: {
-          start: current.start,
-          end: current.end,
-        },
-        previous: {
-          start: previous.start,
-          end: previous.end,
-        },
-      },
-    };
-  } catch (error) {
-    console.error("获取仪表盘统计数据失败:", error);
-    // 出错时使用本地计算作为回退
     calculateDashboardStatsLocally();
+  } catch (error) {
+    console.error("计算仪表盘统计数据失败:", error);
   }
 };
 
@@ -628,10 +523,17 @@ const refreshData = async () => {
 
   try {
     loading.value = true;
-    ledger.value = await getLedger();
+    // 不再重复调用getLedger，直接使用useSystemConfig中的ledger信息
+    // 注：如果需要强制刷新ledger信息，可以在这里再次调用initConfig()
+    
+    // 获取本月和上月的数据，以确保统计计算准确
+    const now = dayjs();
+    const firstDayOfLastMonth = now.subtract(1, "month").startOf("month");
+    const lastDayOfCurrentMonth = now.endOf("month");
+    
     const result = await getEntries({
-      start_date: dayjs().subtract(7, "day").toISOString(),
-      end_date: dayjs().toISOString(),
+      start_date: firstDayOfLastMonth.toISOString(),
+      end_date: lastDayOfCurrentMonth.toISOString(),
     });
     // 兼容新旧API格式
     entries.value = result.entries ? result.entries : result;
@@ -683,7 +585,12 @@ const closeModal = () => {
 };
 
 // 监听全局SSE事件
+let mounted = false;
 onMounted(async () => {
+  // 防止热重载导致的重复执行
+  if (mounted) return;
+  mounted = true;
+  
   await initConfig();
   await refreshData();
 
