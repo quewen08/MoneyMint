@@ -137,24 +137,113 @@ def run_query_with_cache(entries, options, query):
 
 
 def initialize_default_ledger():
+    # 如果账本文件不存在，则初始化默认账本
+    print(f"Initializing default ledger file: {LEDGER_FILE}, file exists: {os.path.exists(LEDGER_FILE)}")
+    if os.path.exists(LEDGER_FILE):
+        print(f"Ledger file already exists: {LEDGER_FILE}")
+        return;
     """初始化默认账本文件"""
-    if not os.path.exists(LEDGER_FILE):
-        # 如果LEDGER_FILE包含目录，确保目录存在
-        os.makedirs(os.path.dirname(LEDGER_FILE), exist_ok=True)
-        with open(LEDGER_FILE, 'w', encoding='utf-8') as f:
-            f.write(
-                '''option "title" "MoneyMint Ledger"
+    # 获取主账本文件的目录
+    base_dir = os.path.dirname(LEDGER_FILE)
+ 
+    # 获取当前年份
+    current_year = datetime.now().year
+    # 获取当前月份
+    current_month = datetime.now().month
+    
+    # 确保基本目录结构存在
+    directories_to_create = [
+        os.path.join(base_dir, 'accounts'),
+        os.path.join(base_dir, 'date'),
+        os.path.join(base_dir, 'date', f'{current_year}'),
+    ]
+    
+    for directory in directories_to_create:
+        os.makedirs(directory, exist_ok=True)
+    
+    # 创建主账本文件
+    with open(LEDGER_FILE, 'w', encoding='utf-8') as f:
+        f.write(
+            '''option "title" "MoneyMint Ledger"
 option "operating_currency" "CNY"
 
-2023-01-01 open Assets:Cash CNY
-2023-01-01 open Assets:Bank CNY
-2023-01-01 open Income:Salary CNY
-2023-01-01 open Expenses:Food CNY
-2023-01-01 open Expenses:Transport CNY
-2023-01-01 open Equity:Opening-Balances CNY
-'''
-            )
+include "accounts/assets.bean"
+include "accounts/equity.bean"
+include "accounts/expenses.bean"
+include "accounts/income.bean"
+include "accounts/liabilities.bean"
 
+include "date/main.bean"
+'''
+        )
+    
+    # 创建accounts目录下的文件
+    
+    # assets.bean
+    with open(os.path.join(base_dir, 'accounts', 'assets.bean'), 'w', encoding='utf-8') as f:
+        f.write(
+            f'''; 资产账户
+{current_year}-01-01 open Assets:Cash CNY
+{current_year}-01-01 open Assets:Bank CNY
+'''
+        )
+    
+    # equity.bean
+    with open(os.path.join(base_dir, 'accounts', 'equity.bean'), 'w', encoding='utf-8') as f:
+        f.write(
+            f'''; 权益账户
+{current_year}-01-01 open Equity:Opening-Balances CNY
+'''
+        )
+    
+    # expenses.bean
+    with open(os.path.join(base_dir, 'accounts', 'expenses.bean'), 'w', encoding='utf-8') as f:
+        f.write(
+            f'''; 支出账户
+{current_year}-01-01 open Expenses:Food CNY
+{current_year}-01-01 open Expenses:Transport CNY
+'''
+        )
+    
+    # income.bean
+    with open(os.path.join(base_dir, 'accounts', 'income.bean'), 'w', encoding='utf-8') as f:
+        f.write(
+            f'''; 收入账户
+{current_year}-01-01 open Income:Salary CNY
+
+'''
+        )
+    
+    # liabilities.bean
+    with open(os.path.join(base_dir, 'accounts', 'liabilities.bean'), 'w', encoding='utf-8') as f:
+        f.write(
+            f'''; 负债账户
+{current_year}-01-01 open Liabilities:CreditCard CNY
+'''
+        )
+    
+    # 创建date目录下的文件
+    
+    # date/main.bean
+    with open(os.path.join(base_dir, 'date', 'ledge.bean'), 'w', encoding='utf-8') as f:
+        f.write(
+            f'''; 主账本文件
+include "{current_year}/{current_year}.bean"
+'''
+        )
+    
+    # current_year.bean
+    with open(os.path.join(base_dir, 'date', f'{current_year}', f'{current_year}.bean'), 'w', encoding='utf-8') as f:
+        f.write(
+            f'''; {current_year}年的记账记录
+include "{current_year}-{current_month}.bean"
+'''
+        )
+    
+    # current_year的current_month.bean文件
+    with open(os.path.join(base_dir, 'date', f'{current_year}', f'{current_year}-{current_month}.bean'), 'w', encoding='utf-8') as f:
+        f.write(f''';; {current_year}年{int(current_month)}月的记账记录
+''')
 
 def analyze_include_structure(main_file):
     """分析Beancount文件的include结构
