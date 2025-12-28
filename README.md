@@ -1,5 +1,7 @@
 # MoneyMint Accounting System [中文](README-zh.md)|ENGLISH [![docker image size](https://img.shields.io/docker/image-size/quewen08/money-mint/latest?label=docker-image)](https://hub.docker.com/repository/docker/quewen08/money-mint/general) ![docker pulls](https://img.shields.io/docker/pulls/quewen08/money-mint)
 
+[![](frontend/public/favicon.ico)](https://github.com/QueWen08/money-mint)
+
 A modern personal accounting system built on Beancount and Nuxt.js, featuring powerful backend services and a mobile-friendly frontend interface to help users easily manage their personal finances.
 
 ## 🚀 Project Overview
@@ -61,41 +63,54 @@ MoneyMint is an open-source personal financial management system designed to pro
 
 ```
 MoneyMint/
-├── backend/                    # Python backend services
-│   ├── app/                   # Application code
-│   │   ├── __init__.py        # Application initialization
-│   │   ├── auth/              # Authentication module
-│   │   ├── ledger/            # Ledger management module
-│   │   ├── entries/           # Transaction entries module
-│   │   ├── accounts/          # Accounts management module
-│   │   ├── events/            # SSE events module
-│   │   └── utils/             # Utility functions
-│   ├── data/                  # Ledger data directory
-│   │   └── main.bean          # Default ledger file
-│   ├── .env                   # Environment configuration
-│   ├── requirements.txt       # Python dependencies
-│   ├── run.py                 # Application entry point
-│   ├── setup.py               # Package installation configuration
-│   └── README.md              # Backend module documentation
-├── frontend/                  # Nuxt frontend project
-│   ├── assets/                # Static assets
-│   ├── components/            # Vue components
-│   ├── composables/           # Composable functions
-│   │   └── useApi.ts          # API call encapsulation
-│   ├── pages/                 # Page components
-│   │   ├── index.vue          # Homepage/Dashboard
-│   │   ├── accounts.vue       # Account management
-│   │   ├── entries.vue        # Transaction records
-│   │   └── login.vue          # Login page
-│   ├── plugins/               # Nuxt plugins
-│   ├── public/                # Public resources
-│   ├── nuxt.config.ts         # Nuxt configuration
-│   ├── package.json           # Node.js dependencies
-│   └── tailwind.config.js     # Tailwind CSS configuration
-├── Dockerfile                 # Docker build file
-├── docker-compose.yml         # Docker Compose configuration
-├── README.md                  # English documentation
-└── README-zh.md               # Chinese documentation
+├── backend/                     # Python backend services
+│   ├── app/                     # Application code
+│   │   ├── __init__.py          # Application initialization
+│   │   ├── auth/                # Authentication module
+│   │   ├── ledger/              # Ledger management module
+│   │   ├── entries/             # Transaction entries module
+│   │   ├── accounts/            # Accounts management module
+│   │   ├── events/              # SSE events module
+│   │   └── utils/               # Utility functions
+│   ├── data/                    # Ledger data directory
+│   │   ├── main.bean            # Main ledger file
+│   │   ├── accounts/            # Account definition files
+│   │   │   ├── assets.bean      # Asset accounts
+│   │   │   ├── liabilities.bean # Liability accounts
+│   │   │   ├── income.bean      # Income accounts
+│   │   │   ├── expenses.bean    # Expense accounts
+│   │   │   └── equity.bean      # Equity accounts
+│   │   └── date/                # Date-based transaction files
+│   │       └── year/            # Annual directory
+│   │           ├── year-01.bean # January transactions
+│   │           ├── year-02.bean # February transactions
+│   │           ├── ...          # Other months
+│   │           ├── year-12.bean # December transactions
+│   │           └── year.bean    # Annual transactions
+│   ├── .env                     # Environment configuration
+│   ├── requirements.txt         # Python dependencies
+│   ├── run.py                   # Application entry point
+│   ├── setup.py                 # Package installation configuration
+│   └── README.md                # Backend module documentation
+├── frontend/                    # Nuxt frontend project
+│   ├── assets/                  # Static assets
+│   ├── components/              # Vue components
+│   ├── composables/             # Composable functions
+│   │   └── useApi.ts            # API call encapsulation
+│   ├── pages/                   # Page components
+│   │   ├── index.vue            # Homepage/Dashboard
+│   │   ├── accounts.vue         # Account management
+│   │   ├── entries.vue          # Transaction records
+│   │   └── login.vue            # Login page
+│   ├── plugins/                 # Nuxt plugins
+│   ├── public/                  # Public resources
+│   ├── nuxt.config.ts           # Nuxt configuration
+│   ├── package.json             # Node.js dependencies
+│   └── tailwind.config.js       # Tailwind CSS configuration
+├── Dockerfile                   # Docker build file
+├── docker-compose.yml           # Docker Compose configuration
+├── README.md                    # English documentation
+└── README-zh.md                 # Chinese documentation
 ```
 
 ## 🚀 Quick Start
