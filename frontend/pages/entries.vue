@@ -480,8 +480,41 @@ const openCopyModal = (entry: any) => {
   const copiedEntry = {
     ...entry,
     id: '', // 清空ID，使其成为新条目
-    date: dayjs().format('YYYY-MM-DD') // 默认使用当前日期
+    meta: undefined, // 清除元数据
+    // 保留原日期，让用户自行决定是否修改
+    date: entry.date
   };
+  
+  // 处理记账行数据，确保金额格式正确
+  if (copiedEntry.postings) {
+    copiedEntry.postings = copiedEntry.postings.map((posting: any) => {
+      let amount = '';
+      
+      // 处理不同的金额格式
+      if (posting.amount) {
+        // 旧格式：金额包含货币单位
+        amount = posting.amount.replace(" CNY", "").trim();
+      } else if (posting.units) {
+        // 新格式：金额和货币分开
+        amount = posting.units.number?.toString() || '';
+      } else if (typeof posting.amount === 'number') {
+        // 直接是数字类型
+        amount = posting.amount.toString();
+      }
+      
+      // 处理负数金额的显示
+      if (amount.startsWith('-')) {
+        amount = amount.substring(1); // 去掉负号，前端显示正数
+      }
+      
+      return {
+        account: posting.account,
+        amount: amount,
+        units: undefined // 清除units字段，避免格式冲突
+      };
+    });
+  }
+  
   editingEntry.value = copiedEntry;
   showAddModal.value = true; // 使用添加模态框而不是编辑模态框
 };

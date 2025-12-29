@@ -4,7 +4,15 @@ from flask_jwt_extended import jwt_required
 import os
 import re
 from datetime import datetime, timedelta
-from app.utils.ledger_utils import load_ledger, notify_subscribers, find_suitable_include_file
+from app.utils.ledger_utils import (
+    get_dir_by_year,
+    load_ledger,
+    notify_subscribers,
+    find_suitable_include_file,
+    get_file_by_year_month,
+    get_entries_by_file,
+    get_include_structure,
+)
 
 # 创建蓝图
 entries_bp = Blueprint('entries', __name__)
@@ -18,7 +26,16 @@ PAD_EQUITY_ACCOUNT = os.getenv('PAD_EQUITY_ACCOUNT', 'Equity:Opening-Balances')
 @jwt_required()
 def get_entries():
     """获取所有记账条目（支持时间段筛选、账户筛选、分页和排序）"""
-    entries, errors, options = load_ledger()
+    # 从请求参数中获取年份和月份
+    year = request.args.get('year')
+    month = request.args.get('month')
+
+    # 如果指定了年份和月份，使用缓存功能获取条目
+    if year and month:
+        entries, errors, options = get_entries_by_file(year, month)
+    else:
+        # 否则加载所有条目
+        entries, errors, options = load_ledger()
 
     # 从请求参数中获取筛选条件
     start_date = request.args.get('start_date')
@@ -62,11 +79,15 @@ def get_entries():
             # 创建条目ID：filename:lineno
             entry_id = ''
             if hasattr(entry, 'meta') and 'filename' in entry.meta and 'lineno' in entry.meta:
-                # 获取相对路径（去掉主文件所在目录）
+                # 获取相对路径（使用os.path.relpath确保跨平台兼容性）
                 filename = entry.meta['filename']
                 main_dir = os.path.dirname(LEDGER_FILE)
-                if filename.startswith(main_dir):
-                    filename = filename[len(main_dir) + 1 :]
+                try:
+                    # 使用relpath计算相对于主文件目录的相对路径
+                    filename = os.path.relpath(filename, main_dir)
+                except ValueError:
+                    # 如果路径不在同一驱动器（Windows）或无法计算相对路径，使用原始文件名
+                    pass
                 entry_id = f"{filename}:{entry.meta['lineno']}"
 
             entry_data = {
@@ -159,11 +180,27 @@ def add_entry():
     year = entry_date.split('-')[0]
     month = entry_date.split('-')[1]
 
-    # 构建文件路径
+    # 使用缓存功能获取文件路径
+    date_file = get_file_by_year_month(year, month)
+    if not date_file:
+        # 如果缓存中没有找到文件，使用原有逻辑构建路径
+        data_dir = os.path.dirname(LEDGER_FILE)
+        date_file = os.path.join(data_dir, f'date/{year}/{year}-{month}.bean')
+
+        # 确保目录和文件存在
+        os.makedirs(os.path.dirname(date_file), exist_ok=True)
+        if not os.path.exists(date_file):
+            with open(date_file, 'w', encoding='utf-8') as f:
+                f.write(f';; Auto-generated {year}-{month}.bean file\n')
+
+    # 构建其他相关文件路径
     data_dir = os.path.dirname(LEDGER_FILE)
-    os.makedirs(os.path.join(data_dir, 'date'), exist_ok=True)
-    date_file = os.path.join(data_dir, f'date/{year}/{year}-{month}.bean')
     ledge_file = os.path.join(data_dir, 'date/ledge.bean')
+
+    # step1 确定LEDGER_FILE存在
+    if not os.path.exists(LEDGER_FILE):
+        with open(LEDGER_FILE, 'w', encoding='utf-8') as f:
+            f.write(';; Auto-generated ledger file\n')
 
     # 确保年份目录存在
     year_dir = os.path.dirname(date_file)
@@ -254,11 +291,14 @@ def add_entry():
         f.write('\n' + entry_str)
 
     # 检查年份文件是否存在并包含该月份文件
-    year_file = os.path.join(data_dir, f'date/{year}/{year}.bean')
+    year_file = get_dir_by_year(year) + f'/{year}.bean'
     year_include_line = f'include "{year}-{month}.bean"'
     year_content = ''
 
     print(f"Year file: {year_file}")
+
+    # 确保年份目录存在
+    os.makedirs(os.path.dirname(year_file), exist_ok=True)
 
     # 如果年份文件不存在，创建它
     if not os.path.exists(year_file):
@@ -292,32 +332,6 @@ def add_entry():
     if ledge_include_line not in ledge_content:
         with open(ledge_file, 'a', encoding='utf-8') as f:
             f.write('\n' + f'{ledge_include_line} ;{year}年账本合集')
-
-    # 修改为：
-    # 自动找到适合包含年份文件的文件
-    include_file = find_suitable_include_file(LEDGER_FILE, f'date/{year}/{year}.bean')
-
-    # 构造相对路径
-    include_file_dir = os.path.dirname(include_file)
-    relative_path = os.path.relpath(f'date/{year}/{year}.bean', include_file_dir)
-
-    # 检查include文件中是否已包含该年份文件
-    include_line = f'include "{relative_path}"'
-    include_content = ''
-
-    # 如果include文件不存在，创建它
-    if not os.path.exists(include_file):
-        with open(include_file, 'w', encoding='utf-8') as f:
-            f.write(';; Auto-generated include file\n')
-
-    # 读取include文件内容
-    with open(include_file, 'r', encoding='utf-8') as f:
-        include_content = f.read()
-
-    # 如果include文件中没有包含该年份文件，则添加
-    if include_line not in include_content:
-        with open(include_file, 'a', encoding='utf-8') as f:
-            f.write('\n' + f'{include_line} ;{year}年账本合集')
 
     # 通知SSE订阅者有新条目添加
     notify_subscribers("entry_added", data)

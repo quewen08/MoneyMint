@@ -150,7 +150,7 @@
           </div>
           <div class="text-right">
             <span class="font-medium dark:text-gray-200 text-sm sm:text-base">
-              {{ category.amount }} {{ getCurrency() }}
+              {{ category.amount.toFixed(2) }} {{ getCurrency() }}
             </span>
             <span class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 ml-2">({{ category.percentage }}%)</span>
           </div>
@@ -171,7 +171,7 @@
       </div>
       <div v-else-if="entries
         .filter((e) => e.type === 'Transaction')
-        .filter((e) => e.date >= getLast7Days()).length === 0"
+        .filter((e) => dayjs(e.date).isBetween(getLast7Days().start, getLast7Days().end, null, '[]')).length === 0"
         class="text-center py-6 sm:py-8 text-gray-500 dark:text-gray-400">
         <p class="text-sm sm:text-base">暂无最近7天记账记录</p>
       </div>
@@ -179,7 +179,8 @@
         <!-- 最近7天交易记录 -->
         <div v-for="entry in entries
           .filter((e) => e.type === 'Transaction')
-          .filter((e) => e.date >= getLast7Days())" :key="entry.meta.filename + entry.meta.lineno"
+          .filter((e) => dayjs(e.date).isBetween(getLast7Days().start, getLast7Days().end, null, '[]'))"
+          :key="entry.meta.filename + entry.meta.lineno"
           class="border-b pb-3 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/70 p-2 rounded transition-colors">
           <div class="flex flex-col space-y-1">
             <!-- 日期和类型 -->
@@ -260,6 +261,8 @@ import { ref, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useNuxtApp } from "#app";
 import dayjs from "dayjs";
+import isBetween from 'dayjs/plugin/isBetween';
+dayjs.extend(isBetween);
 import { useSystemConfig } from "~/composables/useSystemConfig";
 import { getLunarAndFestival } from "~/utils/lunarUtils";
 
@@ -522,7 +525,11 @@ const refreshData = async () => {
     const result = await getEntries({
       start_date: firstDayOfLastMonth.toISOString(),
       end_date: lastDayOfCurrentMonth.toISOString(),
-    });
+      // }).then((res) => {
+      //   const test = res.entries
+      //   console.log(test);
+      //   return res;
+    })
     // 兼容新旧API格式
     entries.value = result.entries ? result.entries : result;
 

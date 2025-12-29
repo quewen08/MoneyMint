@@ -33,7 +33,7 @@
       </aside>
 
       <!-- 顶部导航栏 -->
-      <header class="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-40 transition-colors duration-200">
+      <header class="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-40 transition-colors duration-200 md:pl-64">
         <div class="container mx-auto px-4 py-3 flex justify-between items-center">
           <!-- 移动端标题 -->
           <h1 class="md:hidden text-xl font-bold text-primary">
@@ -123,12 +123,13 @@
           class="bg-white dark:bg-gray-800 border-t dark:border-gray-700 transition-colors duration-200 md:hidden">
           <div class="container mx-auto px-4 py-3 space-y-3">
             <NuxtLink v-for="menuItem in menuItems" :key="menuItem.path" :to="menuItem.path"
-              class="block btn btn-secondary dark:text-white" @click="showMobileMenu = false">
+              class="block px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200" 
+              @click="showMobileMenu = false">
               {{ menuItem.name }}
             </NuxtLink>
             <button @click="showAddModal = true; showMobileMenu = false"
-              class="block w-full btn btn-primary dark:text-white">+ 添加记录</button>
-            <div class="border-t dark:border-gray-700 pt-3">
+              class="block w-full px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200">+ 添加记录</button>
+            <div class="border-t dark:border-gray-700 pt-3" v-if="user">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ user.username }}</span>
               </div>
@@ -175,7 +176,7 @@
       </header>
 
       <!-- 主内容区 -->
-      <main class="container mx-auto px-4 md:px-6 py-4 md:py-8 md:ml-64 pb-16">
+      <main class="container mx-auto px-4 md:px-6 py-4 md:py-8 md:pl-64 pb-16 min-h-[calc(100vh-4rem)]">
         <NuxtPage />
       </main>
 
@@ -183,11 +184,17 @@
       <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-lg z-40 transition-colors duration-200">
         <div class="flex justify-around items-center h-14">
           <NuxtLink v-for="menuItem in menuItems" :key="menuItem.path" :to="menuItem.path"
-            class="flex flex-col items-center justify-center p-2 flex-1 text-gray-600 dark:text-gray-300 active:text-primary">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            class="flex flex-col items-center justify-center p-2 flex-1 transition-colors duration-200 group" :class="{
+              'text-primary bg-primary/10 rounded-lg': $route.path === menuItem.path,
+              'text-gray-600 dark:text-gray-300 hover:text-primary': $route.path !== menuItem.path
+            }">
+            <svg class="w-6 h-6 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" :class="{
+              'text-primary': $route.path === menuItem.path,
+              'group-hover:text-primary': $route.path !== menuItem.path
+            }">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="menuItem.icon"></path>
             </svg>
-            <span class="text-xs mt-1">{{ menuItem.name }}</span>
+            <span class="text-xs mt-1 transition-colors duration-200">{{ menuItem.name }}</span>
           </NuxtLink>
           <button @click="showAddModal = true" @touchstart="showAddModal = true"
             class="flex flex-col items-center justify-center p-2 flex-1 text-gray-600 dark:text-gray-300">
@@ -215,7 +222,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useSse } from '../composables/useSse'
 import AddEntryModal from '../components/AddEntryModal.vue'
 import { useNuxtApp } from '#app'
@@ -349,12 +356,51 @@ const handleEntryAdded = () => {
 }
 
 // 点击外部关闭用户菜单
-document.addEventListener('click', (e) => {
+const handleClickOutside = (e) => {
   const userMenu = document.querySelector('.absolute.right-0.mt-2.w-48.bg-white.rounded-lg.shadow-xl.py-1.z-50')
   const userButton = document.querySelector('.flex.items-center.gap-2.px-3.py-2.bg-gray-100.rounded-full')
 
   if (userMenu && !userMenu.contains(e.target) && userButton && !userButton.contains(e.target)) {
     showUserMenu.value = false
   }
+}
+
+// 在组件挂载时添加事件监听器
+onMounted(() => {
+  // 从localStorage恢复深色模式
+  if (isLocalStorageAvailable()) {
+    const savedDarkMode = localStorage.getItem('darkMode')
+    if (savedDarkMode) {
+      darkMode.value = savedDarkMode === 'true'
+    } else {
+      // 默认检查系统深色模式偏好（使用try-catch防止某些设备不支持）
+      try {
+        darkMode.value = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      } catch (e) {
+        darkMode.value = false
+      }
+    }
+    applyDarkMode()
+
+    // 从localStorage恢复自动同步设置
+    const savedAutoSync = localStorage.getItem('autoSync')
+    if (savedAutoSync) {
+      autoSync.value = savedAutoSync === 'true'
+    }
+    // 根据设置连接/断开SSE
+    if (autoSync.value) {
+      connectSse()
+    } else {
+      disconnectSse()
+    }
+  }
+
+  // 添加点击外部关闭用户菜单的事件监听器
+  document.addEventListener('click', handleClickOutside)
+})
+
+// 在组件卸载时移除事件监听器
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>

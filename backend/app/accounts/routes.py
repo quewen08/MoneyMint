@@ -4,7 +4,7 @@ import os
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from datetime import datetime
-from app.utils.ledger_utils import load_ledger
+from app.utils.ledger_utils import load_ledger, get_file_entries
 
 # 创建蓝图
 accounts_bp = Blueprint('accounts', __name__)
@@ -14,18 +14,21 @@ accounts_bp = Blueprint('accounts', __name__)
 @jwt_required()
 def get_accounts():
     """获取所有账户信息"""
-    entries, errors, options = load_ledger()
+    # 使用缓存功能获取文件到条目的映射
+    file_entries = get_file_entries()
 
     # 收集所有Open和Close的账户
     open_accounts = set()
     closed_accounts = set()
 
-    for entry in entries:
-        if hasattr(entry, 'account'):
-            if type(entry).__name__ == 'Open':
-                open_accounts.add(entry.account)
-            elif type(entry).__name__ == 'Close':
-                closed_accounts.add(entry.account)
+    # 遍历所有文件中的条目
+    for entries in file_entries.values():
+        for entry in entries:
+            if hasattr(entry, 'account'):
+                if type(entry).__name__ == 'Open':
+                    open_accounts.add(entry.account)
+                elif type(entry).__name__ == 'Close':
+                    closed_accounts.add(entry.account)
 
     # 只返回未关闭的账户
     active_accounts = open_accounts - closed_accounts
@@ -37,6 +40,10 @@ def get_accounts():
 @jwt_required()
 def get_account_balances():
     """获取账户余额"""
+    # 使用缓存功能获取文件到条目的映射
+    file_entries = get_file_entries()
+
+    # 加载账本以获取options
     entries, errors, options = load_ledger()
     currency = options.get('operating_currency', 'CNY')
 
@@ -76,49 +83,51 @@ def get_account_balances():
     open_accounts = set()
     closed_accounts = set()
 
-    for entry in entries:
-        # 检查entry是否有日期属性
-        if hasattr(entry, 'date'):
-            # 应用日期范围筛选
-            if start_date_obj or end_date_obj:
-                entry_date = entry.date
-                if start_date_obj and entry_date < start_date_obj:
-                    continue
-                if end_date_obj and entry_date > end_date_obj:
-                    continue
+    # 遍历所有文件中的条目
+    for file_entries_list in file_entries.values():
+        for entry in file_entries_list:
+            # 检查entry是否有日期属性
+            if hasattr(entry, 'date'):
+                # 应用日期范围筛选
+                if start_date_obj or end_date_obj:
+                    entry_date = entry.date
+                    if start_date_obj and entry_date < start_date_obj:
+                        continue
+                    if end_date_obj and entry_date > end_date_obj:
+                        continue
 
-        # 处理账户的Open信息（包含note和currency）
-        if hasattr(entry, 'account'):
-            if type(entry).__name__ == 'Open':
-                account = entry.account
-                open_accounts.add(account)
-                # 获取note信息
-                if hasattr(entry, 'meta') and entry.meta:
-                    if 'note' in entry.meta:
-                        account_notes[account] = entry.meta['note']
-                # 获取currency信息
-                if hasattr(entry, 'currencies') and entry.currencies:
-                    # currencies可能是字符串列表或对象列表
-                    if isinstance(entry.currencies[0], str):
-                        account_currencies[account] = entry.currencies[0]
-                    else:
-                        account_currencies[account] = (
-                            entry.currencies[0].currency if hasattr(entry.currencies[0], 'currency') else currency
-                        )
-            elif type(entry).__name__ == 'Close':
-                account = entry.account
-                closed_accounts.add(account)
+            # 处理账户的Open信息（包含note和currency）
+            if hasattr(entry, 'account'):
+                if type(entry).__name__ == 'Open':
+                    account = entry.account
+                    open_accounts.add(account)
+                    # 获取note信息
+                    if hasattr(entry, 'meta') and entry.meta:
+                        if 'note' in entry.meta:
+                            account_notes[account] = entry.meta['note']
+                    # 获取currency信息
+                    if hasattr(entry, 'currencies') and entry.currencies:
+                        # currencies可能是字符串列表或对象列表
+                        if isinstance(entry.currencies[0], str):
+                            account_currencies[account] = entry.currencies[0]
+                        else:
+                            account_currencies[account] = (
+                                entry.currencies[0].currency if hasattr(entry.currencies[0], 'currency') else currency
+                            )
+                elif type(entry).__name__ == 'Close':
+                    account = entry.account
+                    closed_accounts.add(account)
 
-        # 计算账户余额
-        if hasattr(entry, 'postings'):
-            for posting in entry.postings:
-                account = posting.account
-                if hasattr(posting, 'units') and posting.units:
-                    # 确保amount是数字类型
-                    amount = float(posting.units.number)
-                    if account not in balances:
-                        balances[account] = 0.0
-                    balances[account] += amount
+            # 计算账户余额
+            if hasattr(entry, 'postings'):
+                for posting in entry.postings:
+                    account = posting.account
+                    if hasattr(posting, 'units') and posting.units:
+                        # 确保amount是数字类型
+                        amount = float(posting.units.number)
+                        if account not in balances:
+                            balances[account] = 0.0
+                        balances[account] += amount
 
     # 只返回未关闭的账户
     active_accounts = open_accounts - closed_accounts

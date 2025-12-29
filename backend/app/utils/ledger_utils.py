@@ -51,17 +51,125 @@ def load_ledger():
 
     current_mtime = get_file_modification_time()
 
+    # 检查主文件是否存在
+    if not os.path.exists(LEDGER_FILE):
+        print(f"Error: Ledger file not found at {LEDGER_FILE}")
+        return None, None, None
+
     with cache_lock:
         # 如果缓存为空或文件已修改，则重新加载
         if ledger_cache['entries'] is None or current_mtime > ledger_cache['last_modified']:
             print(f"Reloading ledger file: {LEDGER_FILE}")
             # 使用UTF-8编码加载账本文件
             entries, errors, options = beancount.loader.load_file(LEDGER_FILE, encoding='utf-8')
-            ledger_cache = {'entries': entries, 'errors': errors, 'options': options, 'last_modified': current_mtime}
+
+            # 根据beancount load_file的返回值构建目录结构
+            # 分析include结构，构建文件目录缓存
+            include_structure, reverse_include = analyze_include_structure(LEDGER_FILE)
+
+            # 构建文件到条目的映射
+            file_entries = defaultdict(list)
+            for entry in entries:
+                if hasattr(entry, 'meta') and 'filename' in entry.meta:
+                    filename = entry.meta['filename']
+                    file_entries[filename].append(entry)
+
+            # 构建年份和月份的文件映射
+            year_month_files = defaultdict(dict)
+            base_dir = os.path.dirname(LEDGER_FILE)
+
+            # 遍历所有文件，提取年份和月份信息
+            for filename in file_entries.keys():
+                # 获取相对于主文件目录的路径
+                try:
+                    rel_path = os.path.relpath(filename, base_dir)
+                except ValueError:
+                    rel_path = filename
+
+                # 解析年份和月份信息（主要针对date目录下的文件）
+                if 'date' in rel_path:
+                    parts = rel_path.split(os.sep)
+                    for i, part in enumerate(parts):
+                        if part.isdigit() and len(part) == 4:  # 年份
+                            year = part
+                            # 检查下一个部分是否是月份文件
+                            if i + 1 < len(parts) and parts[i + 1].endswith('.bean'):
+                                month_file = parts[i + 1]
+                                # 提取月份信息（如2024-01.bean -> 01）
+                                if '-' in month_file:
+                                    month = month_file.split('-')[1].split('.')[0]
+                                    year_month_files[year][month] = filename
+
+            ledger_cache = {
+                'entries': entries,
+                'errors': errors,
+                'options': options,
+                'last_modified': current_mtime,
+                'include_structure': include_structure,
+                'reverse_include': reverse_include,
+                'file_entries': file_entries,
+                'year_month_files': year_month_files,
+            }
             if len(errors) > 0:
                 print(f"errors: {errors}")
 
     return ledger_cache['entries'], ledger_cache['errors'], ledger_cache['options']
+
+
+def get_include_structure():
+    """获取include结构缓存"""
+    load_ledger()  # 确保缓存已加载
+    return ledger_cache.get('include_structure', {})
+
+
+def get_reverse_include():
+    """获取反向include映射缓存"""
+    load_ledger()  # 确保缓存已加载
+    return ledger_cache.get('reverse_include', {})
+
+
+def get_file_entries():
+    """获取文件到条目的映射缓存"""
+    load_ledger()  # 确保缓存已加载
+    return ledger_cache.get('file_entries', defaultdict(list))
+
+
+def get_year_month_files():
+    """获取年份月份文件映射缓存"""
+    load_ledger()  # 确保缓存已加载
+    return ledger_cache.get('year_month_files', defaultdict(dict))
+
+
+def get_file_by_year_month(year, month):
+    """根据年份和月份获取对应的文件路径"""
+    year_month_files = get_year_month_files()
+    return year_month_files.get(year, {}).get(month)
+
+
+def get_dir_by_year(year):
+    """根据年份获取对应的目录路径"""
+    return os.path.join(os.path.dirname(LEDGER_FILE), 'date', year)
+
+
+def get_entries_by_file(filename):
+    """根据文件名获取对应的条目列表"""
+    file_entries = get_file_entries()
+    return file_entries.get(filename, [])
+
+
+def get_include_chain(filename):
+    """获取文件的include链（从主文件到当前文件的路径）"""
+    reverse_include = get_reverse_include()
+    chain = []
+    current_file = filename
+
+    while current_file in reverse_include:
+        chain.append(current_file)
+        current_file = reverse_include[current_file]
+
+    chain.append(current_file)  # 添加主文件
+    chain.reverse()  # 从主文件开始
+    return chain
 
 
 def notify_subscribers(event="update", data=None):
@@ -141,26 +249,26 @@ def initialize_default_ledger():
     print(f"Initializing default ledger file: {LEDGER_FILE}, file exists: {os.path.exists(LEDGER_FILE)}")
     if os.path.exists(LEDGER_FILE):
         print(f"Ledger file already exists: {LEDGER_FILE}")
-        return;
+        return
     """初始化默认账本文件"""
     # 获取主账本文件的目录
     base_dir = os.path.dirname(LEDGER_FILE)
- 
+
     # 获取当前年份
     current_year = datetime.now().year
     # 获取当前月份
     current_month = datetime.now().month
-    
+
     # 确保基本目录结构存在
     directories_to_create = [
         os.path.join(base_dir, 'accounts'),
         os.path.join(base_dir, 'date'),
         os.path.join(base_dir, 'date', f'{current_year}'),
     ]
-    
+
     for directory in directories_to_create:
         os.makedirs(directory, exist_ok=True)
-    
+
     # 创建主账本文件
     with open(LEDGER_FILE, 'w', encoding='utf-8') as f:
         f.write(
@@ -173,12 +281,12 @@ include "accounts/expenses.bean"
 include "accounts/income.bean"
 include "accounts/liabilities.bean"
 
-include "date/main.bean"
+include "date/ledge.bean"
 '''
         )
-    
+
     # 创建accounts目录下的文件
-    
+
     # assets.bean
     with open(os.path.join(base_dir, 'accounts', 'assets.bean'), 'w', encoding='utf-8') as f:
         f.write(
@@ -187,7 +295,7 @@ include "date/main.bean"
 {current_year}-01-01 open Assets:Bank CNY
 '''
         )
-    
+
     # equity.bean
     with open(os.path.join(base_dir, 'accounts', 'equity.bean'), 'w', encoding='utf-8') as f:
         f.write(
@@ -195,7 +303,7 @@ include "date/main.bean"
 {current_year}-01-01 open Equity:Opening-Balances CNY
 '''
         )
-    
+
     # expenses.bean
     with open(os.path.join(base_dir, 'accounts', 'expenses.bean'), 'w', encoding='utf-8') as f:
         f.write(
@@ -204,7 +312,7 @@ include "date/main.bean"
 {current_year}-01-01 open Expenses:Transport CNY
 '''
         )
-    
+
     # income.bean
     with open(os.path.join(base_dir, 'accounts', 'income.bean'), 'w', encoding='utf-8') as f:
         f.write(
@@ -213,7 +321,7 @@ include "date/main.bean"
 
 '''
         )
-    
+
     # liabilities.bean
     with open(os.path.join(base_dir, 'accounts', 'liabilities.bean'), 'w', encoding='utf-8') as f:
         f.write(
@@ -221,9 +329,9 @@ include "date/main.bean"
 {current_year}-01-01 open Liabilities:CreditCard CNY
 '''
         )
-    
+
     # 创建date目录下的文件
-    
+
     # date/main.bean
     with open(os.path.join(base_dir, 'date', 'ledge.bean'), 'w', encoding='utf-8') as f:
         f.write(
@@ -231,7 +339,7 @@ include "date/main.bean"
 include "{current_year}/{current_year}.bean"
 '''
         )
-    
+
     # current_year.bean
     with open(os.path.join(base_dir, 'date', f'{current_year}', f'{current_year}.bean'), 'w', encoding='utf-8') as f:
         f.write(
@@ -239,11 +347,16 @@ include "{current_year}/{current_year}.bean"
 include "{current_year}-{current_month}.bean"
 '''
         )
-    
+
     # current_year的current_month.bean文件
-    with open(os.path.join(base_dir, 'date', f'{current_year}', f'{current_year}-{current_month}.bean'), 'w', encoding='utf-8') as f:
-        f.write(f''';; {current_year}年{int(current_month)}月的记账记录
-''')
+    with open(
+        os.path.join(base_dir, 'date', f'{current_year}', f'{current_year}-{current_month}.bean'), 'w', encoding='utf-8'
+    ) as f:
+        f.write(
+            f'''; {current_year}年{int(current_month)}月的记账记录
+'''
+        )
+
 
 def analyze_include_structure(main_file):
     """分析Beancount文件的include结构

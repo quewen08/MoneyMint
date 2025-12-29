@@ -27,31 +27,7 @@
           </div>
         </div>
 
-        <!-- 交易类型选择 -->
-        <div v-if="!isEditMode" class="mb-4">
-          <div class="border-b border-gray-200 dark:border-gray-700">
-            <nav class="flex space-x-8">
-              <button @click="transactionType = 'expense'" :class="[
-                'py-3 px-1 border-b-2 font-medium text-sm',
-                transactionType === 'expense' ? 'border-primary text-primary' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
-              ]">
-                支出
-              </button>
-              <button @click="transactionType = 'income'" :class="[
-                'py-3 px-1 border-b-2 font-medium text-sm',
-                transactionType === 'income' ? 'border-primary text-primary' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
-              ]">
-                收入
-              </button>
-              <button @click="transactionType = 'transfer'" :class="[
-                'py-3 px-1 border-b-2 font-medium text-sm',
-                transactionType === 'transfer' ? 'border-primary text-primary' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
-              ]">
-                转账
-              </button>
-            </nav>
-          </div>
-        </div>
+
 
         <div class="card">
           <form @submit.prevent="handleSubmit">
@@ -81,38 +57,63 @@
                   class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
               </div>
 
-              <!-- 交易类型表单 -->
-              <div v-if="!isEditMode">
+              <!-- 交易类型选择 -->
+              <div v-if="!isEditMode" class="mb-4">
+                <div class="border-b border-gray-200 dark:border-gray-700">
+                  <nav class="flex space-x-8">
+                    <button @click="transactionType = 'expense'" :class="[
+                      'py-3 px-1 border-b-2 font-medium text-sm',
+                      transactionType === 'expense' ? 'border-primary text-primary' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                    ]">
+                      支出
+                    </button>
+                    <button @click="transactionType = 'income'" :class="[
+                      'py-3 px-1 border-b-2 font-medium text-sm',
+                      transactionType === 'income' ? 'border-primary text-primary' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                    ]">
+                      收入
+                    </button>
+                    <button @click="transactionType = 'transfer'" :class="[
+                      'py-3 px-1 border-b-2 font-medium text-sm',
+                      transactionType === 'transfer' ? 'border-primary text-primary' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                    ]">
+                      转账
+                    </button>
+                  </nav>
+                </div>
                 <!-- 交易类型说明 -->
                 <div
                   class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <p class="text-sm text-blue-800 dark:text-blue-200">
-                    {{ transactionType === 'expense' ? '支出：从资产账户扣除金额到支出账户' :
-                      transactionType === 'income' ? '收入：从收入账户增加金额到资产账户' :
-                        '转账：从一个账户转移金额到另一个账户' }}
+                    {{ transactionType === 'expense' ? '支出：记录一笔支出交易' :
+                      transactionType === 'income' ? '收入：记录一笔收入交易' :
+                        '转账：记录一笔转账交易' }}
+                  </p>
+                  <p class="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                    提示：系统会自动处理借贷平衡：
+                    <br>
+                    • 请至少填写两个账户
+                    <br>
+                    • 金额之和应为零
+                    <br>
+                    • 可留空一个记账行金额，系统会自动计算差额
                   </p>
                 </div>
+              </div>
 
                 <!-- 记账行列表 -->
                 <div class="space-y-4">
                   <div v-for="(posting, index) in formData.postings" :key="index" class="space-y-2">
                     <div class="relative">
                       <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        {{ index === 0 ?
-                          (transactionType === 'expense' ? '支出账户' :
-                            transactionType === 'income' ? '收入账户' : '转出账户') :
-                          (index === 1 ?
-                            (transactionType === 'expense' ? '支出类别' :
-                              transactionType === 'income' ? '收入类别' : '转入账户') :
-                            `账户 ${index + 1}`) }}
+                        {{ index === 0 ? '账户 1' : index === 1 ? '账户 2' : `账户 ${index + 1}` }}
                       </label>
                       <!-- 使用自定义账户选择组件 -->
                       <AccountSelect v-model="posting.account" :accounts="accountsStore.list"
-                        :account-type="index === 1 ? (transactionType === 'expense' ? 'expenses' : transactionType === 'income' ? 'income' : '') : ''"
                         placeholder="选择或搜索账户..." />
                     </div>
                     <div class="grid grid-cols-2 gap-2">
-                      <input type="number" v-model="posting.amount" placeholder="金额" step="0.01"
+                      <input type="number" v-model="posting.amount" :placeholder="index === 0 ? '金额（可留空）' : '金额'" step="0.01"
                         class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         required />
                       <button type="button" @click="removePosting(index)"
@@ -135,7 +136,6 @@
                     </button>
                   </div>
                 </div>
-              </div>
 
               <!-- 编辑模式下根据记录类型显示不同的表单 -->
               <div v-if="isEditMode">
@@ -324,7 +324,16 @@ const loadEntryToForm = (entry: any) => {
       } else if (p.units) {
         // 新格式：金额和货币分开
         amount = p.units.number?.toString() || "";
+      } else if (typeof p.amount === 'number') {
+        // 直接是数字类型
+        amount = p.amount.toString();
       }
+      
+      // 处理负数金额的显示
+      if (amount.startsWith('-')) {
+        amount = amount.substring(1); // 去掉负号，前端显示正数
+      }
+      
       return {
         account: p.account,
         amount: amount,
@@ -399,55 +408,45 @@ const handleSubmit = async () => {
         postings: [] as any[],
       };
 
-      if (transactionType.value === 'expense' || transactionType.value === 'income' || transactionType.value === 'transfer') {
-        // 对于基本交易类型，使用自动平衡逻辑
-        if (validPostings.length === 2) {
-          // 两笔记账行的情况，自动计算平衡
-          const firstAmount = parseFloat(formData.postings[0].amount) || 0;
-          const secondAmount = parseFloat(formData.postings[1].amount) || 0;
+      // 计算所有记账行的总金额
+      let total = 0;
+      const postings = validPostings.map(p => {
+        const amount = parseFloat(p.amount) || 0;
+        total += amount;
+        return {
+          account: p.account,
+          amount: `${amount} CNY`
+        };
+      });
 
-          // 根据交易类型确定金额符号
-          if (transactionType.value === 'expense') {
-            // 支出：资产账户减少，支出账户增加
-            entry.postings = [
-              { account: formData.postings[0].account, amount: `${-firstAmount} CNY` },
-              { account: formData.postings[1].account, amount: `${firstAmount} CNY` }
-            ];
-          } else if (transactionType.value === 'income') {
-            // 收入：资产账户增加，收入账户增加
-            entry.postings = [
-              { account: formData.postings[0].account, amount: `${firstAmount} CNY` },
-              { account: formData.postings[1].account, amount: `${-firstAmount} CNY` }
-            ];
-          } else if (transactionType.value === 'transfer') {
-            // 转账：转出账户减少，转入账户增加
-            entry.postings = [
-              { account: formData.postings[0].account, amount: `${-firstAmount} CNY` },
-              { account: formData.postings[1].account, amount: `${firstAmount} CNY` }
-            ];
+      // 如果总金额不为零，自动平衡差额
+      if (Math.abs(total) > 0.01) {
+        // 查找第一个为0或空的记账行来调整差额
+        let adjustmentIndex = -1;
+        for (let i = 0; i < validPostings.length; i++) {
+          const amount = parseFloat(validPostings[i].amount) || 0;
+          if (Math.abs(amount) < 0.01) { // 金额为0或接近0
+            adjustmentIndex = i;
+            break;
           }
+        }
+        
+        // 如果存在为0或空的记账行，自动调整差额
+        if (adjustmentIndex !== -1) {
+          // 调整差额到选定的记账行
+          const adjustedAmount = -total; // 差额直接设为总金额的相反数
+          postings[adjustmentIndex].amount = `${adjustedAmount} CNY`;
+          
+          console.log(`自动平衡借贷差额：在记账行${adjustmentIndex + 1}设置差额${adjustedAmount}`);
         } else {
-          // 多记账行的情况，要求用户确保借贷平衡
-          let total = 0;
-          const postings = validPostings.map(p => {
-            const amount = parseFloat(p.amount) || 0;
-            total += amount;
-            return {
-              account: p.account,
-              amount: `${amount} CNY`
-            };
-          });
-
-          // 验证借贷平衡
-          if (Math.abs(total) > 0.01) {
-            alert('多记账行时，金额之和必须为零（借贷平衡）');
-            submitting.value = false;
-            return;
-          }
-
-          entry.postings = postings;
+          // 没有为0或空的记账行，提示用户
+          alert('所有记账行都已填写金额，请确保金额之和为零（借贷平衡）');
+          submitting.value = false;
+          return;
         }
       }
+
+      entry.postings = postings;
     }
     // 编辑模式
     else {
@@ -552,6 +551,29 @@ const handleDelete = async () => {
   }
 };
 
+// 根据记账行数据自动判断交易类型（简化版，主要用于显示分类）
+const determineTransactionType = (entry: any) => {
+  if (!entry.postings || entry.postings.length < 2) {
+    transactionType.value = 'expense';
+    return;
+  }
+
+  // 简化判断逻辑，仅根据金额正负进行基本分类
+  const firstAmount = parseFloat(entry.postings[0]?.amount?.replace(' CNY', '') || '0');
+  const secondAmount = parseFloat(entry.postings[1]?.amount?.replace(' CNY', '') || '0');
+
+  if (firstAmount < 0 && secondAmount > 0) {
+    // 第一行负，第二行正：支出
+    transactionType.value = 'expense';
+  } else if (firstAmount > 0 && secondAmount < 0) {
+    // 第一行正，第二行负：收入
+    transactionType.value = 'income';
+  } else {
+    // 其他情况：转账
+    transactionType.value = 'transfer';
+  }
+};
+
 // 监听entry属性变化
 watch(
   () => props.entry,
@@ -569,6 +591,8 @@ watch(
       editingEntry.value = null;
       // 加载数据到表单但不重置
       loadEntryToForm(newValue);
+      // 复制交易时，根据记账行自动判断交易类型
+      determineTransactionType(newValue);
     } else {
       // 否则进入添加模式
       isEditMode.value = false;
