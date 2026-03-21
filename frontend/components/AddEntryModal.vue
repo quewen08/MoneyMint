@@ -283,8 +283,7 @@ const loadAccounts = async () => {
     console.log("账户列表加载完成，共", accountsStore.list.length, "个账户");
   } catch (error) {
     console.error("Error loading accounts:", error);
-    // 添加简单的错误提示
-    alert("加载账户列表失败，请刷新页面重试");
+    (window as any).$toast?.error('加载账户列表失败，请刷新页面重试');
   }
 };
 
@@ -384,7 +383,7 @@ const handleSubmit = async () => {
     // 验证记账行数据
     const validPostings = formData.postings.filter(p => p.account && p.amount);
     if (validPostings.length < 2) {
-      alert('根据Beancount记账规则，每笔交易至少需要两个记账行');
+      (window as any).$toast?.error('根据Beancount记账规则，每笔交易至少需要两个记账行');
       submitting.value = false;
       return;
     }
@@ -393,7 +392,7 @@ const handleSubmit = async () => {
     const accounts = validPostings.map(p => p.account);
     const uniqueAccounts = new Set(accounts);
     if (accounts.length !== uniqueAccounts.size) {
-      alert('同一交易中不能使用相同的账户');
+      (window as any).$toast?.error('同一交易中不能使用相同的账户');
       submitting.value = false;
       return;
     }
@@ -440,7 +439,7 @@ const handleSubmit = async () => {
           console.log(`自动平衡借贷差额：在记账行${adjustmentIndex + 1}设置差额${adjustedAmount}`);
         } else {
           // 没有为0或空的记账行，提示用户
-          alert('所有记账行都已填写金额，请确保金额之和为零（借贷平衡）');
+          (window as any).$toast?.warning('所有记账行都已填写金额，请确保金额之和为零（借贷平衡）');
           submitting.value = false;
           return;
         }
@@ -455,7 +454,7 @@ const handleSubmit = async () => {
         // 验证借贷平衡
         const total = validPostings.reduce((sum, p) => sum + parseFloat(p.amount), 0);
         if (Math.abs(total) > 0.01) { // 允许0.01的误差
-          alert('记账行金额之和必须为零（借贷平衡）');
+          (window as any).$toast?.error('记账行金额之和必须为零（借贷平衡）');
           submitting.value = false;
           return;
         }
@@ -507,10 +506,12 @@ const handleSubmit = async () => {
     if (isEditMode.value && editingEntryId.value && props.entry) {
       console.log('编辑模式：更新记录', editingEntryId.value);
       await updateEntry(editingEntryId.value, entry);
+      (window as any).$toast?.success('记录已更新');
       emit("entryUpdated");
     } else {
       console.log('添加模式：创建新记录');
       await addEntry(entry);
+      (window as any).$toast?.success('记录已添加');
       emit("entryAdded");
     }
 

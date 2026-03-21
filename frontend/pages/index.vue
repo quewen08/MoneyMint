@@ -138,21 +138,32 @@
       <h2 class="text-lg sm:text-xl font-semibold mb-3 dark:text-white p-4 pt-4 pb-0">
         分类支出
       </h2>
-      <div class="space-y-3 p-4 pt-3">
+      <div class="space-y-4 p-4 pt-3">
         <div v-for="(category, index) in dashboardStats.expenseByCategory" :key="index"
-          class="flex justify-between items-center">
-          <div class="flex items-center">
-            <div class="w-2.5 h-2.5 rounded-full mr-2" :style="{ backgroundColor: getCategoryColor(Number(index)) }">
+          class="animate-fade-in" :style="{ animationDelay: `${index * 50}ms` }">
+          <div class="flex justify-between items-center mb-2">
+            <div class="flex items-center">
+              <div class="w-3 h-3 rounded-full mr-3" :style="{ backgroundColor: getCategoryColor(Number(index)) }">
+              </div>
+              <span class="text-sm sm:text-base text-gray-700 dark:text-gray-300 font-medium truncate max-w-[120px] sm:max-w-none">
+                {{ category.name }}
+              </span>
             </div>
-            <span class="text-sm sm:text-base text-gray-700 dark:text-gray-300 truncate max-w-[120px] sm:max-w-none">
-              {{ category.name }}
-            </span>
+            <div class="text-right">
+              <span class="font-semibold dark:text-gray-200 text-sm sm:text-base">
+                {{ category.amount.toFixed(2) }} {{ getCurrency() }}
+              </span>
+              <span class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 ml-2">({{ category.percentage }}%)</span>
+            </div>
           </div>
-          <div class="text-right">
-            <span class="font-medium dark:text-gray-200 text-sm sm:text-base">
-              {{ category.amount.toFixed(2) }} {{ getCurrency() }}
-            </span>
-            <span class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 ml-2">({{ category.percentage }}%)</span>
+          <div class="progress-bar">
+            <div class="progress-bar-fill" 
+              :style="{ 
+                width: `${category.percentage}%`,
+                backgroundColor: getCategoryColor(Number(index)),
+                opacity: 0.8
+              }">
+            </div>
           </div>
         </div>
       </div>
@@ -177,73 +188,71 @@
       </div>
       <div v-else class="space-y-3 p-4 pt-3">
         <!-- 最近7天交易记录 -->
-        <div v-for="entry in entries
+        <div v-for="(entry, idx) in entries
           .filter((e) => e.type === 'Transaction')
           .filter((e) => dayjs(e.date).isBetween(getLast7Days().start, getLast7Days().end, null, '[]'))"
           :key="entry.meta.filename + entry.meta.lineno"
-          class="border-b pb-3 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/70 p-2 rounded transition-colors">
-          <div class="flex flex-col space-y-1">
+          class="animate-slide-up card-compact" :style="{ animationDelay: `${idx * 50}ms` }">
+          <div class="flex flex-col space-y-2">
             <!-- 日期和类型 -->
             <div class="flex justify-between items-center">
-              <span class="font-medium dark:text-gray-300 text-sm">
-                {{ entry.date }}
-              </span>
-              <span
-                class="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                {{ entry.type }}
-              </span>
-            </div>
-
-            <!-- 交易描述 -->
-            <div v-if="entry.type === 'Transaction' && entry.narration"
-              class="text-sm text-gray-700 dark:text-gray-300 ml-1.5 truncate">
-              {{ entry.narration }}
-            </div>
-
-            <!-- 标签 - 移动端简化 -->
-            <div v-if="entry.tags && entry.tags.length > 0" class="flex flex-wrap gap-1 ml-1.5">
-              <span v-for="(tag, index) in entry.tags.slice(0, 2)" :key="index"
-                class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs px-1.5 py-0.5 rounded">
-                #{{ tag }}
-              </span>
-              <span v-if="entry.tags.length > 2" class="text-xs text-gray-500 dark:text-gray-400">
-                +{{ entry.tags.length - 2 }}
-              </span>
-            </div>
-
-            <!-- 收支信息 - 移动端简化 -->
-            <div v-if="entry.type === 'Transaction' && entry.postings" class="ml-1.5">
-              <div v-for="(posting, index) in entry.postings.slice(0, 2)" :key="index"
-                class="flex justify-between text-sm">
-                <span class="text-gray-600 dark:text-gray-400 truncate max-w-[120px] sm:max-w-[200px]">
-                  {{ posting.account.split(":").pop() }}
+              <div class="flex items-center gap-2">
+                <span class="font-semibold dark:text-gray-200 text-sm">
+                  {{ entry.date }}
                 </span>
-                <span class="font-medium" :class="posting.units?.number > 0
-                  ? 'text-green-600'
-                  : posting.units?.number < 0
-                    ? 'text-red-600'
-                    : ''
-                  ">
-                  {{ posting.units?.number || 0 }}
+                <span
+                  class="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                  {{ entry.type }}
                 </span>
               </div>
-              <!-- 显示更多记账行 -->
-              <div v-if="entry.postings.length > 2" class="text-xs text-gray-500 dark:text-gray-400">
-                +{{ entry.postings.length - 2 }} 行
-              </div>
-            </div>
-
-            <!-- 操作按钮 - 移动端固定位置 -->
-            <div class="ml-auto">
               <button @click="
                 openEditModal({
                   ...entry,
                   id: `${entry.meta?.filename}:${entry.meta?.lineno}`,
                 })
                 "
-                class="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors">
+                class="touch-target text-sm px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors font-medium">
                 编辑
               </button>
+            </div>
+
+            <!-- 交易描述 -->
+            <div v-if="entry.type === 'Transaction' && entry.narration"
+              class="text-base text-gray-800 dark:text-gray-200 font-medium">
+              {{ entry.narration }}
+            </div>
+
+            <!-- 标签 - 移动端简化 -->
+            <div v-if="entry.tags && entry.tags.length > 0" class="flex flex-wrap gap-1.5">
+              <span v-for="(tag, index) in entry.tags.slice(0, 3)" :key="index"
+                class="tag bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                #{{ tag }}
+              </span>
+              <span v-if="entry.tags.length > 3" class="text-xs text-gray-500 dark:text-gray-400 flex items-center">
+                +{{ entry.tags.length - 3 }}
+              </span>
+            </div>
+
+            <!-- 收支信息 - 移动端简化 -->
+            <div v-if="entry.type === 'Transaction' && entry.postings" class="space-y-2 pt-1">
+              <div v-for="(posting, index) in entry.postings.slice(0, 3)" :key="index"
+                class="flex justify-between items-center text-sm">
+                <span class="text-gray-600 dark:text-gray-400 truncate max-w-[140px] sm:max-w-[240px]">
+                  {{ posting.account.split(":").pop() }}
+                </span>
+                <span class="font-semibold text-lg" :class="posting.units?.number > 0
+                  ? 'text-income'
+                  : posting.units?.number < 0
+                    ? 'text-expense'
+                    : ''
+                  ">
+                  {{ posting.units?.number > 0 ? '+' : '' }}{{ posting.units?.number || 0 }}
+                </span>
+              </div>
+              <!-- 显示更多记账行 -->
+              <div v-if="entry.postings.length > 3" class="text-xs text-gray-500 dark:text-gray-400">
+                +{{ entry.postings.length - 3 }} 行明细
+              </div>
             </div>
           </div>
         </div>

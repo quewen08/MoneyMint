@@ -188,8 +188,14 @@ export const useApi = () => {
     checkRegistrationStatus,
     logout,
 
+    // 基础API方法
+    fetchApi,
+
     // Ledger endpoints
     getLedger: () => fetchApi('/ledger'),
+    getFiles: () => fetchApi('/ledger/files'),
+    getFileContent: (filePath: string) => fetchApi(`/ledger/files/${filePath}`),
+    saveFileContent: (filePath: string, content: string) => fetchApi(`/ledger/files/${filePath}`, { method: 'PUT', body: JSON.stringify({ content }) }),
     getEntries: (params: { start_date?: string, end_date?: string, account?: string, type?: string, page?: number, page_size?: number, sort?: string, order?: string } = {}) => {
       // 构建查询参数
       const queryParams = new URLSearchParams()
