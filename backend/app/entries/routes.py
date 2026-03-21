@@ -350,10 +350,24 @@ def update_entry(entry_id):
         lineno = int(lineno)
 
         # 获取完整的文件路径
-        full_path = os.path.join(os.path.dirname(LEDGER_FILE), filename)
+        # 利用项目中已有的文件缓存机制，获取所有已知的bean文件
+        from app.utils.ledger_utils import get_file_entries
+        
+        all_files = set(get_file_entries().keys())
+        ledger_dir = os.path.dirname(LEDGER_FILE)
+        
+        # 如果filename已经在已知文件列表中，直接使用
+        if filename in all_files:
+            full_path = filename
+        # 如果filename是相对路径，与LEDGER_FILE所在目录拼接
+        else:
+            full_path = os.path.join(ledger_dir, filename)
+
+        # 规范化路径，处理可能的双斜杠等问题
+        full_path = os.path.normpath(full_path)
 
         if not os.path.exists(full_path):
-            return jsonify({'error': 'File not found'}), 404
+            return jsonify({'error': f'File not found: {full_path}'}), 404
 
         # 读取文件内容
         with open(full_path, 'r', encoding='utf-8') as f:
@@ -460,10 +474,24 @@ def delete_entry(entry_id):
         lineno = int(lineno)
 
         # 获取完整的文件路径
-        full_path = os.path.join(os.path.dirname(LEDGER_FILE), filename)
+        # 利用项目中已有的文件缓存机制，获取所有已知的bean文件
+        from app.utils.ledger_utils import get_file_entries
+        
+        all_files = set(get_file_entries().keys())
+        ledger_dir = os.path.dirname(LEDGER_FILE)
+        
+        # 如果filename已经在已知文件列表中，直接使用
+        if filename in all_files:
+            full_path = filename
+        # 如果filename是相对路径，与LEDGER_FILE所在目录拼接
+        else:
+            full_path = os.path.join(ledger_dir, filename)
+
+        # 规范化路径，处理可能的双斜杠等问题
+        full_path = os.path.normpath(full_path)
 
         if not os.path.exists(full_path):
-            return jsonify({'error': 'File not found'}), 404
+            return jsonify({'error': f'File not found: {full_path}'}), 404
 
         # 读取文件内容
         with open(full_path, 'r', encoding='utf-8') as f:

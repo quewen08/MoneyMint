@@ -6,15 +6,19 @@
   body {
     @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-white;
   }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 @layer components {
   .btn {
-    @apply px-4 py-2 rounded-lg font-medium transition-colors;
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 active:scale-95;
   }
   
   .btn-primary {
-    @apply bg-primary text-white hover:bg-primary/90;
+    @apply bg-primary text-white hover:bg-primary/90 shadow-sm hover:shadow;
   }
   
   .btn-secondary {
@@ -24,8 +28,107 @@
   .btn-danger {
     @apply bg-red-500 text-white hover:bg-red-600;
   }
+
+  .btn-income {
+    @apply bg-income text-white hover:bg-income-dark shadow-sm hover:shadow;
+  }
+
+  .btn-expense {
+    @apply bg-expense text-white hover:bg-expense-dark shadow-sm hover:shadow;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+
+  .btn-lg {
+    @apply px-6 py-3 text-lg;
+  }
   
   .card {
-    @apply bg-white rounded-lg shadow-md p-6 dark:bg-gray-800 dark:border dark:border-gray-700;
+    @apply bg-white rounded-xl p-6 dark:bg-gray-800 dark:border dark:border-gray-700 transition-all duration-200;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  }
+  .card:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  .card-compact {
+    @apply bg-white rounded-xl p-4 dark:bg-gray-800 dark:border dark:border-gray-700 transition-all duration-200;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  }
+  .card-compact:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  .input {
+    @apply w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-all duration-200 outline-none;
+  }
+
+  .input-error {
+    @apply border-red-500 dark:border-red-400 focus:ring-red-500/30 focus:border-red-500;
+  }
+
+  .tag {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .tag-income {
+    @apply bg-income-light text-income-dark dark:bg-income-dark/30 dark:text-income-light;
+  }
+
+  .tag-expense {
+    @apply bg-expense-light text-expense-dark dark:bg-expense-dark/30 dark:text-expense-light;
+  }
+
+  .tag-balance {
+    @apply bg-balance-light text-balance-dark dark:bg-balance-dark/30 dark:text-balance-light;
+  }
+
+  .progress-bar {
+    @apply h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden;
+  }
+
+  .progress-bar-fill {
+    @apply h-full transition-all duration-500 ease-out rounded-full;
+  }
+
+  .stat-card {
+    @apply bg-white rounded-xl shadow-card p-5 dark:bg-gray-800 dark:border dark:border-gray-700;
+  }
+
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-12 text-center;
+  }
+
+  .empty-state-icon {
+    @apply w-16 h-16 text-gray-300 dark:text-gray-600 mb-4;
+  }
+
+  .empty-state-title {
+    @apply text-lg font-medium text-gray-700 dark:text-gray-300 mb-2;
+  }
+
+  .empty-state-desc {
+    @apply text-sm text-gray-500 dark:text-gray-400;
+  }
+
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
