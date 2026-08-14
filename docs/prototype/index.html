@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>家庭云记账 · 低保真原型（移动端 + PC 端）</title>
+<style>
+  :root{
+    --blue:#3B6EF6; --green:#2BA471; --warn:#E8590C;
+    --bg:#F5F6F8; --card:#FFFFFF; --ink:#1A1D1F; --sub:#6B7280; --line:#E5E7EB;
+    --sidebar:#1E2330; --sidebar-hover:#2A3040; --sidebar-active:#3B6EF6;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  body{
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif;
+    background:#e9ecf1; color:var(--ink);
+    display:flex; flex-direction:column; align-items:center;
+    gap:20px; padding:20px; min-height:100vh;
+  }
+  /* ---------- 页面标题 ---------- */
+  .page-title{ text-align:center; margin-bottom:4px; }
+  .page-title h1{ font-size:20px; font-weight:800; }
+  .page-title p{ font-size:12px; color:var(--sub); margin-top:2px; }
+
+  /* ---------- 端标注 ---------- */
+  .platform-label{
+    display:flex; align-items:center; gap:10px; font-size:16px; font-weight:700;
+    color:var(--ink); margin-bottom:8px; padding:0 4px;
+  }
+  .platform-label .badge{
+    font-size:11px; font-weight:600; padding:3px 10px; border-radius:999px;
+  }
+  .platform-label .badge.mobile{ background:#e7f0ff; color:var(--blue); }
+  .platform-label .badge.pc{ background:#e7f6ef; color:var(--green); }
+  .platform-label .desc{ font-size:12px; font-weight:400; color:var(--sub); }
+
+  /* ---------- 手机框 ---------- */
+  .phone{
+    width:390px; height:844px; background:var(--bg); border-radius:44px;
+    box-shadow:0 20px 60px rgba(0,0,0,.25); position:relative; overflow:hidden;
+    border:10px solid #111; display:flex; flex-direction:column; flex:0 0 auto;
+  }
+  .statusbar{
+    height:44px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 22px; font-size:13px; font-weight:600; background:var(--bg); flex:0 0 auto;
+  }
+  .statusbar .icons{display:flex; gap:6px; align-items:center;}
+  .statusbar .dot{width:7px; height:7px; border-radius:50%; background:#333;}
+  .screen-area{flex:1; overflow:hidden; position:relative;}
+  .screen{
+    position:absolute; inset:0; overflow-y:auto; padding:14px 14px 76px;
+    display:none; flex-direction:column; gap:12px;
+  }
+  .screen.active{display:flex;}
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:6px 4px 2px; position:sticky; top:-14px; background:var(--bg); z-index:5;
+  }
+  .topbar .ledger{font-weight:700; font-size:17px;}
+  .topbar .sync{font-size:12px; display:flex; align-items:center; gap:5px; color:var(--sub);}
+  .syncbadge{width:9px; height:9px; border-radius:50%; background:var(--green);}
+  .syncbadge.pending{background:var(--warn);}
+  .syncbadge.offline{background:#9aa0a6;}
+  .offlinebar{
+    background:#fff3e6; color:var(--warn); font-size:12px; padding:8px 12px;
+    border-radius:10px; text-align:center; font-weight:600;
+  }
+  /* ---------- 通用块 ---------- */
+  .card{background:var(--card); border-radius:14px; padding:14px; box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .muted{color:var(--sub); font-size:12px;}
+  .row{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .tag{font-size:11px; padding:2px 8px; border-radius:999px; background:#eef1f6; color:var(--sub);}
+  .block{background:#eef1f6; border-radius:10px; padding:12px; color:var(--sub); font-size:12px; min-height:40px; display:flex; align-items:center;}
+  .clickable{cursor:pointer; transition:transform .05s;}
+  .clickable:active{transform:scale(.98);}
+  /* ---------- 首页 ---------- */
+  .networth{font-size:34px; font-weight:800; letter-spacing:-.5px;}
+  .group-title{font-size:13px; color:var(--sub); font-weight:600; margin-top:4px;}
+  .acc-row{padding:10px 0; border-bottom:1px solid var(--line);}
+  .acc-row:last-child{border-bottom:none;}
+  .acc-bal{font-weight:700; font-variant-numeric:tabular-nums;}
+  /* ---------- FAB ---------- */
+  .fab{
+    position:absolute; right:18px; bottom:84px; width:56px; height:56px; border-radius:50%;
+    background:var(--blue); color:#fff; font-size:28px; display:flex; align-items:center;
+    justify-content:center; box-shadow:0 6px 16px rgba(59,110,246,.5); cursor:pointer; z-index:20;
+  }
+  /* ---------- 底部 Tab ---------- */
+  .tabbar{
+    position:absolute; left:0; right:0; bottom:0; height:56px; background:#fff;
+    border-top:1px solid var(--line); display:flex; z-index:30;
+  }
+  .tab{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; font-size:11px; color:var(--sub); cursor:pointer;}
+  .tab .ic{font-size:18px;}
+  .tab.active{color:var(--blue); font-weight:700;}
+  /* ---------- 记一笔 ---------- */
+  .posting{border:1px solid var(--line); border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:6px;}
+  .posting .pline{display:flex; gap:8px; align-items:center;}
+  .posting .acc-sel{flex:1; background:#f3f4f6; border-radius:9px; padding:11px; font-size:14px; color:var(--ink);}
+  .posting .amt{flex:1; background:#f3f4f6; border-radius:9px; padding:11px; font-size:14px; text-align:right; font-variant-numeric:tabular-nums;}
+  .posting .del{color:var(--warn); font-size:18px; padding:0 4px;}
+  .balance-meter{padding:12px; border-radius:12px; font-weight:700; text-align:center; font-size:15px;}
+  .balance-meter.ok{background:#e7f6ef; color:var(--green);}
+  .balance-meter.bad{background:#fdeee3; color:var(--warn);}
+  .btn-primary{background:var(--blue); color:#fff; border:none; border-radius:12px; padding:14px; font-size:16px; font-weight:700; cursor:pointer; width:100%;}
+  .btn-primary:disabled{background:#c4cdda; cursor:not-allowed;}
+  .btn-ghost{background:#fff; color:var(--blue); border:1px solid var(--blue); border-radius:12px; padding:13px; font-size:15px; font-weight:700; cursor:pointer; width:100%;}
+  .add-line{text-align:center; color:var(--blue); font-weight:700; padding:10px; cursor:pointer;}
+  /* ---------- 设置 ---------- */
+  .set-row{display:flex; align-items:center; justify-content:space-between; padding:14px 4px; border-bottom:1px solid var(--line); cursor:pointer;}
+  .set-row:last-child{border-bottom:none;}
+  /* ---------- PC 提示卡 ---------- */
+  .pc-hint{
+    background:linear-gradient(135deg,#eef1f6,#e7f0ff); border:1px dashed var(--blue);
+    border-radius:12px; padding:14px; font-size:13px; color:var(--blue); text-align:center; font-weight:600;
+  }
+
+  /* ============ PC 端 ============ */
+  .pc-frame{
+    width:1100px; height:620px; background:var(--bg); border-radius:12px;
+    box-shadow:0 20px 60px rgba(0,0,0,.25); overflow:hidden; position:relative;
+    border:1px solid #d1d5db; display:flex; flex:0 0 auto;
+  }
+  /* 浏览器顶栏 */
+  .pc-titlebar{
+    height:36px; background:#e0e2e8; display:flex; align-items:center; padding:0 14px;
+    gap:8px; border-bottom:1px solid #cdd0d6; flex:0 0 auto;
+  }
+  .pc-titlebar .tb-dot{width:12px; height:12px; border-radius:50%;}
+  .pc-titlebar .tb-dot.r{background:#ff5f57;}
+  .pc-titlebar .tb-dot.y{background:#febc2e;}
+  .pc-titlebar .tb-dot.g{background:#28c840;}
+  .pc-titlebar .url{
+    flex:1; background:#fff; border-radius:6px; padding:5px 12px; font-size:12px;
+    color:var(--sub); margin-left:16px; max-width:400px;
+  }
+  /* 侧边栏 */
+  .pc-sidebar{
+    width:200px; background:var(--sidebar); flex:0 0 auto; display:flex; flex-direction:column;
+    color:#9aa0a6; font-size:13px;
+  }
+  .pc-sidebar .logo{
+    padding:18px 16px 14px; font-size:15px; font-weight:800; color:#fff;
+    display:flex; align-items:center; gap:8px;
+  }
+  .pc-sidebar .logo .dot{width:8px; height:8px; border-radius:50%; background:var(--green);}
+  .pc-nav-item{
+    padding:11px 16px; display:flex; align-items:center; gap:10px; cursor:pointer;
+    transition:background .12s; border-left:3px solid transparent;
+  }
+  .pc-nav-item:hover{background:var(--sidebar-hover);}
+  .pc-nav-item.active{background:var(--sidebar-hover); color:#fff; border-left-color:var(--sidebar-active);}
+  .pc-nav-item .ic{font-size:16px; width:20px; text-align:center;}
+  .pc-nav-section{padding:12px 16px 4px; font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#555c6b;}
+  /* 主区 */
+  .pc-main{flex:1; display:flex; flex-direction:column; overflow:hidden;}
+  .pc-topbar{
+    height:52px; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex:0 0 auto;
+  }
+  .pc-topbar .title{font-size:16px; font-weight:700;}
+  .pc-topbar .right{display:flex; align-items:center; gap:16px;}
+  .pc-topbar .sync-info{font-size:12px; display:flex; align-items:center; gap:6px; color:var(--sub);}
+  .pc-topbar .avatar{
+    width:32px; height:32px; border-radius:50%; background:var(--blue); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700;
+  }
+  .pc-content{flex:1; overflow-y:auto; padding:18px; display:none; flex-direction:column; gap:12px;}
+  .pc-content.active{display:flex;}
+  .pc-content::-webkit-scrollbar{width:6px;}
+  .pc-content::-webkit-scrollbar-track{background:transparent;}
+  .pc-content::-webkit-scrollbar-thumb{background:#cdd0d6; border-radius:3px;}
+
+  /* PC 通用组件 */
+  .pc-grid-2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .pc-grid-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;}
+  .pc-grid-4{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
+  .pc-card{background:#fff; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.05);}
+  .pc-card .label{font-size:11px; color:var(--sub); margin-bottom:4px;}
+  .pc-card .value{font-size:22px; font-weight:800; font-variant-numeric:tabular-nums;}
+  .pc-card .delta{font-size:11px; margin-top:2px;}
+  .pc-card .delta.up{color:var(--green);}
+  .pc-card .delta.down{color:var(--warn);}
+  .pc-section-title{font-size:14px; font-weight:700; margin-bottom:4px; display:flex; align-items:center; justify-content:space-between;}
+  .pc-section-title .actions{display:flex; gap:8px;}
+  .pc-btn{font-size:13px; padding:7px 14px; border-radius:8px; border:none; cursor:pointer; font-weight:600;}
+  .pc-btn.primary{background:var(--blue); color:#fff;}
+  .pc-btn.ghost{background:#fff; color:var(--blue); border:1px solid var(--blue);}
+  .pc-btn.danger{background:#fff; color:var(--warn); border:1px solid var(--warn);}
+  .pc-btn.subtle{background:#eef1f6; color:var(--ink);}
+  /* PC 表格 */
+  .pc-table{width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;}
+  .pc-table th{
+    text-align:left; padding:9px 10px; font-size:11px; font-weight:600; color:var(--sub);
+    text-transform:uppercase; letter-spacing:.5px; border-bottom:2px solid var(--line);
+    background:#fafbfc; white-space:nowrap;
+  }
+  .pc-table td{padding:9px 10px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis;}
+  .pc-table tr:hover td{background:#f9fafb;}
+  .pc-table .num-r{text-align:right; white-space:nowrap;}
+  .pc-table .num-pos{color:var(--green); font-weight:600;}
+  .pc-table .num-neg{color:var(--warn); font-weight:600;}
+  /* PC 表单 */
+  .pc-form-row{display:flex; align-items:center; gap:12px; margin-bottom:16px;}
+  .pc-form-row label{width:120px; font-size:13px; color:var(--sub); flex:0 0 auto; text-align:right;}
+  .pc-input{flex:1; background:#f3f4f6; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px;}
+  .pc-select{flex:1; background:#f3f4f6; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; color:var(--ink);}
+  /* PC posting 编辑器 */
+  .pc-posting{
+    border:1px solid var(--line); border-radius:10px; padding:14px;
+    display:flex; gap:12px; align-items:center;
+  }
+  .pc-posting .acc-sel{flex:2; background:#f3f4f6; border-radius:8px; padding:10px; font-size:14px;}
+  .pc-posting .amt{flex:1; background:#f3f4f6; border-radius:8px; padding:10px; font-size:14px; text-align:right; font-variant-numeric:tabular-nums;}
+  /* PC 成员角色标签 */
+  .role-tag{font-size:11px; padding:2px 8px; border-radius:6px; font-weight:600;}
+  .role-tag.owner{background:#fdeede; color:#b45309;}
+  .role-tag.editor{background:#e7f0ff; color:var(--blue);}
+  .role-tag.viewer{background:#eef1f6; color:var(--sub);}
+  /* PC 图表占位 */
+  .chart-placeholder{
+    background:linear-gradient(180deg,#f0f4ff 0%,#e7f0ff 100%);
+    border-radius:8px; height:160px; display:flex; align-items:flex-end;
+    padding:12px; gap:4px; position:relative;
+  }
+  .chart-bar{
+    flex:1; background:var(--blue); border-radius:4px 4px 0 0; opacity:.7;
+    min-height:8px;
+  }
+  .chart-bar.alt{background:var(--green);}
+  /* PC 筛选栏 */
+  .pc-filter-bar{
+    display:flex; gap:10px; align-items:center; background:#fff; border-radius:10px;
+    padding:10px 14px; box-shadow:0 1px 3px rgba(0,0,0,.05);
+  }
+  .pc-filter-bar .filter-chip{
+    font-size:12px; padding:5px 12px; border-radius:6px; background:#eef1f6;
+    cursor:pointer; font-weight:500;
+  }
+  .pc-filter-bar .filter-chip.active{background:var(--blue); color:#fff;}
+  .pc-filter-bar input{
+    flex:1; border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:13px;
+  }
+  /* PC 导入导出区 */
+  .pc-drop-zone{
+    border:2px dashed var(--line); border-radius:12px; padding:40px;
+    text-align:center; color:var(--sub); font-size:14px; background:#fafbfc;
+  }
+  .pc-drop-zone .ic{font-size:36px; margin-bottom:8px;}
+  /* PC 同步日志 */
+  .pc-sync-log{
+    font-family:'SF Mono','Fira Code',Consolas,monospace; font-size:12px;
+    background:#1e2330; color:#a0d4a0; border-radius:8px; padding:14px; line-height:1.8;
+  }
+  .pc-sync-log .ts{color:#666;}
+  .pc-sync-log .ok{color:var(--green);}
+  .pc-sync-log .warn{color:#febc2e;}
+
+  /* ============ 注解面板 ============ */
+  .notes{
+    width:100%; max-width:1200px; flex:0 0 auto;
+  }
+  .notes h2{font-size:16px; margin-bottom:10px;}
+  .notes-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  @media(max-width:760px){ .notes-grid{grid-template-columns:1fr;} }
+  .notes .n{background:#fff; border-left:3px solid var(--blue); border-radius:8px; padding:10px 12px; font-size:13px; line-height:1.55; color:#333;}
+  .notes .n b{color:var(--ink);}
+  .notes .n .k{display:inline-block; background:#eef1f6; border-radius:5px; padding:1px 6px; font-size:11px; color:var(--blue); margin-right:4px;}
+  .notes .n.pc-note{border-left-color:var(--green);}
+  .notes .n.pc-note .k{color:var(--green);}
+  .legend{font-size:12px; color:var(--sub); margin-top:8px; line-height:1.6;}
+
+  /* 端切换 */
+  .platform-switch{
+    position:fixed; top:14px; right:14px; display:flex; gap:4px; background:#111;
+    border-radius:8px; padding:4px; z-index:99;
+  }
+  .platform-switch button{
+    background:transparent; color:#9aa0a6; border:none; padding:6px 14px;
+    border-radius:6px; font-size:12px; cursor:pointer; font-weight:600;
+  }
+  .platform-switch button.active{background:var(--blue); color:#fff;}
+
+  /* 平台容器：左右并排 */
+  .platform-row{
+    display:flex; gap:32px; align-items:flex-start; justify-content:center;
+    flex-wrap:nowrap; width:100%; max-width:1680px; margin:0 auto;
+  }
+  @media(max-width:1640px){ .platform-row{ flex-wrap:wrap; justify-content:center; } }
+  .platform-col{ display:flex; flex-direction:column; align-items:center; flex:0 0 auto; }
+</style>
+</head>
+<body>
+
+<div class="page-title">
+  <h1>家庭云记账 · 低保真原型</h1>
+  <p>移动端（轻量操作） + PC 端（完整管理） · 点击各页面元素可跳转</p>
+</div>
+
+<div class="platform-switch">
+  <button class="active" onclick="switchPlatform('both')">全部</button>
+  <button onclick="switchPlatform('mobile')">仅移动端</button>
+  <button onclick="switchPlatform('pc')">仅 PC 端</button>
+</div>
+
+<!-- ================================================================ -->
+<!-- ====================== 移动端 + PC 端并排 ====================== -->
+<!-- ================================================================ -->
+<div class="platform-row">
+
+<!-- ====================== 移动端（轻量） ========================== -->
+<div class="platform-col" id="mobileSection">
+<div class="platform-label">
+  <span class="badge mobile">Mobile</span>
+  移动端 — 仅保留查看与快速记账
+  <span class="desc">复杂操作请前往 PC 端</span>
+</div>
+
+<div class="phone">
+  <div class="statusbar">
+    <span>9:41</span>
+    <span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="font-size:11px; border:1px solid #333; border-radius:3px; padding:0 3px;">5G</span></span>
+  </div>
+
+  <div class="screen-area">
+
+    <!-- ===== 登录 / 注册 ===== -->
+    <div class="screen active" data-screen="login">
+      <div class="topbar"><span class="ledger">家庭记账</span></div>
+      <div class="card" style="display:flex; flex-direction:column; gap:12px; margin-top:48px;">
+        <div class="block" style="justify-content:center; color:var(--blue); font-weight:700; font-size:16px;">🔐 登录您的账本</div>
+        <div><div class="muted" style="margin-bottom:6px">用户名</div><div class="block" style="color:var(--ink)">输入用户名</div></div>
+        <div><div class="muted" style="margin-bottom:6px">密码</div><div class="block" style="color:var(--ink)">••••••••</div></div>
+        <button class="btn-primary" onclick="go('dashboard')">登录</button>
+        <div class="add-line" onclick="go('dashboard')">没有账号？注册</div>
+      </div>
+    </div>
+
+    <!-- ===== 首页（简化） ===== -->
+    <div class="screen" data-screen="dashboard">
+      <div class="topbar">
+        <span class="ledger">家庭账本</span>
+        <span class="sync"><span class="syncbadge" id="dashSync"></span><span id="dashSyncTxt">已同步</span></span>
+      </div>
+      <div id="dashOffline" class="offlinebar" style="display:none">离线模式 · 数据保存在本机</div>
+
+      <div class="card">
+        <div class="muted">净资产（资产 − 负债）</div>
+        <div class="networth">¥ 4,961.50</div>
+        <div class="muted" style="margin-top:4px">较上月 +2.3%</div>
+      </div>
+
+      <div class="group-title">资产</div>
+      <div class="card">
+        <div class="acc-row row"><span>现金 Cash</span><span class="acc-bal">¥ 4,961.50</span></div>
+        <div class="acc-row row"><span>银行卡 Card</span><span class="acc-bal">−¥ 200.00</span></div>
+      </div>
+
+      <div class="group-title">最近交易</div>
+      <div class="card">
+        <div class="acc-row clickable" onclick="go('txn-detail')"><span><div>超市采购</div><div class="muted">08-11 · Cash</div></span><span class="acc-bal">−¥38.50</span></div>
+        <div class="acc-row clickable" onclick="go('txn-detail')"><span><div>初始注资</div><div class="muted">08-10 · Cash</div></span><span class="acc-bal">+¥5,000.00</span></div>
+      </div>
+    </div>
+
+    <!-- ===== 记一笔（保留 · 核心功能） ===== -->
+    <div class="screen" data-screen="record">
+      <div class="topbar"><span style="font-size:22px; cursor:pointer" onclick="go('dashboard')">‹</span><span class="ledger">记一笔</span><span style="width:22px"></span></div>
+
+      <div class="card" style="display:flex; flex-direction:column; gap:12px;">
+        <div class="row"><span class="muted">日期</span><span style="font-weight:600">2026-08-11</span></div>
+        <div><div class="muted" style="margin-bottom:6px">摘要</div><div class="block" style="color:var(--ink)">如：超市采购</div></div>
+      </div>
+
+      <div class="group-title">借贷分录（至少 2 条，必须平衡）</div>
+      <div class="posting">
+        <div class="pline"><div class="acc-sel">现金 Cash ▾</div><div class="amt">−38.50</div><div class="del">✕</div></div>
+      </div>
+      <div class="posting">
+        <div class="pline"><div class="acc-sel">餐饮 Food ▾</div><div class="amt">+38.50</div><div class="del">✕</div></div>
+      </div>
+      <div class="add-line" onclick="addPosting()">＋ 添加分录</div>
+
+      <div class="balance-meter ok" id="balMeter">✓ 已平衡（CNY 0.00）</div>
+
+      <button class="btn-primary" id="saveBtn">保存</button>
+    </div>
+
+    <!-- ===== 流水（浏览） ===== -->
+    <div class="screen" data-screen="transactions">
+      <div class="topbar"><span class="ledger">流水</span><span class="sync">⚲ 筛选</span></div>
+      <div class="card" style="display:flex; flex-direction:column; gap:10px;">
+        <div class="muted">2026-08-11</div>
+        <div class="acc-row clickable" onclick="go('txn-detail')"><span><div>超市采购</div><div class="muted">Cash → Food</div></span><span class="acc-bal">−¥38.50</span></div>
+        <div class="acc-row clickable" onclick="go('txn-detail')"><span><div>刷卡加油</div><div class="muted">Card → Expense</div></span><span class="acc-bal">−¥200.00</span></div>
+        <div class="muted" style="margin-top:4px">2026-08-10</div>
+        <div class="acc-row clickable" onclick="go('txn-detail')"><span><div>初始注资</div><div class="muted">Equity → Cash</div></span><span class="acc-bal">+¥5,000.00</span></div>
+      </div>
+    </div>
+
+    <!-- ===== 交易详情（只读） ===== -->
+    <div class="screen" data-screen="txn-detail">
+      <div class="topbar"><span style="font-size:22px; cursor:pointer" onclick="go('transactions')">‹</span><span class="ledger">交易详情</span></div>
+      <div class="card" style="display:flex; flex-direction:column; gap:10px;">
+        <div class="row"><span class="muted">日期</span><span>2026-08-11</span></div>
+        <div class="row"><span class="muted">摘要</span><span>超市采购</span></div>
+        <div class="row"><span class="muted">标记</span><span class="tag">*</span></div>
+      </div>
+      <div class="group-title">借贷分录</div>
+      <div class="card">
+        <div class="acc-row row"><span>现金 Cash</span><span class="acc-bal">−38.50</span></div>
+        <div class="acc-row row"><span>餐饮 Food</span><span class="acc-bal">+38.50</span></div>
+      </div>
+      <div class="balance-meter ok">✓ 借贷平衡</div>
+      <div class="muted" style="text-align:center">只读 · 如需更正请在 PC 端新增冲正交易</div>
+    </div>
+
+    <!-- ===== 我的/设置（精简） ===== -->
+    <div class="screen" data-screen="settings">
+      <div class="topbar"><span class="ledger">我的</span></div>
+      <div class="card clickable" onclick="go('sync')">
+        <div class="row"><span><div style="font-weight:700">同步状态</div><div class="muted">上次同步：刚刚 · 待同步 0 条</div></span><span style="color:var(--green); font-size:20px">›</span></div>
+      </div>
+      <div class="card">
+        <div class="set-row"><span>导出 Beancount</span><span style="color:var(--blue)">下载 ›</span></div>
+        <div class="set-row" onclick="go('pc-hint')"><span>账户 / 成员管理</span><span class="muted">前往 PC 端 ›</span></div>
+        <div class="set-row"><span>主题</span><span class="muted">跟随系统 ›</span></div>
+        <div class="set-row"><span>关于</span><span class="muted">v0.1 ›</span></div>
+        <div class="set-row" style="color:var(--warn); font-weight:700" onclick="go('login')"><span>退出登录</span><span>›</span></div>
+      </div>
+    </div>
+
+    <!-- ===== 同步状态（简化） ===== -->
+    <div class="screen" data-screen="sync">
+      <div class="topbar"><span style="font-size:22px; cursor:pointer" onclick="go('settings')">‹</span><span class="ledger">同步状态</span></div>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:46px">🟢</div>
+        <div style="font-weight:700; margin-top:6px">已同步</div>
+        <div class="muted">上次同步：刚刚 · 待同步 0 条</div>
+        <button class="btn-primary" style="margin-top:12px">立即同步</button>
+      </div>
+      <div class="muted" style="text-align:center">详细同步日志请查看 PC 端</div>
+    </div>
+
+    <!-- PC 端提示 -->
+    <div class="screen" data-screen="pc-hint">
+      <div class="topbar"><span style="font-size:22px; cursor:pointer" onclick="go('settings')">‹</span><span class="ledger">操作提示</span></div>
+      <div class="pc-hint">
+        <div style="font-size:28px; margin-bottom:8px;">🖥️</div>
+        此操作需要在 PC 端完成<br>
+        <span style="font-weight:400; font-size:12px; color:var(--sub);">请在浏览器中访问记账应用网页版</span>
+      </div>
+    </div>
+
+    <!-- FAB -->
+    <div class="fab" onclick="go('record')">＋</div>
+
+  </div>
+
+  <!-- 底部 Tab -->
+  <div class="tabbar">
+    <div class="tab active" data-tab="dashboard" onclick="go('dashboard')"><span class="ic">⌂</span>首页</div>
+    <div class="tab" data-tab="transactions" onclick="go('transactions')"><span class="ic">≡</span>流水</div>
+    <div class="tab" data-tab="settings" onclick="go('settings')"><span class="ic">⚙</span>我的</div>
+  </div>
+</div>
+</div>
+<!-- 移动端列结束 -->
+
+<!-- ======================== PC 端（完整） ======================== -->
+<div class="platform-col" id="pcSection">
+<div class="platform-label">
+  <span class="badge pc">PC</span>
+  PC 端 — 完整管理与复杂操作
+  <span class="desc">账户管理 · 成员管理 · 商品/价格 · 导入导出 · 报表 · 高级同步</span>
+</div>
+
+<div class="pc-frame">
+  <!-- 浏览器顶栏 -->
+  <div class="pc-titlebar">
+    <span class="tb-dot r"></span><span class="tb-dot y"></span><span class="tb-dot g"></span>
+    <div class="url">🔒 nas.local:8080 / dashboard</div>
+  </div>
+
+  <div style="display:flex; flex:1; overflow:hidden;">
+    <!-- 侧边栏 -->
+    <div class="pc-sidebar">
+      <div class="logo"><span class="dot"></span>家庭账本</div>
+
+      <div class="pc-nav-section">概览</div>
+      <div class="pc-nav-item active" data-pc="dashboard" onclick="pcGo('dashboard')"><span class="ic">⌂</span>仪表盘</div>
+      <div class="pc-nav-item" data-pc="transactions" onclick="pcGo('transactions')"><span class="ic">≡</span>交易流水</div>
+
+      <div class="pc-nav-section">管理</div>
+      <div class="pc-nav-item" data-pc="accounts" onclick="pcGo('accounts')"><span class="ic">▦</span>账户管理</div>
+      <div class="pc-nav-item" data-pc="members" onclick="pcGo('members')"><span class="ic">👥</span>成员管理</div>
+      <div class="pc-nav-item" data-pc="commodities" onclick="pcGo('commodities')"><span class="ic">💰</span>商品与价格</div>
+
+      <div class="pc-nav-section">工具</div>
+      <div class="pc-nav-item" data-pc="import-export" onclick="pcGo('import-export')"><span class="ic">⇅</span>导入与导出</div>
+      <div class="pc-nav-item" data-pc="reports" onclick="pcGo('reports')"><span class="ic">📊</span>报表分析</div>
+      <div class="pc-nav-item" data-pc="sync" onclick="pcGo('sync')"><span class="ic">🔄</span>同步管理</div>
+
+      <div class="pc-nav-section">系统</div>
+      <div class="pc-nav-item" data-pc="settings" onclick="pcGo('settings')"><span class="ic">⚙</span>设置</div>
+    </div>
+
+    <!-- 主区 -->
+    <div class="pc-main">
+      <div class="pc-topbar">
+        <span class="title" id="pcPageTitle">仪表盘</span>
+        <div class="right">
+          <span class="sync-info"><span class="syncbadge"></span>已同步 · 刚刚</span>
+          <button class="pc-btn primary" onclick="pcGo('record')">＋ 记一笔</button>
+          <div class="avatar">老</div>
+        </div>
+      </div>
+
+      <div class="pc-content active" data-pc-content="dashboard" style="overflow-y:auto;">
+        <!-- 概览卡片 -->
+        <div class="pc-grid-4">
+          <div class="pc-card">
+            <div class="label">净资产</div>
+            <div class="value">¥ 4,961.50</div>
+            <div class="delta up">↑ 2.3% 较上月</div>
+          </div>
+          <div class="pc-card">
+            <div class="label">本月支出</div>
+            <div class="value">¥ 238.50</div>
+            <div class="delta down">↑ 12.5% 较上月</div>
+          </div>
+          <div class="pc-card">
+            <div class="label">本月收入</div>
+            <div class="value">¥ 0.00</div>
+            <div class="delta muted">无变化</div>
+          </div>
+          <div class="pc-card">
+            <div class="label">待同步</div>
+            <div class="value" style="color:var(--green)">0 条</div>
+            <div class="delta muted">全部已同步</div>
+          </div>
+        </div>
+
+        <!-- 趋势图 + 账户分布 -->
+        <div class="pc-grid-2">
+          <div class="pc-card">
+            <div class="pc-section-title">净资产趋势（近 6 个月）</div>
+            <div class="chart-placeholder">
+              <div class="chart-bar" style="height:40%"></div>
+              <div class="chart-bar" style="height:55%"></div>
+              <div class="chart-bar" style="height:50%"></div>
+              <div class="chart-bar" style="height:65%"></div>
+              <div class="chart-bar" style="height:80%"></div>
+              <div class="chart-bar alt" style="height:95%"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--sub); margin-top:4px;">
+              <span>3月</span><span>4月</span><span>5月</span><span>6月</span><span>7月</span><span>8月</span>
+            </div>
+          </div>
+          <div class="pc-card">
+            <div class="pc-section-title">账户余额汇总</div>
+            <table class="pc-table" style="margin-top:8px;">
+              <thead><tr><th>账户</th><th>类型</th><th class="num-r">余额</th></tr></thead>
+              <tbody>
+                <tr><td>现金 Cash</td><td><span class="tag">资产</span></td><td class="num-r num-pos">¥ 4,961.50</td></tr>
+                <tr><td>银行卡 Card</td><td><span class="tag">资产</span></td><td class="num-r num-neg">−¥ 200.00</td></tr>
+                <tr><td>信用卡</td><td><span class="tag">负债</span></td><td class="num-r">¥ 0.00</td></tr>
+                <tr><td>权益 Equity</td><td><span class="tag">权益</span></td><td class="num-r num-neg">−¥ 5,000.00</td></tr>
+                <tr><td>餐饮 Food</td><td><span class="tag">支出</span></td><td class="num-r">¥ 238.50</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 最近交易 -->
+        <div class="pc-card">
+          <div class="pc-section-title">
+            <span>最近交易</span>
+            <div class="actions">
+              <button class="pc-btn subtle" onclick="pcGo('transactions')">查看全部</button>
+              <button class="pc-btn primary" onclick="pcGo('record')">＋ 新增</button>
+            </div>
+          </div>
+          <table class="pc-table" style="margin-top:8px;">
+            <thead><tr><th>日期</th><th>摘要</th><th>分录</th><th class="num-r">金额</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr class="clickable" onclick="pcGo('txn-detail')"><td>08-11</td><td>超市采购</td><td>Cash → Food</td><td class="num-r num-neg">−¥38.50</td><td><span class="muted">查看 ›</span></td></tr>
+              <tr class="clickable" onclick="pcGo('txn-detail')"><td>08-11</td><td>刷卡加油</td><td>Card → Expense</td><td class="num-r num-neg">−¥200.00</td><td><span class="muted">查看 ›</span></td></tr>
+              <tr class="clickable" onclick="pcGo('txn-detail')"><td>08-10</td><td>初始注资</td><td>Equity → Cash</td><td class="num-r num-pos">+¥5,000.00</td><td><span class="muted">查看 ›</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== 账户管理 ===== -->
+      <div class="pc-content" data-pc-content="accounts">
+        <div class="pc-card">
+          <div class="pc-section-title">
+            <span>账户管理</span>
+            <div class="actions">
+              <button class="pc-btn primary" onclick="pcGo('account-edit')">＋ 新建账户</button>
+            </div>
+          </div>
+          <div class="pc-filter-bar" style="margin-top:12px;">
+            <div class="filter-chip active">全部</div>
+            <div class="filter-chip">资产</div>
+            <div class="filter-chip">负债</div>
+            <div class="filter-chip">权益</div>
+            <div class="filter-chip">收入</div>
+            <div class="filter-chip">支出</div>
+            <input placeholder="搜索账户名..." />
+          </div>
+          <table class="pc-table" style="margin-top:12px;">
+            <thead><tr><th>账户名</th><th>类型</th><th>开户日期</th><th>币种</th><th class="num-r">余额</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>现金 Cash</td><td><span class="tag">资产</span></td><td>2026-08-01</td><td>CNY</td><td class="num-r num-pos">¥ 4,961.50</td><td><span class="tag" style="background:#e7f6ef;color:var(--green)">开放</span></td><td><a class="muted" onclick="pcGo('account-edit')">编辑</a> · <a style="color:var(--warn)">关闭</a></td></tr>
+              <tr><td>银行卡 Card</td><td><span class="tag">资产</span></td><td>2026-08-01</td><td>CNY</td><td class="num-r num-neg">−¥ 200.00</td><td><span class="tag" style="background:#e7f6ef;color:var(--green)">开放</span></td><td><a class="muted" onclick="pcGo('account-edit')">编辑</a> · <a style="color:var(--warn)">关闭</a></td></tr>
+              <tr><td>信用卡</td><td><span class="tag">负债</span></td><td>2026-08-01</td><td>CNY</td><td class="num-r">¥ 0.00</td><td><span class="tag" style="background:#e7f6ef;color:var(--green)">开放</span></td><td><a class="muted" onclick="pcGo('account-edit')">编辑</a> · <a style="color:var(--warn)">关闭</a></td></tr>
+              <tr><td>权益 Equity</td><td><span class="tag">权益</span></td><td>2026-08-01</td><td>CNY</td><td class="num-r num-neg">−¥ 5,000.00</td><td><span class="tag" style="background:#e7f6ef;color:var(--green)">开放</span></td><td><a class="muted" onclick="pcGo('account-edit')">编辑</a> · <a style="color:var(--warn)">关闭</a></td></tr>
+              <tr><td>餐饮 Food</td><td><span class="tag">支出</span></td><td>2026-08-01</td><td>CNY</td><td class="num-r">¥ 238.50</td><td><span class="tag" style="background:#e7f6ef;color:var(--green)">开放</span></td><td><a class="muted" onclick="pcGo('account-edit')">编辑</a> · <a style="color:var(--warn)">关闭</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== 新建/编辑账户 ===== -->
+      <div class="pc-content" data-pc-content="account-edit">
+        <div class="pc-card" style="max-width:600px;">
+          <div class="pc-section-title"><span>新建 / 编辑账户</span></div>
+          <div style="margin-top:16px;">
+            <div class="pc-form-row">
+              <label>账户名 *</label>
+              <input class="pc-input" placeholder="如「支付宝」" />
+            </div>
+            <div class="pc-form-row">
+              <label>类型 *</label>
+              <select class="pc-select">
+                <option>资产 Assets</option>
+                <option>负债 Liabilities</option>
+                <option>权益 Equity</option>
+                <option>收入 Income</option>
+                <option>支出 Expenses</option>
+              </select>
+            </div>
+            <div class="pc-form-row">
+              <label>开户日期</label>
+              <input class="pc-input" type="date" value="2026-08-11" />
+            </div>
+            <div class="pc-form-row">
+              <label>币种限制</label>
+              <select class="pc-select">
+                <option>不限制</option>
+                <option>CNY</option>
+                <option>USD</option>
+              </select>
+            </div>
+            <div class="pc-form-row">
+              <label>备注</label>
+              <input class="pc-input" placeholder="可选备注" />
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; margin-top:20px; justify-content:flex-end;">
+            <button class="pc-btn subtle" onclick="pcGo('accounts')">取消</button>
+            <button class="pc-btn primary" onclick="pcGo('accounts')">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 交易流水（完整） ===== -->
+      <div class="pc-content" data-pc-content="transactions">
+        <div class="pc-card">
+          <div class="pc-section-title">
+            <span>交易流水</span>
+            <div class="actions">
+              <button class="pc-btn ghost">批量导出</button>
+              <button class="pc-btn primary" onclick="pcGo('record')">＋ 记一笔</button>
+            </div>
+          </div>
+          <div class="pc-filter-bar" style="margin-top:12px;">
+            <div class="filter-chip active">全部</div>
+            <div class="filter-chip">本月</div>
+            <div class="filter-chip">上月</div>
+            <div class="filter-chip">自定义</div>
+            <input placeholder="搜索摘要..." />
+            <button class="pc-btn subtle">高级筛选</button>
+          </div>
+          <table class="pc-table" style="margin-top:12px;">
+            <thead><tr><th><input type="checkbox" /></th><th>日期</th><th>摘要</th><th>标记</th><th>分录详情</th><th class="num-r">总金额</th><th>创建人</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr class="clickable" onclick="pcGo('txn-detail')">
+                <td><input type="checkbox" /></td><td>2026-08-11</td><td>超市采购</td><td>*</td>
+                <td><span class="muted">Cash −38.50 → Food +38.50</span></td>
+                <td class="num-r num-neg">−¥38.50</td><td>老板</td>
+                <td><a class="muted">查看</a> · <a style="color:var(--warn)">冲正</a></td>
+              </tr>
+              <tr class="clickable" onclick="pcGo('txn-detail')">
+                <td><input type="checkbox" /></td><td>2026-08-11</td><td>刷卡加油</td><td>*</td>
+                <td><span class="muted">Card −200 → Expense +200</span></td>
+                <td class="num-r num-neg">−¥200.00</td><td>老板</td>
+                <td><a class="muted">查看</a> · <a style="color:var(--warn)">冲正</a></td>
+              </tr>
+              <tr class="clickable" onclick="pcGo('txn-detail')">
+                <td><input type="checkbox" /></td><td>2026-08-10</td><td>初始注资</td><td>*</td>
+                <td><span class="muted">Equity −5000 → Cash +5000</span></td>
+                <td class="num-r num-pos">+¥5,000.00</td><td>老板</td>
+                <td><a class="muted">查看</a> · <a style="color:var(--warn)">冲正</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== 记一笔（PC 完整版） ===== -->
+      <div class="pc-content" data-pc-content="record">
+        <div class="pc-card" style="max-width:720px;">
+          <div class="pc-section-title"><span>记一笔（复式记账）</span></div>
+          <div style="margin-top:16px;">
+            <div class="pc-form-row">
+              <label>日期</label>
+              <input class="pc-input" type="date" value="2026-08-11" style="max-width:200px;" />
+              <label style="width:60px;">标记</label>
+              <select class="pc-select" style="max-width:120px;">
+                <option>* 已完成</option>
+                <option>! 未完成</option>
+              </select>
+            </div>
+            <div class="pc-form-row">
+              <label>摘要</label>
+              <input class="pc-input" placeholder="如：超市采购" />
+            </div>
+          </div>
+
+          <div style="margin-top:8px; font-size:14px; font-weight:700; color:var(--sub);">借贷分录（至少 2 条，必须平衡）</div>
+          <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;" id="pcPostings">
+            <div class="pc-posting">
+              <div class="acc-sel">现金 Cash ▾</div>
+              <select class="pc-select" style="max-width:100px;"><option>CNY</option></select>
+              <div class="amt" style="min-width:120px;">−38.50</div>
+              <span class="del" style="color:var(--warn); cursor:pointer; font-size:18px;">✕</span>
+            </div>
+            <div class="pc-posting">
+              <div class="acc-sel">餐饮 Food ▾</div>
+              <select class="pc-select" style="max-width:100px;"><option>CNY</option></select>
+              <div class="amt" style="min-width:120px;">+38.50</div>
+              <span class="del" style="color:var(--warn); cursor:pointer; font-size:18px;">✕</span>
+            </div>
+          </div>
+          <div class="add-line" style="text-align:left; padding:8px 0;" onclick="addPcPosting()">＋ 添加分录</div>
+
+          <div class="balance-meter ok" style="margin-top:8px;">✓ 已平衡（CNY 0.00）</div>
+
+          <div style="display:flex; gap:10px; margin-top:16px;">
+            <button class="pc-btn primary">保存交易</button>
+            <button class="pc-btn ghost">保存并继续</button>
+            <button class="pc-btn subtle" onclick="pcGo('transactions')">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 交易详情（PC） ===== -->
+      <div class="pc-content" data-pc-content="txn-detail">
+        <div class="pc-card" style="max-width:720px;">
+          <div class="pc-section-title">
+            <span>交易详情</span>
+            <div class="actions">
+              <button class="pc-btn danger">⚠ 新增冲正交易</button>
+              <button class="pc-btn subtle" onclick="pcGo('transactions')">返回列表</button>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+            <div><div class="muted" style="margin-bottom:4px;">日期</div><div style="font-weight:600;">2026-08-11</div></div>
+            <div><div class="muted" style="margin-bottom:4px;">标记</div><div><span class="tag">*</span></div></div>
+            <div><div class="muted" style="margin-bottom:4px;">摘要</div><div style="font-weight:600;">超市采购</div></div>
+            <div><div class="muted" style="margin-bottom:4px;">创建人</div><div style="font-weight:600;">老板</div></div>
+            <div><div class="muted" style="margin-bottom:4px;">UUID</div><div style="font-family:monospace; font-size:12px;">txn-a1b2c3d4</div></div>
+            <div><div class="muted" style="margin-bottom:4px;">版本</div><div>v1</div></div>
+          </div>
+          <div style="margin-top:16px; font-weight:700; font-size:14px;">借贷分录</div>
+          <table class="pc-table" style="margin-top:8px;">
+            <thead><tr><th>账户</th><th>币种</th><th class="num-r">金额</th></tr></thead>
+            <tbody>
+              <tr><td>现金 Cash</td><td>CNY</td><td class="num-r num-neg">−38.50</td></tr>
+              <tr><td>餐饮 Food</td><td>CNY</td><td class="num-r num-pos">+38.50</td></tr>
+            </tbody>
+          </table>
+          <div class="balance-meter ok" style="margin-top:12px;">✓ 借贷平衡</div>
+          <div class="muted" style="margin-top:8px;">交易不可修改 · 如需更正请使用「冲正交易」功能新增一条反向记录</div>
+        </div>
+      </div>
+
+      <!-- ===== 成员管理 ===== -->
+      <div class="pc-content" data-pc-content="members">
+        <div class="pc-card">
+          <div class="pc-section-title">
+            <span>成员管理</span>
+            <div class="actions">
+              <button class="pc-btn primary">＋ 邀请成员</button>
+            </div>
+          </div>
+          <div class="muted" style="margin-top:4px;">家庭账本共享 · 成员可查看和操作同一账本数据</div>
+          <table class="pc-table" style="margin-top:12px;">
+            <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>加入时间</th><th>邀请人</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>laoban</td><td>老板</td><td><span class="role-tag owner">owner</span></td>
+                <td>2026-08-01</td><td>—</td><td><span class="muted">不可修改</span></td>
+              </tr>
+              <tr>
+                <td>laoma</td><td>老妈</td><td><span class="role-tag editor">editor</span></td>
+                <td>2026-08-05</td><td>laoban</td>
+                <td><a class="muted">改为查看</a> · <a style="color:var(--warn)">移除</a></td>
+              </tr>
+              <tr>
+                <td>laoba</td><td>老爸</td><td><span class="role-tag viewer">viewer</span></td>
+                <td>2026-08-05</td><td>laoban</td>
+                <td><a class="muted">改为编辑</a> · <a style="color:var(--warn)">移除</a></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="margin-top:16px; padding:12px; background:#fafbfc; border-radius:8px; font-size:12px; color:var(--sub);">
+            <b>角色说明：</b>
+            <span class="role-tag owner">owner</span> 账本所有者，不可移除，可管理一切 ·
+            <span class="role-tag editor">editor</span> 可记账、可查看 ·
+            <span class="role-tag viewer">viewer</span> 仅可查看，不可记账
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 商品与价格管理 ===== -->
+      <div class="pc-content" data-pc-content="commodities">
+        <div class="pc-grid-2">
+          <div class="pc-card">
+            <div class="pc-section-title">
+              <span>商品列表</span>
+              <div class="actions"><button class="pc-btn primary">＋ 新建商品</button></div>
+            </div>
+            <table class="pc-table" style="margin-top:12px;">
+              <thead><tr><th>代码</th><th>名称</th><th>精度</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>CNY</td><td>人民币</td><td>2</td><td><a class="muted">编辑</a></td></tr>
+                <tr><td>USD</td><td>美元</td><td>2</td><td><a class="muted">编辑</a></td></tr>
+                <tr><td>STOCK</td><td>股票</td><td>4</td><td><a class="muted">编辑</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pc-card">
+            <div class="pc-section-title">
+              <span>价格记录</span>
+              <div class="actions"><button class="pc-btn primary">＋ 新增价格</button></div>
+            </div>
+            <table class="pc-table" style="margin-top:12px;">
+              <thead><tr><th>商品</th><th>货币</th><th>日期</th><th class="num-r">汇率</th><th>来源</th></tr></thead>
+              <tbody>
+                <tr><td>USD</td><td>CNY</td><td>2026-08-10</td><td class="num-r">7.18</td><td><span class="tag">手动</span></td></tr>
+                <tr><td>STOCK</td><td>CNY</td><td>2026-08-10</td><td class="num-r">12.50</td><td><span class="tag">导入</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 导入与导出 ===== -->
+      <div class="pc-content" data-pc-content="import-export">
+        <div class="pc-grid-2">
+          <!-- 导出 -->
+          <div class="pc-card">
+            <div class="pc-section-title"><span>导出数据</span></div>
+            <div class="muted" style="margin-top:4px;">导出为标准 Beancount 文本文件，可通过 bean-check 校验</div>
+            <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
+              <div style="padding:14px; background:#f3f4f6; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:600; font-size:14px;">📄 Beancount (.beancount)</div>
+                  <div class="muted" style="margin-top:2px;">标准复式记账文本 · 适合导入其他工具</div>
+                </div>
+                <button class="pc-btn primary">下载</button>
+              </div>
+              <div style="padding:14px; background:#f3f4f6; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:600; font-size:14px;">📊 CSV 表格</div>
+                  <div class="muted" style="margin-top:2px;">交易流水表格 · 适合 Excel 分析</div>
+                </div>
+                <button class="pc-btn ghost">下载</button>
+              </div>
+              <div style="padding:14px; background:#f3f4f6; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:600; font-size:14px;">💾 数据库备份</div>
+                  <div class="muted" style="margin-top:2px;">SQLite 完整备份 · 适合灾难恢复</div>
+                </div>
+                <button class="pc-btn ghost">下载</button>
+              </div>
+            </div>
+          </div>
+          <!-- 导入 -->
+          <div class="pc-card">
+            <div class="pc-section-title"><span>导入数据</span></div>
+            <div class="muted" style="margin-top:4px;">支持 OFX / CSV 银行流水导入</div>
+            <div class="pc-drop-zone" style="margin-top:16px;">
+              <div class="ic">📁</div>
+              <div>拖放文件至此处 或 <span style="color:var(--blue); font-weight:600; text-decoration:underline;">点击选择</span></div>
+              <div class="muted" style="margin-top:4px; font-size:12px;">支持 .ofx .csv .xlsx 格式</div>
+            </div>
+            <div style="margin-top:16px;">
+              <div class="muted" style="margin-bottom:6px;">导入历史</div>
+              <div style="font-size:12px; display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; justify-content:space-between; padding:8px; background:#f3f4f6; border-radius:6px;">
+                  <span>银行流水_202608.csv</span><span style="color:var(--green)">✓ 成功 · 42 条</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:8px; background:#f3f4f6; border-radius:6px;">
+                  <span>credit_card.ofx</span><span style="color:var(--green)">✓ 成功 · 18 条</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 报表分析 ===== -->
+      <div class="pc-content" data-pc-content="reports">
+        <div class="pc-grid-2">
+          <div class="pc-card">
+            <div class="pc-section-title"><span>月度收支趋势</span></div>
+            <div class="chart-placeholder" style="margin-top:8px;">
+              <div class="chart-bar" style="height:30%"></div>
+              <div class="chart-bar" style="height:45%"></div>
+              <div class="chart-bar" style="height:35%"></div>
+              <div class="chart-bar" style="height:50%"></div>
+              <div class="chart-bar alt" style="height:60%"></div>
+              <div class="chart-bar alt" style="height:40%"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--sub); margin-top:4px;">
+              <span>3月</span><span>4月</span><span>5月</span><span>6月</span><span>7月</span><span>8月</span>
+            </div>
+            <div style="margin-top:8px; font-size:12px;">
+              <span style="display:inline-block; width:10px; height:10px; background:var(--blue); border-radius:2px; margin-right:4px;"></span>收入
+              <span style="display:inline-block; width:10px; height:10px; background:var(--green); border-radius:2px; margin:0 4px 0 12px;"></span>支出
+            </div>
+          </div>
+          <div class="pc-card">
+            <div class="pc-section-title"><span>支出分类（本月）</span></div>
+            <table class="pc-table" style="margin-top:8px;">
+              <thead><tr><th>分类</th><th class="num-r">金额</th><th class="num-r">占比</th></tr></thead>
+              <tbody>
+                <tr><td>餐饮 Food</td><td class="num-r">¥ 238.50</td><td class="num-r">100%</td></tr>
+              </tbody>
+            </table>
+            <div class="muted" style="margin-top:12px; text-align:center;">本月仅一笔支出记录</div>
+          </div>
+        </div>
+        <div class="pc-card">
+          <div class="pc-section-title">
+            <span>资产负债表（Trial Balance）</span>
+            <div class="actions">
+              <button class="pc-btn subtle">导出 PDF</button>
+              <button class="pc-btn ghost">导出 CSV</button>
+            </div>
+          </div>
+          <table class="pc-table" style="margin-top:8px;">
+            <thead><tr><th>账户</th><th>类型</th><th class="num-r">借方</th><th class="num-r">贷方</th></tr></thead>
+            <tbody>
+              <tr><td>现金 Cash</td><td>资产</td><td class="num-r">¥ 4,961.50</td><td class="num-r">—</td></tr>
+              <tr><td>银行卡 Card</td><td>资产</td><td class="num-r num-neg">−¥ 200.00</td><td class="num-r">—</td></tr>
+              <tr><td>权益 Equity</td><td>权益</td><td class="num-r">—</td><td class="num-r">¥ 5,000.00</td></tr>
+              <tr><td>餐饮 Food</td><td>支出</td><td class="num-r">¥ 238.50</td><td class="num-r">—</td></tr>
+              <tr style="font-weight:700; border-top:2px solid var(--line);">
+                <td colspan="2">合计</td>
+                <td class="num-r">¥ 5,000.00</td><td class="num-r">¥ 5,000.00</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="balance-meter ok" style="margin-top:12px;">✓ 借贷平衡</div>
+        </div>
+      </div>
+
+      <!-- ===== 同步管理（PC 完整） ===== -->
+      <div class="pc-content" data-pc-content="sync">
+        <div class="pc-grid-2">
+          <div class="pc-card">
+            <div class="pc-section-title"><span>同步状态</span></div>
+            <div style="text-align:center; padding:20px 0;">
+              <div style="font-size:48px;">🟢</div>
+              <div style="font-weight:700; margin-top:6px;">已同步</div>
+              <div class="muted">上次同步：刚刚 · 待同步 0 条</div>
+              <button class="pc-btn primary" style="margin-top:12px;">立即同步</button>
+            </div>
+            <div style="margin-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:13px;">
+              <div style="padding:10px; background:#f3f4f6; border-radius:8px;">
+                <div class="muted">客户端 ID</div>
+                <div style="font-weight:600; margin-top:2px;">web-abc123</div>
+              </div>
+              <div style="padding:10px; background:#f3f4f6; border-radius:8px;">
+                <div class="muted">当前水位</div>
+                <div style="font-weight:600; margin-top:2px;">seq 6</div>
+              </div>
+            </div>
+          </div>
+          <div class="pc-card">
+            <div class="pc-section-title"><span>同步检查点</span></div>
+            <table class="pc-table" style="margin-top:8px;">
+              <thead><tr><th>客户端</th><th>水位</th><th>最后同步</th></tr></thead>
+              <tbody>
+                <tr><td>web-abc123</td><td>6</td><td>刚刚</td></tr>
+                <tr><td>phone-def456</td><td>6</td><td>2 分钟前</td></tr>
+                <tr><td>tablet-789</td><td>5</td><td>1 小时前</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="pc-card">
+          <div class="pc-section-title"><span>同步日志（最近 20 条）</span></div>
+          <div class="pc-sync-log" style="margin-top:8px;">
+            <div><span class="ts">[2026-08-11 14:32:05]</span> <span class="ok">PULL</span> since=5 → 收到 1 条变更</div>
+            <div><span class="ts">[2026-08-11 14:32:05]</span> <span class="ok">MERGE</span> seq=6 transaction txn-a1b2 → 已合并</div>
+            <div><span class="ts">[2026-08-11 14:31:58]</span> <span class="ok">PUSH</span> 1 条待推送 → accepted=0 (重复跳过)</div>
+            <div><span class="ts">[2026-08-11 14:30:12]</span> <span class="ok">PULL</span> since=4 → 收到 1 条变更</div>
+            <div><span class="ts">[2026-08-11 14:30:12]</span> <span class="ok">MERGE</span> seq=5 account cmd-xxx → 已合并</div>
+            <div><span class="ts">[2026-08-10 09:00:00]</span> <span class="warn">WARN</span> 离线模式启动 · 本地缓存已激活</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 设置（PC 完整） ===== -->
+      <div class="pc-content" data-pc-content="settings">
+        <div class="pc-grid-2">
+          <div class="pc-card">
+            <div class="pc-section-title"><span>账本设置</span></div>
+            <div style="margin-top:12px;">
+              <div class="pc-form-row">
+                <label>账本名称</label>
+                <input class="pc-input" value="家庭账本" />
+              </div>
+              <div class="pc-form-row">
+                <label>默认币种</label>
+                <select class="pc-select"><option>CNY 人民币</option><option>USD 美元</option></select>
+              </div>
+              <div class="pc-form-row">
+                <label>默认标记</label>
+                <select class="pc-select"><option>* 已完成</option><option>! 未完成</option></select>
+              </div>
+              <div style="text-align:right; margin-top:12px;">
+                <button class="pc-btn primary">保存</button>
+              </div>
+            </div>
+          </div>
+          <div class="pc-card">
+            <div class="pc-section-title"><span>账户与安全</span></div>
+            <div style="margin-top:12px;">
+              <div class="pc-form-row">
+                <label>用户名</label>
+                <input class="pc-input" value="laoban" disabled />
+              </div>
+              <div class="pc-form-row">
+                <label>显示名</label>
+                <input class="pc-input" value="老板" />
+              </div>
+              <div class="pc-form-row">
+                <label>新密码</label>
+                <input class="pc-input" type="password" placeholder="留空不修改" />
+              </div>
+              <div style="text-align:right; margin-top:12px;">
+                <button class="pc-btn primary">更新资料</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pc-card">
+          <div class="pc-section-title"><span>系统信息</span></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:12px; font-size:13px;">
+            <div style="padding:12px; background:#f3f4f6; border-radius:8px;">
+              <div class="muted">应用版本</div><div style="font-weight:600; margin-top:2px;">v0.1.0</div>
+            </div>
+            <div style="padding:12px; background:#f3f4f6; border-radius:8px;">
+              <div class="muted">数据库</div><div style="font-weight:600; margin-top:2px;">SQLite (modernc.org/sqlite)</div>
+            </div>
+            <div style="padding:12px; background:#f3f4f6; border-radius:8px;">
+              <div class="muted">后端</div><div style="font-weight:600; margin-top:2px;">Go 1.26.5</div>
+            </div>
+          </div>
+          <div style="margin-top:16px;">
+            <button class="pc-btn danger">退出登录</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+<!-- PC 列结束 + 并排容器结束 -->
+
+<!-- ================================================================ -->
+<!-- ======================== 设计注解 ============================== -->
+<!-- ================================================================ -->
+<div class="notes">
+  <h2>设计注解</h2>
+  <div class="notes-grid">
+    <!-- 移动端注解 -->
+    <div class="n"><span class="k">移动端</span><b>定位：轻量查看 + 快速记账</b>。仅保留 5 个页面：登录、首页（净值+近期交易+最近流水）、记一笔、流水浏览/详情、基础设置。底部 Tab 从 4 个减为 3 个（首页 / 流水 / 我的），去除「账户」Tab。</div>
+    <div class="n"><span class="k">移动端 · 首页</span>简化版仪表盘：净资产大字号 + 资产分组 + 最近 2-3 条交易。不展示负债/权益分组（减少滚动），点交易可跳详情。</div>
+    <div class="n"><span class="k">移动端 · 记一笔</span>核心功能保留：日期+摘要+借贷分录+平衡指示器+保存。断网可保存本地。简化但完整，满足日常快速记账。</div>
+    <div class="n"><span class="k">移动端 · 设置</span>仅保留：同步状态卡、导出 Beancount、主题、关于、退出登录。「账户管理」「成员管理」入口标注"前往 PC 端"，点击跳转提示页。</div>
+    <div class="n"><span class="k">移动端 · 移除</span>移除：账户 CRUD、成员管理、商品/价格管理、导入功能、报表分析、高级同步日志、批量交易操作、冲正交易入口。交易详情标注"如需更正请在 PC 端操作"。</div>
+    <!-- PC 端注解 -->
+    <div class="n pc-note"><span class="k">PC 端</span><b>定位：完整管理 + 复杂操作</b>。侧边栏 9 个功能模块：仪表盘、交易流水、账户管理、成员管理、商品与价格、导入与导出、报表分析、同步管理、设置。</div>
+    <div class="n pc-note"><span class="k">PC · 仪表盘</span>完整概览：4 指标卡（净值/月支出/月收入/待同步）+ 净值趋势图 + 账户余额表 + 最近交易表。比移动端信息密度更高。</div>
+    <div class="n pc-note"><span class="k">PC · 账户管理</span>完整 CRUD：表格展示所有账户（含类型筛选+搜索）、新建/编辑表单（名称/类型/开户日期/币种限制/备注）、关闭账户操作。移动端无此功能。</div>
+    <div class="n pc-note"><span class="k">PC · 成员管理</span>家庭共享核心：邀请成员、角色分配（owner/editor/viewer）、移除成员。角色说明卡。移动端仅显示"即将上线"占位。</div>
+    <div class="n pc-note"><span class="k">PC · 商品与价格</span>多币种/商品支持：商品列表（代码/名称/精度）+ 价格记录表（商品/货币/日期/汇率/来源）。为后续多币种记账和外币资产估值做基础。</div>
+    <div class="n pc-note"><span class="k">PC · 导入导出</span>导出：Beancount(.beancount) / CSV / SQLite 备份。导入：OFX/CSV/XLSX 拖放上传 + 导入历史。移动端仅保留 Beancount 导出。</div>
+    <div class="n pc-note"><span class="k">PC · 报表</span>月度收支趋势图 + 支出分类表 + 资产负债表（Trial Balance）。支持导出 PDF/CSV。移动端无此功能。</div>
+    <div class="n pc-note"><span class="k">PC · 同步管理</span>完整同步面板：状态总览 + 客户端检查点表 + 同步日志（终端风格，含 PULL/PUSH/MERGE/WARN）。移动端仅显示同步状态卡+立即同步按钮。</div>
+    <div class="n pc-note"><span class="k">PC · 交易流水</span>完整表格：日期/摘要/标记/分录/金额/创建人/操作。支持批量选择、高级筛选、冲正入口。比移动端多了批量操作和冲正功能。</div>
+    <div class="n pc-note"><span class="k">PC · 记一笔</span>增强版：标记选择（*/!）、保存并继续按钮、更宽的表单布局。功能与移动端一致但操作空间更大。</div>
+    <div class="n pc-note"><span class="k">PC · 交易详情</span>完整只读详情：含 UUID、版本号、创建人。冲正操作入口（新增反向交易）。移动端标注"请在 PC 端操作"。</div>
+    <!-- 规范 -->
+    <div class="n"><span class="k">规范基线</span>主色 #3B6EF6 / 成功 #2BA471 / 警示 #E8590C；圆角 12–16；金额用等宽数字对齐。PC 侧边栏深色 #1E2330。详见 design-spec.md §6。</div>
+    <div class="n"><span class="k">响应式</span>Flutter Web (PWA) 自适应：>1024px 展示 PC 布局（侧边栏+主区）；<768px 展示移动布局（底栏+卡片）。中间宽度自动降级。</div>
+    <div class="n"><span class="k">技术约束</span>导出 .beancount 必须过 bean-check。冲正=新增反向交易而非修改原交易（不可变原则）。同步遵循 append-only + 水位增量协议。</div>
+  </div>
+  <div class="legend">
+    <b>灰色占位块</b> = 设计稿中的真实组件/内容。<br>
+    <b>移动端</b>：点击手机内任意可点元素可跳转。底部 3 Tab：首页 / 流水 / 我的。<br>
+    <b>PC 端</b>：点击左侧侧边栏导航切换页面。顶栏右侧有「记一笔」快捷入口。
+  </div>
+</div>
+
+<script>
+  // ===== 移动端页面切换 =====
+  function go(screen){
+    document.querySelectorAll('.phone .screen').forEach(s=>s.classList.toggle('active', s.dataset.screen===screen));
+    document.querySelectorAll('.phone .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===screen));
+    const sa = document.querySelector('.phone .screen-area');
+    if(sa) sa.scrollTop = 0;
+  }
+
+  // ===== PC 端页面切换 =====
+  function pcGo(page){
+    document.querySelectorAll('.pc-content').forEach(c=>c.classList.toggle('active', c.dataset.pcContent===page));
+    document.querySelectorAll('.pc-nav-item').forEach(n=>n.classList.toggle('active', n.dataset.pc===page));
+    const titles = {
+      'dashboard':'仪表盘', 'transactions':'交易流水', 'accounts':'账户管理',
+      'account-edit':'新建 / 编辑账户', 'record':'记一笔', 'txn-detail':'交易详情',
+      'members':'成员管理', 'commodities':'商品与价格',
+      'import-export':'导入与导出', 'reports':'报表分析', 'sync':'同步管理', 'settings':'设置'
+    };
+    document.getElementById('pcPageTitle').textContent = titles[page] || page;
+    document.querySelector('.pc-content.active')?.scrollTo(0,0);
+  }
+
+  // ===== 演示：切换同步状态 =====
+  let syncState = 0;
+  function cycleSync(){
+    syncState = (syncState+1)%3;
+    const b=document.getElementById('dashSync'), t=document.getElementById('dashSyncTxt'), off=document.getElementById('dashOffline');
+    if(syncState===0){b.className='syncbadge'; t.textContent='已同步'; off.style.display='none';}
+    if(syncState===1){b.className='syncbadge pending'; t.textContent='待同步 2'; off.style.display='none';}
+    if(syncState===2){b.className='syncbadge offline'; t.textContent='离线'; off.style.display='block';}
+  }
+  const dashSyncEl = document.getElementById('dashSync');
+  if(dashSyncEl){
+    dashSyncEl.parentElement.style.cursor='pointer';
+    dashSyncEl.parentElement.onclick=cycleSync;
+  }
+
+  // ===== 移动端添加分录 =====
+  function addPosting(){
+    const p=document.createElement('div');
+    p.className='posting';
+    p.innerHTML='<div class="pline"><div class="acc-sel">选择账户 ▾</div><div class="amt">0.00</div><div class="del" onclick="this.parentNode.parentNode.remove()">✕</div></div>';
+    const meter=document.getElementById('balMeter');
+    if(meter) meter.parentNode.insertBefore(p, meter);
+  }
+
+  // ===== PC 端添加分录 =====
+  function addPcPosting(){
+    const container = document.getElementById('pcPostings');
+    if(!container) return;
+    const p = document.createElement('div');
+    p.className = 'pc-posting';
+    p.innerHTML = '<div class="acc-sel">选择账户 ▾</div><select class="pc-select" style="max-width:100px;"><option>CNY</option></select><div class="amt" style="min-width:120px;">0.00</div><span class="del" style="color:var(--warn); cursor:pointer; font-size:18px;" onclick="this.parentNode.remove()">✕</span>';
+    container.appendChild(p);
+  }
+
+  // ===== 平台切换 =====
+  function switchPlatform(mode){
+    const mobile = document.getElementById('mobileSection');
+    const pc = document.getElementById('pcSection');
+    if(mode==='mobile'){ mobile.style.display=''; pc.closest('.platform-col').style.display='none'; }
+    else if(mode==='pc'){ mobile.closest('.platform-col').style.display='none'; pc.style.display=''; }
+    else { mobile.style.display=''; pc.style.display=''; mobile.closest('.platform-col').style.display=''; pc.closest('.platform-col').style.display=''; }
+    document.querySelectorAll('.platform-switch button').forEach(b=>b.classList.remove('active'));
+    event.target.classList.add('active');
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+# VCS
+.git/
+.gitignore
+
+# Python (Go 后端编译不需要)
+.venv/
+__pycache__/
+
+# Frontend 构建缓存（前端单独 build web 后拷贝进镜像）
+frontend/.dart_tool/
+frontend/build/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/android/
+frontend/ios/
+frontend/linux/
+frontend/macos/
+frontend/windows/
+
+# 运行时数据与生成产物
+data/
+*.db
+*.db-shm
+*.db-wal
+*.beancount
+*.log
+
+# 本地二进制 / 测试构建
+familyledger
+smoketest_bin
+ledgerauthtest_bin
+*.exe
+
+# 演示目录（运行时不需要）
+export_demo/
+
+# 编辑器 / 智能体本地记忆
+.idea/
+.vscode/
+.workbuddy/
+.DS_Store
+Thumbs.db

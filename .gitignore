@@ -1,0 +1,49 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local DB / generated artifacts
+*.db
+export_demo/ledger.db
+
+# Go build output
+/bin/
+dist/
+
+# Flutter / Dart
+frontend/.dart_tool/
+frontend/build/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/android/  # 本切片仅用 web，未拉起移动端原生工程
+frontend/ios/
+frontend/linux/
+frontend/macos/
+frontend/windows/
+
+# Runtime data
+data/
+
+# Logs
+*.log
+
+# Generated export artifacts (beancount)
+*.beancount
+export_demo/*.beancount
+
+# Compiled binaries / test builds (root-level, CGO_ENABLED=0 go build 产物)
+familyledger
+smoketest_bin
+ledgerauthtest_bin
+.sync_test_bin
+*.exe
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Agent working memory (local only)
+.workbuddy/
