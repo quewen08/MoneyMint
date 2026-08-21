@@ -11,6 +11,7 @@ package export
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"sort"
@@ -40,6 +41,7 @@ type posting struct {
 type txn struct {
 	id               int64
 	date, flag, desc string
+	tags             []string
 	postings         []posting
 }
 
@@ -105,16 +107,23 @@ func ExportLedger(db *sql.DB, ledgerID int64) (string, error) {
 
 	// 4. 交易 + 分录（排除软删交易）
 	var txns []txn
-	trows, err := db.Query(`SELECT id, date, flag, description
+	trows, err := db.Query(`SELECT id, date, flag, description, tags
 		FROM transactions WHERE ledger_id=? AND deleted_at IS NULL ORDER BY date, id`, ledgerID)
 	if err != nil {
 		return "", err
 	}
 	for trows.Next() {
 		var t txn
-		if err := trows.Scan(&t.id, &t.date, &t.flag, &t.desc); err != nil {
+		var tags sql.NullString
+		if err := trows.Scan(&t.id, &t.date, &t.flag, &t.desc, &tags); err != nil {
 			trows.Close()
 			return "", err
+		}
+		if tags.Valid && tags.String != "" {
+			var parsed []string
+			if jsonErr := json.Unmarshal([]byte(tags.String), &parsed); jsonErr == nil {
+				t.tags = parsed
+			}
 		}
 		// 先收集交易，postings 在 trows 关闭后再查，
 		// 避免在单连接(MaxOpenConns=1)下同时持有两结果集导致死锁。
@@ -204,16 +213,21 @@ func ExportLedger(db *sql.DB, ledgerID int64) (string, error) {
 	}
 	b.WriteString("\n")
 
-	// 2) open / close
+	// 2) open / close（按账户遍历：open 紧跟其 close）
+	//    支持 Beancount close 后再 open 同名账户：每个账户的 close 紧随其 open 之后输出，
+	//    避免多个 open 堆叠导致 duplicate open 指令（0.4-A close 语义）。
+	sort.SliceStable(accounts, func(i, j int) bool {
+		if accounts[i].openDate != accounts[j].openDate {
+			return accounts[i].openDate < accounts[j].openDate
+		}
+		return accounts[i].name < accounts[j].name
+	})
 	for _, a := range accounts {
 		if a.hasRestr {
 			fmt.Fprintf(&b, "%s open %s %s\n", a.openDate, a.name, a.restr)
 		} else {
 			fmt.Fprintf(&b, "%s open %s\n", a.openDate, a.name)
 		}
-	}
-	b.WriteString("\n")
-	for _, a := range accounts {
 		if a.hasClose {
 			fmt.Fprintf(&b, "%s close %s\n", a.closeDate, a.name)
 		}
@@ -229,6 +243,12 @@ func ExportLedger(db *sql.DB, ledgerID int64) (string, error) {
 	// 4) 交易
 	for _, t := range txns {
 		fmt.Fprintf(&b, "%s %s %q\n", t.date, t.flag, t.desc)
+		// 标签以元数据形式写出：Beancount 的 #tag 语法仅允许 ASCII，
+		// 而本应用需要支持中文标签，故统一用 `tags: "..."` 元数据行，
+		// 既可保留中文又能通过 bean-check。
+		if joined := joinTags(t.tags); joined != "" {
+			fmt.Fprintf(&b, "  tags: %q\n", joined)
+		}
 		for _, p := range t.postings {
 			fmt.Fprintf(&b, "  %s %s %s\n", p.account, formatAmount(p.amount, precOf(p.commodity)), p.commodity)
 		}
@@ -269,4 +289,18 @@ func formatAmount(s string, prec int) string {
 		return s
 	}
 	return r.FloatString(prec)
+}
+
+// joinTags 把标签切片清洗后用空格拼接成一个字符串（用于导出为 Beancount 的
+// `tags: "..."` 元数据值）。空/纯空白标签被忽略；首尾空白被裁掉。无有效标签返回空串。
+func joinTags(tags []string) string {
+	clean := make([]string, 0, len(tags))
+	for _, t := range tags {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		clean = append(clean, t)
+	}
+	return strings.Join(clean, " ")
 }

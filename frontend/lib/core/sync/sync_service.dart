@@ -124,11 +124,16 @@ class SyncService {
   }
 
   /// 本地创建账户：生成 uuid，落本地，入待推送队列，随后尝试同步。
+  /// [icon]/[color]/[parentUuid]/[subType] 为展示/层级字段（可选）。
   Future<LocalAccount> createAccount({
     required String name,
     required String type,
     required String openDate,
     String? commodity,
+    String? icon,
+    String? color,
+    String? parentUuid,
+    String? subType,
   }) async {
     final a = LocalAccount(
       uuid: _newUuid(),
@@ -136,6 +141,10 @@ class SyncService {
       type: type,
       openDate: openDate,
       restriction: commodity,
+      icon: icon,
+      color: color,
+      parentUuid: parentUuid,
+      subType: subType,
     );
     await store.putAccount(a);
     await store.addPending(PendingChange(
@@ -148,11 +157,12 @@ class SyncService {
   }
 
   /// 本地记账：生成 uuid，postings 引用账户 uuid，落本地，入待推送队列。
-  /// [reversedOf] 用于标记这是某笔交易的冲正（仅本地/展示用，后端忽略未知字段）。
+  /// [tags] 为交易标签；[reversedOf] 用于标记这是某笔交易的冲正（仅本地/展示用）。
   Future<LocalTxn> createTransaction({
     required String date,
     required String description,
     required List<LocalPosting> postings,
+    List<String>? tags,
     String? reversedOf,
   }) async {
     final t = LocalTxn(
@@ -161,7 +171,9 @@ class SyncService {
       flag: '*',
       description: description,
       postings: postings,
+      tags: tags ?? const [],
       reversedOf: reversedOf,
+      createdByName: LedgerApi.displayName,
     );
     await store.putTxn(t);
     await store.addPending(PendingChange(
@@ -186,23 +198,65 @@ class SyncService {
     await sync();
   }
 
-  /// 删除账户（软删，连带其引用交易）：
-  /// 本地删除账户 + 引用交易（与服务器级联语义一致），入待推送队列后同步。
-  /// 服务器生成账户 + 各交易 delete 事件，其他端经 pull 同步清理。
-  Future<void> deleteAccount(LocalAccount a) async {
-    await store.deleteAccount(a.uuid);
-    final txns = await store.getAllTxns();
-    for (final t in txns) {
-      if (t.postings.any((p) => p.accountUuid == a.uuid)) {
-        await store.deleteTxn(t.uuid);
-      }
-    }
+  /// 关闭账户（Beancount close 语义，0.4-A 起）：
+  /// 本地更新账户 close_date（不删账户、不删引用交易），入待推送队列（op=close）后同步。
+  /// 服务器置 close_date 并写 sync_log op=close，其他端经 pull 收到 close 事件更新关闭态。
+  Future<void> closeAccount(LocalAccount a) async {
+    final today = DateTime.now().toString().substring(0, 10);
+    await store.putAccount(LocalAccount(
+      uuid: a.uuid,
+      name: a.name,
+      displayName: a.displayName,
+      type: a.type,
+      openDate: a.openDate,
+      closeDate: today,
+      restriction: a.restriction,
+      icon: a.icon,
+      color: a.color,
+      parentUuid: a.parentUuid,
+      subType: a.subType,
+    ));
     await store.addPending(PendingChange(
       entityType: 'account',
-      op: 'delete',
+      op: 'close',
       key: a.uuid,
       entity: {'uuid': a.uuid},
     ));
+    await sync();
+  }
+
+  /// 重排账户顺序（0.4-C 分类拖拽排序）：本地按传入顺序写 sort_order（1..N），
+  /// 逐条入待推送队列（op=update），随后同步。服务端按 uuid 更新 sort_order 并广播。
+  /// [ordered] 为同一类型下已拖拽排好序的根分类（parentUuid 为空）。
+  Future<void> reorderAccounts(List<LocalAccount> ordered) async {
+    final pending = <PendingChange>[];
+    for (var i = 0; i < ordered.length; i++) {
+      final a = ordered[i];
+      final updated = LocalAccount(
+        uuid: a.uuid,
+        name: a.name,
+        displayName: a.displayName,
+        type: a.type,
+        openDate: a.openDate,
+        closeDate: a.closeDate,
+        restriction: a.restriction,
+        icon: a.icon,
+        color: a.color,
+        parentUuid: a.parentUuid,
+        subType: a.subType,
+        sortOrder: i + 1,
+      );
+      await store.putAccount(updated);
+      pending.add(PendingChange(
+        entityType: 'account',
+        op: 'update',
+        key: a.uuid,
+        entity: updated.toMap(),
+      ));
+    }
+    for (final p in pending) {
+      await store.addPending(p);
+    }
     await sync();
   }
 

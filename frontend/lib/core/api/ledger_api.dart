@@ -57,6 +57,29 @@ class LedgerApi {
     }
   }
 
+  // ---- 当前用户显示名（用于离线记账时回填「谁记的」，持久化于 localStorage）----
+  static const _displayNameKey = 'fl_display_name';
+  static String? _displayName;
+
+  /// 当前用户显示名；无则为 null。
+  static String? get displayName => _displayName;
+
+  /// 设置当前用户显示名并持久化。
+  static void setDisplayName(String? name) {
+    _displayName = name;
+    if (name == null || name.isEmpty) {
+      html.window.localStorage.remove(_displayNameKey);
+    } else {
+      html.window.localStorage[_displayNameKey] = name;
+    }
+  }
+
+  /// 启动时从 localStorage 恢复当前用户显示名。
+  static Future<void> loadDisplayName() async {
+    final v = html.window.localStorage[_displayNameKey];
+    _displayName = v != null && v.isNotEmpty ? v : null;
+  }
+
   Map<String, String> get _headers => {
         'Content-Type': 'application/json',
         if (_token != null) 'Authorization': 'Bearer $_token',
@@ -167,10 +190,11 @@ class LedgerApi {
     return PushResp.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
   }
 
-  // ---- 删除（P1-B1）----
+  // ---- 删除/关闭（P1-B1 / 0.4-A close 语义）----
 
-  /// 软删账户（连带其引用交易，写 sync_log delete）。
-  Future<void> deleteAccount(String uuid) async {
+  /// 关闭账户（Beancount close）：DELETE /api/accounts/{uuid}，服务器置 close_date。
+  /// 0.4-A 起语义从软删改为关闭，保留全部交易引用；HTTP 动词仍为 DELETE。
+  Future<void> closeAccount(String uuid) async {
     final r = await http.delete(
       Uri.parse('$base/api/accounts/$uuid'),
       headers: _headers,

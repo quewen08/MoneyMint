@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FamBean · PC 端优化设计稿（高保真）</title>
+<style>
+  :root{
+    --blue:#3B6EF6; --green:#2BA471; --warn:#E8590C;
+    --bg:#F5F6F8; --card:#FFFFFF; --ink:#1A1D1F; --sub:#6B7280; --line:#E5E7EB;
+    --sidebar:#15203B; --side-fg:#C7D0E0; --side-head:#7E8AA3;
+    --soft:#EEF1F6;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif;
+    background:#dfe3ea; color:var(--ink); display:flex; height:100vh; overflow:hidden;
+  }
+  .num{font-variant-numeric:tabular-nums;}
+  /* ---------- 侧边栏 ---------- */
+  .sidebar{width:240px; background:var(--sidebar); color:var(--side-fg); display:flex; flex-direction:column; flex:0 0 auto;}
+  .brand{display:flex; align-items:center; gap:10px; padding:20px 20px 8px; color:#fff; font-weight:800; font-size:16px;}
+  .brand .logo{width:30px; height:30px; border-radius:8px; background:var(--blue); display:flex; align-items:center; justify-content:center; color:#fff; font-size:16px;}
+  .nav{flex:1; overflow-y:auto; padding:8px 12px;}
+  .nav-group{font-size:11px; font-weight:700; letter-spacing:.6px; color:var(--side-head); padding:14px 12px 6px;}
+  .nav-item{display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:8px; font-size:13.5px; cursor:pointer; color:var(--side-fg);}
+  .nav-item:hover{background:#1f2a44;}
+  .nav-item.active{background:var(--blue); color:#fff; font-weight:700;}
+  .nav-item .ic{width:19px; text-align:center;}
+  .side-cta{margin:12px 16px 18px;}
+  .side-cta button{width:100%; background:var(--blue); color:#fff; border:none; border-radius:10px; padding:12px; font-weight:700; font-size:14px; cursor:pointer;}
+  /* ---------- 主区 ---------- */
+  .main{flex:1; display:flex; flex-direction:column; min-width:0;}
+  .topbar{height:60px; background:var(--bg); display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid var(--line);}
+  .topbar h1{font-size:18px; font-weight:800;}
+  .topbar .right{display:flex; align-items:center; gap:14px;}
+  .ledger-name{font-weight:700; font-size:14px;}
+  .sync{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--sub);}
+  .dot{width:9px; height:9px; border-radius:50%; background:var(--green);}
+  .btn-primary{background:var(--blue); color:#fff; border:none; border-radius:10px; padding:9px 16px; font-weight:700; font-size:13px; cursor:pointer;}
+  .btn-ghost{background:#fff; color:var(--blue); border:1px solid var(--blue); border-radius:10px; padding:8px 14px; font-weight:700; font-size:13px; cursor:pointer;}
+  .content{flex:1; overflow-y:auto; padding:24px;}
+  .wrap{max-width:1180px; margin:0 auto;}
+  /* ---------- 卡片/网格 ---------- */
+  .grid{display:grid; gap:16px;}
+  .grid.c4{grid-template-columns:repeat(4,1fr);}
+  .grid.c3{grid-template-columns:repeat(3,1fr);}
+  .grid.c2{grid-template-columns:2fr 1fr;}
+  .card{background:var(--card); border-radius:14px; padding:18px; box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .metric .label{font-size:13px; color:var(--sub); margin-bottom:8px;}
+  .metric .val{font-size:26px; font-weight:800; letter-spacing:-.5px;}
+  .metric .sub{font-size:12px; color:var(--sub); margin-top:6px;}
+  .sec-title{font-size:15px; font-weight:800; margin:0 0 12px;}
+  /* ---------- 趋势 / 图表 ---------- */
+  .chart{display:flex; align-items:flex-end; gap:8px; height:160px; padding-top:8px;}
+  .bar{flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; justify-content:flex-end; height:100%;}
+  .bar .col{width:100%; border-radius:5px 5px 0 0; background:var(--blue); min-height:3px;}
+  .bar .col.alt{background:var(--green);}
+  .bar .lab{font-size:11px; color:var(--sub);}
+  .donut{width:160px; height:160px; border-radius:50%; margin:0 auto;
+    background:conic-gradient(var(--warn) 0 34%, var(--blue) 34% 58%, var(--green) 58% 74%, #f0b429 74% 88%, #9aa0a6 88% 100%);}
+  .legend{display:flex; flex-wrap:wrap; gap:10px 18px; margin-top:14px; font-size:12px; color:var(--sub);}
+  .legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:middle;}
+  /* ---------- 交易表 ---------- */
+  .tabs{display:flex; gap:4px; background:var(--soft); padding:4px; border-radius:10px; width:fit-content; margin-bottom:14px;}
+  .tabs .t{padding:7px 16px; border-radius:8px; font-size:13px; font-weight:600; color:var(--sub); cursor:pointer;}
+  .tabs .t.active{background:#fff; color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.06);}
+  .filterbar{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; align-items:center;}
+  .chip{background:#fff; border:1px solid var(--line); border-radius:999px; padding:7px 14px; font-size:12.5px; color:var(--ink); cursor:pointer; display:flex; align-items:center; gap:6px;}
+  .chip.active{border-color:var(--blue); color:var(--blue); background:#eef3ff;}
+  .search{flex:1; min-width:180px; background:#fff; border:1px solid var(--line); border-radius:999px; padding:8px 14px; font-size:13px; color:var(--sub);}
+  table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  th,td{text-align:left; padding:12px 10px; border-bottom:1px solid var(--line);}
+  th{font-size:12px; color:var(--sub); font-weight:600;}
+  td.amt{text-align:right; font-weight:700;}
+  .cat{display:inline-flex; align-items:center; gap:7px;}
+  .cat .ico{width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:700;}
+  .tag{font-size:11px; padding:2px 8px; border-radius:999px; background:var(--soft); color:var(--sub);}
+  /* ---------- 账户 ---------- */
+  .acc-card{display:flex; align-items:center; gap:12px; padding:14px; border:1px solid var(--line); border-radius:12px;}
+  .acc-card .ico{width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:17px;}
+  .acc-card .nm{font-weight:700; font-size:14px;}
+  .acc-card .bal{margin-left:auto; font-weight:800; font-size:16px;}
+  /* ---------- 分类树 ---------- */
+  .cat-row{display:flex; align-items:center; gap:12px; padding:12px 10px; border-bottom:1px solid var(--line);}
+  .cat-row .ico{width:32px; height:32px; border-radius:9px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px; font-weight:700;}
+  .cat-row .sub{font-size:12px; color:var(--sub);}
+  /* ---------- 弹窗 ---------- */
+  .mask{position:fixed; inset:0; background:rgba(20,28,48,.45); display:none; align-items:center; justify-content:center; z-index:50;}
+  .mask.show{display:flex;}
+  .modal{background:#fff; border-radius:18px; width:460px; max-width:92vw; box-shadow:0 24px 60px rgba(0,0,0,.3); overflow:hidden;}
+  .modal-head{display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--line);}
+  .modal-head h3{font-size:17px; font-weight:800;}
+  .modal-body{padding:20px;}
+  .seg{display:flex; background:var(--soft); border-radius:10px; padding:4px; margin-bottom:16px;}
+  .seg button{flex:1; border:none; background:transparent; padding:9px; border-radius:8px; font-weight:700; font-size:13px; color:var(--sub); cursor:pointer;}
+  .seg button.active{background:#fff; color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.06);}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12.5px; color:var(--sub); margin-bottom:6px; font-weight:600;}
+  .input{width:100%; background:var(--soft); border:none; border-radius:10px; padding:12px 14px; font-size:14px;}
+  .selbox{width:100%; background:var(--soft); border-radius:10px; padding:12px 14px; font-size:14px; display:flex; align-items:center; gap:10px; cursor:pointer;}
+  .amount-input{font-size:30px; font-weight:800; letter-spacing:-.5px; background:var(--soft); border:none; border-radius:12px; padding:14px; width:100%;}
+  .modal-foot{display:flex; gap:10px; padding:0 20px 20px;}
+  .modal-foot button{flex:1;}
+  .link-btn{background:none; border:none; color:var(--blue); font-weight:700; font-size:13px; cursor:pointer; margin-top:4px;}
+  /* 图标/颜色选择器 */
+  .icongrid{display:flex; flex-wrap:wrap; gap:8px;}
+  .icongrid .g{width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:16px; cursor:pointer; border:2px solid transparent;}
+  .icongrid .g.sel{border-color:var(--ink);}
+  .colorgrid{display:flex; gap:8px; margin-top:8px;}
+  .colorgrid .c{width:26px; height:26px; border-radius:50%; cursor:pointer; border:2px solid transparent;}
+  .colorgrid .c.sel{border-color:var(--ink);}
+</style>
+</head>
+<body>
+
+<!-- ============ 侧边栏 ============ -->
+<aside class="sidebar">
+  <div class="brand"><div class="logo">¥</div>家庭记账</div>
+  <nav class="nav" id="nav">
+    <div class="nav-group">概览</div>
+    <div class="nav-item active" data-screen="overview"><span class="ic">▦</span>总览</div>
+    <div class="nav-item" data-screen="transactions"><span class="ic">≣</span>交易流水</div>
+    <div class="nav-group">管理</div>
+    <div class="nav-item" data-screen="accounts"><span class="ic">▤</span>账户管理</div>
+    <div class="nav-item" data-screen="categories"><span class="ic">▥</span>分类管理</div>
+    <div class="nav-item" data-screen="tags"><span class="ic">▦</span>标签</div>
+    <div class="nav-item" data-screen="members"><span class="ic">◯</span>成员管理</div>
+    <div class="nav-group">工具</div>
+    <div class="nav-item" data-screen="import"><span class="ic">⇄</span>导入与导出</div>
+    <div class="nav-item" data-screen="reports"><span class="ic">▥</span>报表分析</div>
+    <div class="nav-item" data-screen="sync"><span class="ic">↻</span>同步管理</div>
+    <div class="nav-group">系统</div>
+    <div class="nav-item" data-screen="settings"><span class="ic">⚙</span>设置</div>
+  </nav>
+  <div class="side-cta"><button onclick="openRecord()">＋ 记一笔</button></div>
+</aside>
+
+<!-- ============ 主区 ============ -->
+<div class="main">
+  <div class="topbar">
+    <h1 id="pageTitle">总览</h1>
+    <div class="right">
+      <span class="ledger-name">我的家庭账本</span>
+      <span class="sync"><span class="dot"></span>已同步</span>
+      <button class="btn-primary" onclick="openRecord()">记一笔</button>
+      <span style="width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">我</span>
+    </div>
+  </div>
+  <div class="content">
+    <div class="wrap" id="screen"></div>
+  </div>
+</div>
+
+<!-- ============ 记一笔弹窗 ============ -->
+<div class="mask" id="recordMask">
+  <div class="modal">
+    <div class="modal-head"><h3>记一笔</h3><span style="cursor:pointer;color:var(--sub);font-size:20px;" onclick="closeModal('recordMask')">✕</span></div>
+    <div class="modal-body">
+      <div class="seg" id="recSeg">
+        <button class="active" data-mode="expense">支出</button>
+        <button data-mode="income">收入</button>
+        <button data-mode="transfer">转账</button>
+      </div>
+      <div class="field">
+        <input class="amount-input num" value="38.50" />
+      </div>
+      <div class="grid c2" style="gap:10px;">
+        <div class="field" id="fCategory">
+          <label>分类</label>
+          <div class="selbox"><span class="cat"><span class="ico" style="background:#E8590C">食</span>食品饮料</span><span style="margin-left:auto;color:var(--sub);">▾</span></div>
+        </div>
+        <div class="field">
+          <label>账户</label>
+          <div class="selbox"><span class="cat"><span class="ico" style="background:#2BA471">支</span>招商银行 (¥ 12,480.00)</span><span style="margin-left:auto;color:var(--sub);">▾</span></div>
+        </div>
+      </div>
+      <div class="grid c2" style="gap:10px;">
+        <div class="field">
+          <label>日期</label>
+          <input class="input num" value="2026-08-17" />
+        </div>
+        <div class="field">
+          <label>标签</label>
+          <input class="input" placeholder="添加标签，回车确认" />
+        </div>
+      </div>
+      <div class="field">
+        <label>描述</label>
+        <input class="input" placeholder="如：超市采购" />
+      </div>
+      <button class="link-btn" onclick="alert('展开双录分录表单（高级模式）')">高级：双录分录 →</button>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('recordMask')">取消</button>
+      <button class="btn-primary" onclick="closeModal('recordMask');alert('已保存（生成复式 posting）')">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 新建账户弹窗 ============ -->
+<div class="mask" id="accountMask">
+  <div class="modal">
+    <div class="modal-head"><h3>新建账户</h3><span style="cursor:pointer;color:var(--sub);font-size:20px;" onclick="closeModal('accountMask')">✕</span></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>账户名 *</label>
+        <input class="input" placeholder="如 支付宝 / 微信钱包" />
+      </div>
+      <div class="grid c2" style="gap:10px;">
+        <div class="field">
+          <label>分类</label>
+          <div class="selbox">资产<span style="margin-left:auto;color:var(--sub);">▾</span></div>
+        </div>
+        <div class="field">
+          <label>子类型</label>
+          <div class="selbox">借记账户<span style="margin-left:auto;color:var(--sub);">▾</span></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>图标</label>
+        <div class="icongrid">
+          <div class="g sel" style="background:#3B6EF6">¥</div>
+          <div class="g" style="background:#2BA471">支</div>
+          <div class="g" style="background:#E8590C">信</div>
+          <div class="g" style="background:#9b59b6">投</div>
+          <div class="g" style="background:#f0b429">现</div>
+          <div class="g" style="background:#16a085">汇</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>颜色</label>
+        <div class="colorgrid">
+          <div class="c sel" style="background:#3B6EF6"></div>
+          <div class="c" style="background:#2BA471"></div>
+          <div class="c" style="background:#E8590C"></div>
+          <div class="c" style="background:#9b59b6"></div>
+          <div class="c" style="background:#f0b429"></div>
+          <div class="c" style="background:#16a085"></div>
+        </div>
+      </div>
+      <div class="grid c2" style="gap:10px;">
+        <div class="field">
+          <label>币种</label>
+          <input class="input" value="CNY" />
+        </div>
+        <div class="field">
+          <label>期初余额</label>
+          <input class="input num" value="0.00" />
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('accountMask')">取消</button>
+      <button class="btn-primary" onclick="closeModal('accountMask');alert('已创建（自动生成期初余额交易）')">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const titles = {overview:'总览',transactions:'交易流水',accounts:'账户管理',categories:'分类管理',tags:'标签',members:'成员管理',import:'导入与导出',reports:'报表分析',sync:'同步管理',settings:'设置'};
+
+const screens = {
+  overview: `
+    <div class="grid c4" style="margin-bottom:16px;">
+      <div class="card metric"><div class="label">净资产</div><div class="val num">¥ 286,420.50</div><div class="sub">资产 − 负债</div></div>
+      <div class="card metric"><div class="label">总资产</div><div class="val num">¥ 412,860.00</div></div>
+      <div class="card metric"><div class="label">总负债</div><div class="val num">¥ 126,439.50</div></div>
+      <div class="card metric"><div class="label">本月支出 / 收入</div><div class="val num">¥ 6,210 / 18,400</div></div>
+    </div>
+    <div class="grid c2">
+      <div class="card">
+        <div class="sec-title">收支趋势（近 12 个月）</div>
+        <div class="chart">
+          ${[2,5,3,7,4,6,8,5,3,6,4,7].map((v,i)=>`<div class="bar"><div class="col" style="height:${v*10}%"></div><div class="lab">${i+1}月</div></div>`).join('')}
+        </div>
+      </div>
+      <div class="card">
+        <div class="sec-title">最近交易</div>
+        <div style="display:flex;flex-direction:column;">
+          ${[['超市采购','食品饮料','-38.50','08-17'],['工资','薪资收入','+18,400.00','08-15'],['房贷','住房贷款','-4,200.00','08-10'],['打车','交通','-23.00','08-09'],['电影','娱乐','-86.00','08-08']].map(r=>`
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">
+              <span class="cat"><span class="ico" style="background:var(--blue);width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">${r[1][0]}</span></span>
+              <div style="flex:1;"><div style="font-weight:600;font-size:13.5px;">${r[0]}</div><div style="font-size:12px;color:var(--sub);">${r[1]} · ${r[3]}</div></div>
+              <div class="num" style="font-weight:700;color:${r[2][0]==='+'?'var(--green)':'var(--ink)'};">${r[2]}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>`,
+  transactions: `
+    <div class="filterbar">
+      <div class="tabs">
+        <div class="t active">交易列表</div><div class="t">交易日历</div>
+      </div>
+      <span class="chip active">全部</span><span class="chip">支出</span><span class="chip">收入</span><span class="chip">转账</span>
+      <span class="chip">本月 ▾</span><span class="chip">分类 ▾</span><span class="chip">账户 ▾</span><span class="chip">标签 ▾</span>
+      <input class="search" placeholder="搜索描述…" />
+      <button class="btn-ghost" onclick="openRecord()">＋ 添加</button>
+    </div>
+    <div class="card" style="padding:0;">
+      <table>
+        <thead><tr><th>日期</th><th>描述</th><th>分类</th><th>账户</th><th>标签</th><th class="amt">金额</th></tr></thead>
+        <tbody>
+          ${[['08-17','超市采购','食品饮料','招商银行',['日常'],'-38.50'],['08-15','工资','薪资收入','招商银行',[],'+18,400.00'],['08-10','房贷','住房贷款','建设银行',['固定'],'-4,200.00'],['08-09','打车','交通','微信钱包',['出差'],'-23.00'],['08-08','电影票','娱乐','支付宝',[],'-86.00'],['08-05','餐饮','餐饮美食','招商银行',['聚会'],'-156.00']].map(r=>`
+            <tr>
+              <td class="num">${r[0]}</td><td style="font-weight:600;">${r[1]}</td>
+              <td><span class="cat"><span class="ico" style="background:var(--blue);width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;">${r[2][0]}</span>${r[2]}</span></td>
+              <td>${r[3]}</td>
+              <td>${r[4].map(t=>`<span class="tag">${t}</span>`).join(' ') || '—'}</td>
+              <td class="amt num" style="color:${r[5][0]==='+'?'var(--green)':'var(--ink)'};">${r[5]}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`,
+  accounts: `
+    <div class="grid c2">
+      <div class="card">
+        <div class="sec-title">账户类型</div>
+        ${[['资产','¥ 412,860.00','#2BA471'],['负债','¥ 126,439.50','#E8590C'],['权益','¥ 286,420.50','#3B6EF6']].map(a=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);">
+            <span style="font-weight:600;">${a[0]}</span><span class="num" style="font-weight:800;color:${a[2]};">${a[1]}</span>
+          </div>`).join('')}
+        <button class="link-btn" onclick="openAccount()" style="margin-top:10px;">＋ 新建账户</button>
+      </div>
+      <div class="card">
+        <div class="sec-title">我的账户</div>
+        ${[['招商银行','#2BA471','¥ 12,480.00'],['微信钱包','#16a085','¥ 860.30'],['支付宝','#3B6EF6','¥ 3,210.00'],['建设银行(房贷)','#E8590C','-¥ 126,439.50'],['现金','#f0b429','¥ 540.00']].map(a=>`
+          <div class="acc-card" style="border:none;padding:10px 0;border-bottom:1px solid var(--line);">
+            <span class="ico" style="background:${a[1]}">${a[0][0]}</span>
+            <span class="nm">${a[0]}</span><span class="bal num">${a[2]}</span>
+          </div>`).join('')}
+      </div>
+    </div>`,
+  categories: `
+    <div class="grid c2">
+      <div class="card"><div class="sec-title">支出分类（二级）</div>
+        ${[['食品饮料','#E8590C','日常','餐饮','买菜'],['交通','#3B6EF6','打车','地铁','加油'],['娱乐','#9b59b6','电影','游戏'],['居家','#2BA471','物业','水电']].map(c=>`
+          <div class="cat-row"><span class="ico" style="background:${c[1]}">${c[0][0]}</span>
+            <div><div style="font-weight:700;">${c[0]}</div><div class="sub">三级：${c[2]} · ${c[3]} · ${c[4]}</div></div>
+            <span style="margin-left:auto;color:var(--sub);cursor:pointer;">编辑 ▾</span></div>`).join('')}
+        <button class="link-btn" style="margin-top:8px;">＋ 新增二级分类</button>
+      </div>
+      <div class="card"><div class="sec-title">收入分类（二级）</div>
+        ${[['薪资收入','#2BA471','工资','奖金'],['投资收益','#3B6EF6','利息','分红'],['其他收入','#9aa0a6','报销','红包']].map(c=>`
+          <div class="cat-row"><span class="ico" style="background:${c[1]}">${c[0][0]}</span>
+            <div><div style="font-weight:700;">${c[0]}</div><div class="sub">三级：${c[2]} · ${c[3]}</div></div>
+            <span style="margin-left:auto;color:var(--sub);cursor:pointer;">编辑 ▾</span></div>`).join('')}
+      </div>
+    </div>`,
+  tags: `
+    <div class="card"><div class="sec-title">标签</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        ${[['日常',12],['出差',5],['聚会',3],['固定',8],['报销',2],['家庭',6]].map(t=>`<span class="tag" style="font-size:13px;padding:6px 12px;"># ${t[0]} <span style="color:var(--sub);">${t[1]}</span></span>`).join('')}
+      </div>
+      <button class="link-btn" style="margin-top:14px;">＋ 新建标签</button>
+    </div>`,
+  reports: `
+    <div class="grid c2" style="margin-bottom:16px;">
+      <div class="card"><div class="sec-title">支出分类分析</div>
+        <div class="donut"></div>
+        <div class="legend">
+          <span><i style="background:#E8590C"></i>食品饮料 34%</span>
+          <span><i style="background:#3B6EF6"></i>交通 24%</span>
+          <span><i style="background:#2BA471"></i>居家 16%</span>
+          <span><i style="background:#f0b429"></i>娱乐 14%</span>
+          <span><i style="background:#9aa0a6"></i>其他 12%</span>
+        </div>
+      </div>
+      <div class="card"><div class="sec-title">月度收支趋势</div>
+        <div class="chart">
+          ${[3,5,4,7,5,6,8,6,4,7,5,8].map((v,i)=>`<div class="bar"><div class="col" style="height:${v*9}%"></div><div class="lab">${i+1}月</div></div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="card"><div class="sec-title">资产趋势（净资产/总资产/总负债）</div>
+      <div class="chart">
+        ${[5,6,6,7,7,8,8,9,9,10,10,11].map((v,i)=>`<div class="bar"><div class="col alt" style="height:${v*9}%"></div><div class="lab">${i+1}月</div></div>`).join('')}
+      </div>
+    </div>`,
+};
+
+function render(name){
+  document.getElementById('screen').innerHTML = screens[name] || '<div class="card">建设中…</div>';
+  document.getElementById('pageTitle').textContent = titles[name] || '家庭记账';
+}
+document.querySelectorAll('.nav-item').forEach(it=>{
+  it.onclick=()=>{
+    document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+    it.classList.add('active');
+    render(it.dataset.screen);
+  };
+});
+// 弹窗
+function openRecord(){document.getElementById('recordMask').classList.add('show');}
+function openAccount(){document.getElementById('accountMask').classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+document.querySelectorAll('.mask').forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove('show');});
+// 记一笔 Segment 切换
+document.querySelectorAll('#recSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#recSeg button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  const f=document.getElementById('fCategory');
+  f.style.display = b.dataset.mode==='transfer' ? 'none':'block';
+});
+render('overview');
+</script>
+</body>
+</html>

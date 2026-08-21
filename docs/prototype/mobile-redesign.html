@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FamBean · 移动端优化设计稿（高保真）</title>
+<style>
+  :root{
+    --blue:#3B6EF6; --green:#2BA471; --warn:#E8590C;
+    --bg:#F5F6F8; --card:#FFFFFF; --ink:#1A1D1F; --sub:#6B7280; --line:#E5E7EB;
+    --soft:#EEF1F6;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; display:flex; align-items:center; justify-content:center; background:#d0d4dd; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif;}
+  .phone{width:390px; height:844px; background:var(--bg); border-radius:44px; box-shadow:0 24px 70px rgba(0,0,0,.28); border:10px solid #111; overflow:hidden; position:relative; display:flex; flex-direction:column;}
+  .statusbar{height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 22px; font-size:13px; font-weight:700; background:var(--bg); flex:0 0 auto;}
+  .screen{flex:1; overflow-y:auto; position:relative; display:none; flex-direction:column;}
+  .screen.active{display:flex;}
+  .tabbar{height:56px; background:#fff; border-top:1px solid var(--line); display:flex; flex:0 0 auto;}
+  .tab{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:11px; color:var(--sub); cursor:pointer;}
+  .tab .ic{font-size:18px;}
+  .tab.active{color:var(--blue); font-weight:700;}
+  .num{font-variant-numeric:tabular-nums;}
+  .card{background:#fff; border-radius:14px; padding:14px; margin:0 14px 12px; box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .muted{color:var(--sub); font-size:12px;}
+  .row{display:flex; align-items:center; justify-content:space-between;}
+  .btn-primary{background:var(--blue); color:#fff; border:none; border-radius:12px; padding:14px; font-weight:700; font-size:16px; width:100%;}
+  .fab{position:absolute; right:18px; bottom:74px; width:56px; height:56px; border-radius:50%; background:var(--blue); color:#fff; font-size:28px; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(59,110,246,.5); cursor:pointer; z-index:20;}
+  /* header */
+  .m-header{padding:8px 14px 4px; display:flex; align-items:center; justify-content:space-between;}
+  .m-header .title{font-size:18px; font-weight:800; display:flex; align-items:center; gap:6px;}
+  .m-header .right{display:flex; gap:10px; align-items:center;}
+  .pill{background:#fff; border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px;}
+  /* calendar */
+  .cal-head{display:flex; align-items:center; justify-content:space-between; padding:10px 14px;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px; padding:0 14px 14px; text-align:center; font-size:13px;}
+  .cal-grid .wd{color:var(--sub); font-size:12px; font-weight:600; padding:6px 0;}
+  .cal-grid .day{aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:12px; padding:4px 0;}
+  .cal-grid .day.today{background:var(--blue); color:#fff;}
+  .cal-grid .day .d{font-weight:600;}
+  .cal-grid .day .amt{font-size:10px; color:var(--warn); margin-top:2px;}
+  .cal-grid .day.today .amt{color:#fff; opacity:.9;}
+  .cal-grid .day .lunar{font-size:9px; color:var(--sub); margin-top:1px;}
+  /* list */
+  .seg{display:flex; background:var(--soft); border-radius:10px; padding:4px; width:fit-content; margin:0 14px 12px;}
+  .seg button{border:none; background:transparent; padding:7px 18px; border-radius:8px; font-weight:700; font-size:13px; color:var(--sub);}
+  .seg button.active{background:#fff; color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.06);}
+  .day-chart{height:90px; display:flex; align-items:flex-end; gap:3px; padding:0 14px 10px;}
+  .day-chart .b{flex:1; background:var(--blue); border-radius:3px 3px 0 0; min-height:3px;}
+  .txn-group{padding:0 14px 8px;}
+  .txn-group .date{font-size:13px; color:var(--sub); font-weight:600; margin:6px 0;}
+  .txn-item{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line);}
+  .txn-item:last-child{border-bottom:none;}
+  .txn-item .ico{width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px; font-weight:700;}
+  .txn-item .info{flex:1;}
+  .txn-item .name{font-weight:600; font-size:14px;}
+  .txn-item .sub{font-size:12px; color:var(--sub);}
+  .txn-item .amt{font-weight:800; font-size:15px;}
+  /* assets */
+  .networth-card{text-align:center; padding:22px 14px;}
+  .networth-card .label{font-size:13px; color:var(--sub); margin-bottom:6px;}
+  .networth-card .val{font-size:36px; font-weight:800; letter-spacing:-1px;}
+  .asset-summary{display:flex; gap:10px; padding:0 14px 14px;}
+  .asset-summary .card{flex:1; text-align:center; margin:0;}
+  .asset-summary .v{font-size:18px; font-weight:800; margin-top:4px;}
+  .acc-section{margin:0 14px 12px;}
+  .acc-section .title{font-size:14px; font-weight:700; margin-bottom:8px; padding:0 4px;}
+  .acc-row{display:flex; align-items:center; gap:12px; padding:12px 14px; background:#fff; border-bottom:1px solid var(--line);}
+  .acc-row:first-child{border-radius:14px 14px 0 0;}
+  .acc-row:last-child{border-radius:0 0 14px 14px; border-bottom:none;}
+  .acc-row .ico{width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px; font-weight:700;}
+  .acc-row .bal{margin-left:auto; font-weight:800;}
+  /* more */
+  .more-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:14px;}
+  .more-grid .it{background:#fff; border-radius:14px; padding:14px 4px; text-align:center; font-size:12px; color:var(--ink); font-weight:600;}
+  .more-grid .it .ic{font-size:22px; color:var(--blue); margin-bottom:6px;}
+  /* stats */
+  .stats-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:0 14px 14px;}
+  .stats-grid .card{margin:0; text-align:center;}
+  .stats-grid .v{font-size:18px; font-weight:800; margin-top:4px;}
+  .stats-grid .delta{font-size:11px; color:var(--sub); margin-top:2px;}
+  .chart-line{height:120px; display:flex; align-items:flex-end; justify-content:space-between; padding:10px 0;}
+  .chart-line .pt{width:6px; border-radius:3px; background:var(--warn);}
+  /* add account */
+  .form-group{padding:14px; background:#fff; margin-bottom:10px;}
+  .form-row{display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line);}
+  .form-row:last-child{border-bottom:none;}
+  .form-row .k{font-size:14px; color:var(--ink);}
+  .form-row .v{font-size:14px; color:var(--sub); display:flex; align-items:center; gap:8px;}
+  .form-row input{border:none; text-align:right; font-size:14px; color:var(--ink); outline:none;}
+  .toggle{width:44px; height:26px; border-radius:999px; background:#ccc; position:relative;}
+  .toggle.on{background:var(--blue);}
+  .toggle::after{content:''; position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%; background:#fff; transition:.2s;}
+  .toggle.on::after{left:20px;}
+  /* record */
+  .rec-amt{text-align:center; padding:24px 14px;}
+  .rec-amt input{width:100%; border:none; background:transparent; font-size:48px; font-weight:800; text-align:center; outline:none;}
+  .rec-cats{display:flex; flex-wrap:wrap; gap:10px; padding:0 14px 14px;}
+  .rec-cats .c{width:calc(20% - 8px); aspect-ratio:1; border-radius:14px; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-size:11px; color:var(--sub);}
+  .rec-cats .c .ico{width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px;}
+  /* bottom sheet */
+  .sheet{position:absolute; left:0; right:0; bottom:0; background:#fff; border-radius:20px 20px 0 0; padding:16px; transform:translateY(110%); transition:.25s; z-index:40;}
+  .sheet.show{transform:translateY(0);}
+  .sheet-mask{position:absolute; inset:0; background:rgba(0,0,0,.35); display:none; z-index:35;}
+  .sheet-mask.show{display:block;}
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="statusbar"><span>17:02</span><div style="display:flex;gap:5px;"><span>📶</span><span>🔋</span></div></div>
+
+  <!-- ===== 账单首页（日历） ===== -->
+  <div class="screen active" id="scr-bills-cal">
+    <div class="m-header">
+      <div class="title" onclick="openSheet()">默认账本 ▾</div>
+      <div class="right"><span class="pill">2026年08月 ▾</span><span style="font-size:18px;">🔍</span><span style="font-size:18px;" onclick="go('scr-stats')">📊</span></div>
+    </div>
+    <div class="cal-head row" style="padding:0 18px;">
+      <span style="font-weight:800;">2026年8月</span>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:18px;cursor:pointer;" onclick="go('scr-bills-list')">≣</span>
+        <span style="font-size:18px;">↻</span>
+        <span style="font-size:18px;">‹</span><span style="font-size:18px;">›</span>
+      </div>
+    </div>
+    <div class="cal-grid">
+      <div class="wd">日</div><div class="wd">一</div><div class="wd">二</div><div class="wd">三</div><div class="wd">四</div><div class="wd">五</div><div class="wd">六</div>
+      <!-- 示例日期 -->
+      ${(()=>{let h='';for(let i=1;i<=31;i++){const today=i===18;const has=[5,12,17,25].includes(i);h+=`<div class="day ${today?'today':''}"><span class="d">${i}</span>${has?`<span class="amt">-${(i%7+1)*10}</span>`:''}<span class="lunar">${['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十'][i%10]}</span></div>`;}return h;})()}
+    </div>
+    <div class="card">
+      <div class="row" style="margin-bottom:10px;"><span style="font-weight:700;">预算</span><span class="pill" style="font-size:11px;">月预算 ▾</span></div>
+      <div class="muted" style="text-align:center;padding:20px 0;">尚未设置预算<br><span style="font-size:32px;color:var(--blue);">+</span></div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:10px;">快捷记录</div>
+      <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;">
+        ${[['餐饮','#E8590C'],['交通','#3B6EF6'],['购物','#9b59b6'],['娱乐','#f0b429'],['餐饮','#2BA471']].map(c=>`<div style="flex:0 0 auto;text-align:center;"><div style="width:48px;height:48px;border-radius:14px;background:${c[1]};color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;">${c[0][0]}</div><div style="font-size:11px;margin-top:4px;">${c[0]}</div></div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 账单列表 ===== -->
+  <div class="screen" id="scr-bills-list">
+    <div class="m-header"><div class="title" onclick="openSheet()">默认账本 ▾</div><div class="right"><span class="pill">2026年08月 ▾</span><span style="font-size:18px;">🔍</span><span style="font-size:18px;" onclick="go('scr-stats')">📊</span></div></div>
+    <div style="text-align:center;padding:10px 0;"><div class="muted">本月支出</div><div class="num" style="font-size:34px;font-weight:800;">¥ 6,210.00</div></div>
+    <div class="seg" style="margin:0 auto 12px;"><button class="active">支出</button><button>收入</button></div>
+    <div class="day-chart">${Array.from({length:31},(_,i)=>`<div class="b" style="height:${Math.max(4,Math.random()*80)}%"></div>`).join('')}</div>
+    <div class="txn-group">
+      <div class="date">今天 8月17日 <span style="float:right;">支出 38.50</span></div>
+      <div class="txn-item"><div class="ico" style="background:#E8590C">食</div><div class="info"><div class="name">超市采购</div><div class="sub">食品饮料 · 招商银行</div></div><div class="amt num" style="color:var(--warn)">-38.50</div></div>
+    </div>
+    <div class="txn-group">
+      <div class="date">8月15日 <span style="float:right;">收入 18,400.00</span></div>
+      <div class="txn-item"><div class="ico" style="background:#2BA471">资</div><div class="info"><div class="name">工资</div><div class="sub">薪资收入 · 招商银行</div></div><div class="amt num" style="color:var(--green)">+18,400.00</div></div>
+    </div>
+    <div class="txn-group">
+      <div class="date">8月10日 <span style="float:right;">支出 4,200.00</span></div>
+      <div class="txn-item"><div class="ico" style="background:#3B6EF6">住</div><div class="info"><div class="name">房贷</div><div class="sub">住房贷款 · 建设银行</div></div><div class="amt num" style="color:var(--warn)">-4,200.00</div></div>
+    </div>
+  </div>
+
+  <!-- ===== 统计 ===== -->
+  <div class="screen" id="scr-stats">
+    <div class="m-header"><span style="font-size:18px;cursor:pointer;" onclick="go('scr-bills-cal')">‹</span><div class="title" style="margin:0 auto;">2026年8月 ▾</div><span></span></div>
+    <div class="stats-grid">
+      <div class="card"><div class="muted">收入</div><div class="v num">¥18,400</div><div class="delta">上月 0.0%</div></div>
+      <div class="card"><div class="muted">支出</div><div class="v num">¥6,210</div><div class="delta">上月 0.0%</div></div>
+      <div class="card"><div class="muted">结余</div><div class="v num">¥12,190</div></div>
+      <div class="card"><div class="muted">日均消费</div><div class="v num">¥207</div></div>
+      <div class="card"><div class="muted">记账笔数</div><div class="v num">12</div></div>
+      <div class="card"><div class="muted">优惠</div><div class="v num">¥0</div></div>
+    </div>
+    <div class="card">
+      <div class="row" style="margin-bottom:10px;"><span style="font-weight:700;">收支趋势</span><div class="seg"><button class="active">支出</button><button>收入</button></div></div>
+      <div class="chart-line">${Array.from({length:30},()=>`<div class="pt" style="height:${Math.max(10,Math.random()*100)}px;"></div>`).join('')}</div>
+    </div>
+    <div class="card">
+      <div class="row" style="margin-bottom:10px;"><span style="font-weight:700;">分类占比</span><div class="seg"><button class="active">支出</button><button>收入</button></div></div>
+      <div style="width:140px;height:140px;border-radius:50%;margin:0 auto;background:conic-gradient(#E8590C 0 34%,#3B6EF6 34% 58%,#2BA471 58% 74%,#f0b429 74% 88%,#9aa0a6 88% 100%);"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:center;margin-top:14px;font-size:12px;color:var(--sub);">
+        <span><i style="display:inline-block;width:8px;height:8px;background:#E8590C;border-radius:2px;margin-right:4px;"></i>餐饮 34%</span>
+        <span><i style="display:inline-block;width:8px;height:8px;background:#3B6EF6;border-radius:2px;margin-right:4px;"></i>交通 24%</span>
+        <span><i style="display:inline-block;width:8px;height:8px;background:#2BA471;border-radius:2px;margin-right:4px;"></i>居家 16%</span>
+      </div>
+    </div>
+    <div style="height:60px;"></div>
+  </div>
+
+  <!-- ===== 资产 ===== -->
+  <div class="screen" id="scr-assets">
+    <div class="m-header"><div class="title">资产</div><div class="right"><span style="font-size:18px;" onclick="go('scr-stats')">📊</span></div></div>
+    <div class="networth-card">
+      <div class="label">净资产 <span style="font-size:14px;">👁</span></div>
+      <div class="val num">¥ 286,420.50</div>
+    </div>
+    <div class="asset-summary">
+      <div class="card"><div class="muted">总资产</div><div class="v num" style="color:var(--green)">¥412,860</div></div>
+      <div class="card"><div class="muted">总负债</div><div class="v num" style="color:var(--warn)">¥126,440</div></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <div class="row" style="padding:4px 0;"><span style="font-weight:700;">借出/借入</span><span class="muted">净借出 ¥0 ></span></div>
+      <div class="row" style="padding:10px 0;border-top:1px solid var(--line);margin-top:10px;"><span><span style="color:var(--green);font-size:16px;">↑</span> 借出</span><span class="num">¥0</span></div>
+      <div class="row" style="padding:10px 0;"><span><span style="color:var(--warn);font-size:16px;">↓</span> 借入</span><span class="num">¥0</span></div>
+    </div>
+    <div class="acc-section"><div class="title">资产</div></div>
+    <div class="acc-row"><div class="ico" style="background:#2BA471">招</div><span style="font-weight:600;">招商银行</span><span class="bal num">¥12,480.00</span></div>
+    <div class="acc-row"><div class="ico" style="background:#3B6EF6">支</div><span style="font-weight:600;">支付宝</span><span class="bal num">¥3,210.00</span></div>
+    <div class="acc-row"><div class="ico" style="background:#16a085">微</div><span style="font-weight:600;">微信钱包</span><span class="bal num">¥860.30</span></div>
+    <div class="acc-section" style="margin-top:12px;"><div class="title">负债</div></div>
+    <div class="acc-row"><div class="ico" style="background:#E8590C">建</div><span style="font-weight:600;">建设银行</span><span class="bal num" style="color:var(--warn)">-¥126,439.50</span></div>
+    <div style="text-align:center;padding:18px;"><button class="pill" style="padding:10px 24px;" onclick="go('scr-account-add')">＋ 新增</button></div>
+  </div>
+
+  <!-- ===== 更多 ===== -->
+  <div class="screen" id="scr-more">
+    <div class="m-header"><div class="title">更多</div></div>
+    <div class="more-grid">
+      <div class="it" onclick="go('scr-settings')"><div class="ic">⚙</div>设置</div>
+      <div class="it"><div class="ic">👥</div>成员</div>
+      <div class="it"><div class="ic">⇄</div>导入导出</div>
+      <div class="it"><div class="ic">↻</div>同步</div>
+      <div class="it" onclick="go('scr-stats')"><div class="ic">📊</div>报表</div>
+      <div class="it"><div class="ic">🪙</div>商品</div>
+      <div class="it"><div class="ic">🏷</div>标签</div>
+      <div class="it"><div class="ic">ⓘ</div>关于</div>
+    </div>
+  </div>
+
+  <!-- ===== 添加账户 ===== -->
+  <div class="screen" id="scr-account-add">
+    <div class="m-header"><span style="font-size:18px;cursor:pointer;" onclick="go('scr-assets')">‹</span><div class="title" style="margin:0 auto;">添加新账户</div><span style="color:var(--blue);font-weight:700;">保存</span></div>
+    <div style="text-align:center;padding:14px 0;">
+      <div style="width:70px;height:70px;border-radius:20px;background:#f0b429;margin:0 auto;display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;font-weight:700;">现</div>
+      <div style="margin-top:8px;color:var(--blue);font-size:13px;font-weight:700;">更换图标</div>
+    </div>
+    <div class="form-group">
+      <div class="form-row"><span class="k">账户类型</span><span class="v">现金 ></span></div>
+      <div class="form-row"><span class="k">名称</span><input placeholder="输入账户名称" /></div>
+      <div class="form-row"><span class="k">卡号</span><input placeholder="选填" /></div>
+      <div class="form-row"><span class="k">金额</span><input class="num" placeholder="输入金额" /></div>
+    </div>
+    <div class="form-group">
+      <div class="form-row"><span class="k">分组</span><span class="v">现金 ></span></div>
+      <div class="form-row"><span class="k">币种</span><span class="v">CNY ></span></div>
+      <div class="form-row"><span class="k">计入总资产</span><div class="toggle on"></div></div>
+      <div class="form-row"><span class="k">记账时可选</span><div class="toggle on"></div></div>
+      <div class="form-row"><span class="k">备注</span><input placeholder="选填" /></div>
+    </div>
+  </div>
+
+  <!-- ===== 记一笔 ===== -->
+  <div class="screen" id="scr-record">
+    <div class="m-header"><span style="font-size:18px;cursor:pointer;" onclick="go('scr-bills-cal')">✕</span><div class="title" style="margin:0 auto;">记一笔</div><span style="color:var(--blue);font-weight:700;" onclick="go('scr-record-adv')">高级</span></div>
+    <div class="seg" style="margin:10px auto;"><button class="active">支出</button><button>收入</button><button>转账</button></div>
+    <div class="rec-amt"><input class="num" value="¥ 0.00" /></div>
+    <div class="card" style="margin-top:0;">
+      <div class="form-row"><span class="k">账户</span><span class="v">招商银行 ></span></div>
+      <div class="form-row"><span class="k">日期</span><span class="v">2026-08-17 ></span></div>
+      <div class="form-row"><span class="k">标签</span><span class="v">添加标签 ></span></div>
+      <div class="form-row"><span class="k">描述</span><input placeholder="选填" /></div>
+    </div>
+    <div style="padding:0 14px 10px;font-weight:700;">分类</div>
+    <div class="rec-cats">
+      ${[['餐饮','#E8590C'],['交通','#3B6EF6'],['购物','#9b59b6'],['娱乐','#f0b429'],['居家','#2BA471'],['医疗','#e74c3c'],['教育','#3498db'],['通讯','#1abc9c'],['人情','#9b59b6'],['其他','#9aa0a6']].map(c=>`<div class="c"><div class="ico" style="background:${c[1]}">${c[0][0]}</div>${c[0]}</div>`).join('')}
+    </div>
+    <div style="padding:14px;"><button class="btn-primary">保存</button></div>
+  </div>
+
+  <!-- ===== 高级双录（占位） ===== -->
+  <div class="screen" id="scr-record-adv">
+    <div class="m-header"><span style="font-size:18px;cursor:pointer;" onclick="go('scr-record')">‹</span><div class="title" style="margin:0 auto;">高级双录</div></div>
+    <div class="card" style="margin-top:20px;"><div class="muted" style="text-align:center;padding:40px;">此处保留现有双录分录表单</div></div>
+  </div>
+
+  <!-- ===== 设置（占位） ===== -->
+  <div class="screen" id="scr-settings">
+    <div class="m-header"><span style="font-size:18px;cursor:pointer;" onclick="go('scr-more')">‹</span><div class="title" style="margin:0 auto;">设置</div></div>
+    <div class="form-group" style="margin-top:10px;">
+      <div class="form-row"><span class="k">修改密码</span><span class="v">></span></div>
+      <div class="form-row"><span class="k">账本管理</span><span class="v">></span></div>
+      <div class="form-row"><span class="k">退出登录</span><span class="v"></span></div>
+    </div>
+  </div>
+
+  <div class="fab" onclick="go('scr-record')">＋</div>
+
+  <!-- 底部导航 -->
+  <div class="tabbar">
+    <div class="tab active" data-tab="bills"><span class="ic">$</span>账单</div>
+    <div class="tab" data-tab="assets"><span class="ic">▤</span>资产</div>
+    <div class="tab" data-tab="more"><span class="ic">⋯</span>更多</div>
+  </div>
+
+  <!-- 账本选择底部弹窗 -->
+  <div class="sheet-mask" id="sheetMask" onclick="closeSheet()"></div>
+  <div class="sheet" id="ledgerSheet">
+    <div class="row" style="margin-bottom:14px;"><span style="font-weight:800;font-size:16px;">选择账本</span><span style="font-size:20px;cursor:pointer;" onclick="closeSheet()">✕</span></div>
+    <div style="display:flex;justify-content:center;">
+      <div style="width:120px;height:150px;border-radius:16px;background:linear-gradient(135deg,#f0b429,#e67e22);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:16px;color:#fff;position:relative;">
+        <div style="font-size:40px;position:absolute;top:30px;">📒</div>
+        <div style="font-weight:700;">默认账本</div>
+        <div style="margin-top:10px;width:22px;height:22px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">✓</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const tabMap={bills:'scr-bills-cal',assets:'scr-assets',more:'scr-more'};
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+document.querySelectorAll('.tabbar .tab').forEach(t=>{
+  t.onclick=()=>{
+    document.querySelectorAll('.tabbar .tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    go(tabMap[t.dataset.tab]);
+  };
+});
+function openSheet(){document.getElementById('sheetMask').classList.add('show');document.getElementById('ledgerSheet').classList.add('show');}
+function closeSheet(){document.getElementById('sheetMask').classList.remove('show');document.getElementById('ledgerSheet').classList.remove('show');}
+// toggles
+document.querySelectorAll('.toggle').forEach(t=>t.onclick=()=>t.classList.toggle('on'));
+</script>
+</body>
+</html>

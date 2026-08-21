@@ -16,6 +16,10 @@ var migrations = []struct {
 	{"001_sync", migrate001},
 	{"002_delete_semantics", migrate002},
 	{"003_account_display_name", migrate003},
+	{"004_account_visual", migrate004},
+	{"005_txn_tags", migrate005},
+	{"006_account_close_semantics", migrate006},
+	{"007_account_sort_order", migrate007},
 }
 
 // ApplyMigrations 执行所有尚未应用的迁移。
@@ -263,6 +267,91 @@ func migrate003(conn *sql.DB) error {
 	} else if !ok {
 		if _, err := conn.Exec(`ALTER TABLE accounts ADD COLUMN display_name TEXT`); err != nil {
 			return fmt.Errorf("alter accounts add display_name: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrate004：账户增加视觉与层级字段（004_account_visual）。
+//   - icon        : 图标标识（展示用，导出忽略）
+//   - color       : 颜色 hex（展示用，导出忽略）
+//   - parent_uuid : 父账户 uuid（三级分类结构）
+//   - sub_type    : 账户子类型（借记账户/信用卡/虚拟账户等，展示用）
+// 均为可选列，旧库升级后默认 NULL，向前兼容。
+func migrate004(conn *sql.DB) error {
+	for _, col := range []string{"icon", "color", "parent_uuid", "sub_type"} {
+		if ok, err := columnExists(conn, "accounts", col); err != nil {
+			return err
+		} else if !ok {
+			if _, err := conn.Exec(`ALTER TABLE accounts ADD COLUMN ` + col + ` TEXT`); err != nil {
+				return fmt.Errorf("alter accounts add %s: %w", col, err)
+			}
+		}
+	}
+	return nil
+}
+
+// migrate005：交易增加 tags（005_txn_tags）。
+//   - tags : JSON 数组字符串，如 ["餐饮","出差"]（展示/检索/导出 #tag 用）。
+// 为空时存 NULL，导出不输出 #tag。
+func migrate005(conn *sql.DB) error {
+	if ok, err := columnExists(conn, "transactions", "tags"); err != nil {
+		return err
+	} else if !ok {
+		if _, err := conn.Exec(`ALTER TABLE transactions ADD COLUMN tags TEXT`); err != nil {
+			return fmt.Errorf("alter transactions add tags: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrate006：删除语义升级为 Beancount close（0.4-A）。
+//   - 账户「删除」不再软删（deleted_at），改为置 close_date 关闭，保留全部交易引用。
+//   - 账户名唯一索引由「WHERE deleted_at IS NULL」改为不带条件（账本内全局唯一，含已关闭账户）：
+//     关闭后账户名仍占用，不可重建同名（Beancount 实测不允许 close 后再 open 同名，报 duplicate open）。
+//   - 旧库（deleted_at IS NOT NULL 的账户）转写为 close_date 并清空 deleted_at，
+//     使历史软删账户变为已关闭账户（保留其交易引用）。
+//   - 注：accounts.deleted_at 列保留（向前兼容，0.4 起不再写入）。
+func migrate006(conn *sql.DB) error {
+	// 1) 旧库兼容：历史软删账户（deleted_at 非空）转写为 close_date，清空 deleted_at。
+	//    close_date 取 deleted_at 前 10 字符（YYYY-MM-DD），满足 Beancount close 指令日期格式。
+	if _, err := conn.Exec(
+		`UPDATE accounts SET close_date = COALESCE(close_date, substr(deleted_at, 1, 10)), deleted_at = NULL
+		 WHERE deleted_at IS NOT NULL`,
+	); err != nil {
+		return fmt.Errorf("migrate closed accounts: %w", err)
+	}
+
+	// 2) 重建账户名唯一索引：账本内全局唯一（含已关闭账户），关闭后不可重建同名。
+	if _, err := conn.Exec(`DROP INDEX IF EXISTS idx_accounts_ledger_name`); err != nil {
+		return fmt.Errorf("drop old accounts name index: %w", err)
+	}
+	if _, err := conn.Exec(
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_ledger_name
+		 ON accounts(ledger_id, name)`,
+	); err != nil {
+		return fmt.Errorf("create accounts name index: %w", err)
+	}
+
+	return nil
+}
+
+// migrate007：账户排序字段（0.4-C 分类拖拽排序）。
+//   - accounts 加 sort_order INTEGER DEFAULT 0（幂等，已存在则跳过）。
+//   - 旧库 sort_order 全部为 0，等价于「按 open_date, name 排序」原行为；
+//     用户拖拽后由 repository.ReorderAccounts 按类型分桶写入 1..N。
+//   - 排序仅作用于 Expenses/Income 二级分类（parent_uuid IS NULL）展示顺序，
+//     一级类型顺序由 seed 决定，不参与排序。
+func migrate007(conn *sql.DB) error {
+	exists, err := columnExists(conn, "accounts", "sort_order")
+	if err != nil {
+		return fmt.Errorf("check sort_order column: %w", err)
+	}
+	if !exists {
+		if _, err := conn.Exec(
+			`ALTER TABLE accounts ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`,
+		); err != nil {
+			return fmt.Errorf("add accounts.sort_order: %w", err)
 		}
 	}
 	return nil

@@ -3,6 +3,77 @@
 本项目变更记录遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 风格，
 版本号语义化（[SemVer](https://semver.org/lang/zh-CN/)）。
 
+## [0.4.0] - 2026-08-20
+
+### Added
+
+- **删除语义升级为 Beancount close（0.4-A）**：账户「删除」从软删（`deleted_at` + 连带软删引用交易）改为置 `close_date` 关闭，**保留全部交易引用与历史余额**，与 Beancount `close` 指令对齐。
+  - 迁移 `006_account_close_semantics`：旧库 `deleted_at IS NOT NULL` 的账户转写为 `close_date`（取前 10 字符日期）并清空 `deleted_at`；重建账户名唯一索引为账本内全局唯一（`UNIQUE(ledger_id, name)`，含已关闭账户）——关闭后账户名仍占用，不可重建同名（Beancount 实测不允许 close 后再 open 同名，报 duplicate open）。
+  - `sync_log` 新增 `op=close`：`CloseAccount`（`internal/repository/transaction.go`）置 `close_date=date('now')`（满足 Beancount 日期格式）+ 写 `op=close`；幂等（已关闭/不存在返回 false）。
+  - 同步协议：`SyncPull` 的 `op=close` 走 `loadEntity` 返回账户全量（含 `close_date`）；`SyncPush` 分拣顺序新增 `{OpClose, EntityAccount}`；`applyCloseEntity` 处理 `op=close`；旧客户端 `op=delete account` 向前兼容按 close 处理。
+  - 账户列表 `GET /api/accounts` 新增 `?include_closed=1` 参数，默认仅返回未关闭账户（`close_date IS NULL`）；`AccountView` 增 `close_date` 字段。
+  - 记账引用校验：`AccountIDByUUID` 加 `close_date IS NULL`，已关闭账户不可再被记账引用（在线 `account_id` 与离线 `account_uuid` 均禁止）。
+  - 自然键合并：离线推送同名账户时，仅合并到**未关闭**的同名账户；若同名账户已关闭，不合并（走新建触发同名唯一约束冲突，符合「关闭后不可重建同名」语义）。
+  - 导出器（`internal/export/beancount.go`）：`open`/`close` 指令改为按账户合并输出（open 紧跟其 close），更清晰；已关闭账户仍计入净资产与历史（Beancount close 不抹除历史）；导出通过 `bean-check`（退出码 0）。
+
+### Changed
+
+- **前端账户关闭交互**（`screens/accounts/accounts_screen.dart`）：账户行菜单「删除账户」改为「关闭账户」；确认弹窗文案改为「历史交易全部保留，余额历史照常计入；默认列表隐藏已关闭账户，可在『显示已关闭』中查看」。
+- **前端「显示已关闭」开关**：账户页顶栏新增 Switch（仅当存在已关闭账户时显示），默认隐藏已关闭账户；已关闭账户行视觉降权（灰字 + 「已关闭 · 日期」副标题）。
+- **前端记账选账户排除已关闭**：`record_dialog.dart` / `record_screen.dart` 选账户时过滤 `isClosed`，已关闭账户不可选入记账。
+- **前端本地模型与同步**：`LocalAccount` 增 `closeDate` 字段 + `isClosed` getter；`LocalStore.applyChange` 新增 `op=close` 分支（更新账户 `close_date`，不删除账户与交易）；`SyncService.deleteAccount` → `closeAccount`（本地置 `close_date` + 入队 `op=close`，不再删引用交易）；`LedgerController.deleteAccount` → `closeAccount` + `toggleShowClosedAccounts`；`accountsOfType` 加 `includeClosed` 参数（默认 false）；`LedgerApi.deleteAccount` → `closeAccount`（DELETE URL 不变，语义改为 close）。
+- `AccountRow`/`LocalAccountRow`（`widgets/common.dart`）新增 `dimmed` 参数用于已关闭账户视觉降权。
+
+### Fixed
+
+- **导出器 open/close 分离导致 close 后重建同名 duplicate open**：原导出器把所有 `open` 与所有 `close` 分别堆叠输出，close 后重建同名账户会触发 Beancount `duplicate open directive`。改为按账户合并输出（open 紧跟其 close）。同时确认 Beancount 不允许 close 后再 open 同名，账户名唯一索引改为全局唯一（关闭后不可重建同名），从根本上避免该场景。
+
+### Added（0.4-C 账户增强）
+
+- **分类拖拽排序（迁移 007）**：`accounts` 新增 `sort_order INTEGER DEFAULT 0`（幂等，记录 `schema_migrations`）；`GET /api/accounts` 的 `AccountView` 返回 `sort_order`；后端 `UpdateAccountSortOrder`（`internal/repository/account.go`）更新序位并写 `sync_log op=update`；同步协议新增 `op=update`（仅账户排序字段更新，无自然键合并，多端一致）。
+- **前端排序链路**：`LocalAccount` 增 `sortOrder` 字段；`LocalStore.applyChange` 新增 `op=update` 分支（按 uuid 全量 upsert）；`SyncService.reorderAccounts` 本地按拖拽顺序写 `sort_order` + 逐条入队 `op=update` 并同步；`LedgerController.reorderAccounts` 透传；`reload()` 全局按「类型 → sort_order（子分类跟随父）→ name」稳定排序。
+- **分类页拖拽（`screens/categories/categories_screen.dart`）**：`ReorderableListView` 长按拖拽重排 `Expenses`/`Income` 根分类（仅 `parent_uuid IS NULL`），拖完持久化，刷新后顺序保持。
+- **默认账户（纯前端记忆，零后端改动）**：`LocalStore` 按账本隔离存默认账户映射（kind ∈ `expense`/`income`/`transferOut`/`transferIn` → uuid）；`LedgerController` 暴露 `defaultAccounts`/`setDefaultAccount`/`clearDefaultAccounts`；记一笔弹窗按交易类型预选默认账户、提交回写「上次选择」；账户行菜单「设为默认支出/收入账户」；设置页新增「默认账户」查看与「清除全部默认」。
+- **账户详情页（`screens/accounts/account_detail_screen.dart`，新增）**：账户余额卡 + 该账户月度收支趋势（`TrendLineChart`）+ 最近交易预览 + 「查看全部流水 / 设为默认 / 关闭账户」入口；账户行点击改为进详情页（替代原直跳流水列表）。
+
+### Changed（0.4-C 账户增强）
+
+- 账户列表全局排序纳入 `sort_order`（同类型内升序，未设置回退按 name；子分类跟随其父根排序），`AccountsScreen`/`CategoriesScreen` 均按此展示。
+- 账户行点击 → 账户详情页（原「查看流水」改为详情页内「查看全部流水」入口）；行菜单新增「账户详情」「设为默认支出/收入账户」。
+
+## [0.3.0] - 2026-08-18
+
+全端体验优化（分类 / 标签 / 图标 / 简化记账）第一阶段：账芯与数据层完成，核心交互弹窗落地。
+
+### Added
+
+- **分类体系（复用账户模型）**：`Expenses` / `Income` 类型账户通过 `parent_uuid` 表达二级/三级分类，不引入独立分类实体；新建账本 seed 默认二级分类（餐饮/食品/交通/购物…与薪资/奖金…）并带 icon/color。
+- **账户视觉字段（迁移 004）**：`accounts` 新增 `icon` / `color` / `parent_uuid` / `sub_type`（TEXT，幂等、记录 `schema_migrations`）；贯穿 domain / repository / service / handler / sync 实体与导出引用；seed 账户补全 emoji 图标 + hex 颜色。
+- **交易标签（迁移 005）**：`transactions` 新增 `tags`（JSON 数组字符串，如 `["餐饮","出差"]`）；贯穿 repository / service / handler / sync / 前端模型与同步层。
+- **简化记一笔（核心交互）**：新增 `screens/record/record_dialog.dart`（PC 弹窗），支出/收入/转账分段切换 + 金额 + 分类(account)/账户 + 日期 + 标签 + 描述，自动生成标准复式 posting 并提交；保留「高级」双录入口。`AppShell` 在宽屏用 `RecordDialog`、窄屏用 `RecordScreen`。
+- **账户/分类编辑弹窗**：新增 `screens/accounts/account_dialog.dart`，支持 emoji 图标选择、颜色面板、类型、父分类、名称、开户余额（自动生成 `Equity:Opening-Balances` 冲抵交易）。
+- **分类页**：新增 `screens/categories/categories_screen.dart`，展示 Expenses/Income 二级/三级分类层级，支持新增三级分类。
+- **账户页双 Tab**：`screens/accounts/accounts_screen.dart` 改为 `TabController`，Tab1「账户」、Tab2「分类」（接入 `CategoriesScreen`）。
+- **图标组件**：新增 `widgets/account_icon.dart`，emoji 渲染于彩色圆角方块，无 icon 时按类型/名称派生默认图标与颜色。
+- **前端模型/同步适配**：`LocalAccount` 增 `icon/color/parentUuid/subType`，`LocalTxn` 增 `tags`；`SyncService` / `LedgerController` 的建账户、建交易透传新字段。
+
+### Changed
+
+- **Beancount 标签导出改为元数据形式**：原计划的交易头行 `#tag1 #tag2` 语法仅允许 ASCII，中文标签会导致 `bean-check` 报语法错误。改为在交易头行之下写 `tags: "tag1 tag2"` 元数据行——保留中文且通过 `bean-check`（已用 `TestExportTags` 验证 `bean-check` 退出码 0）。代价是该标签不被 Beancount 识别为 `#tag` 查询键，但作为记账留档与兼容导出满足需求。见 PRD §3.4 设计权衡。
+- `widgets/common.dart` 的 `todayStr()` 支持可选日期参数。
+
+### Fixed
+
+- **标签导出 `bean-check` 失败**：中文 `#餐饮` 触发 `unexpected HASH` 语法错误。根因为 Beancount `#tag` 词法不支持非 ASCII，已通过改用元数据形式修复（见 Changed）。
+
+### Pending（后续迭代，见 PRD §8）
+
+- 移动端底部三 Tab 导航 + 资产页 + 账单首页（日历/列表）。
+- PC 总览卡片化（净资产/总资产/总负债/本月收支）+ 近 12 月趋势图。
+- PC 交易流水筛选 + 日历视图。
+- 标签页（按标签筛选交易列表与统计）。
+- 报表图表化（分类占比/收支趋势/资产趋势）。
+
 ## [0.2.1] - 2026-08-14
 
 ### Fixed

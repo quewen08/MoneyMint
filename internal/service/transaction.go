@@ -18,11 +18,12 @@ type PostingView struct {
 
 // TransactionView 是交易列表项的返回视图。
 type TransactionView struct {
-	ID          int64         `json:"id"`
-	Date        string        `json:"date"`
-	Flag        string        `json:"flag"`
-	Description string        `json:"description"`
-	Postings    []PostingView `json:"postings"`
+	ID            int64         `json:"id"`
+	Date          string        `json:"date"`
+	Flag          string        `json:"flag"`
+	Description   string        `json:"description"`
+	CreatedByName string        `json:"created_by_name"` // 记账人显示名；无创建者时为空串
+	Postings      []PostingView `json:"postings"`
 }
 
 // TransactionCreated 是创建交易的返回。
@@ -42,11 +43,12 @@ func (s *Service) ListTransactions(ledgerID int64) ([]TransactionView, error) {
 	out := make([]TransactionView, 0, len(txns))
 	for _, t := range txns {
 		v := TransactionView{
-			ID:          t.ID,
-			Date:        t.Date,
-			Flag:        t.Flag,
-			Description: t.Description,
-			Postings:    make([]PostingView, 0, len(t.Postings)),
+			ID:            t.ID,
+			Date:          t.Date,
+			Flag:          t.Flag,
+			Description:   t.Description,
+			CreatedByName: t.CreatedByName,
+			Postings:      make([]PostingView, 0, len(t.Postings)),
 		}
 		for _, p := range t.Postings {
 			v.Postings = append(v.Postings, PostingView{

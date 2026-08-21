@@ -60,6 +60,8 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  const _DefaultAccountsCard(),
+                  const SizedBox(height: 12),
                   AppCard(
                     child: Column(
                       children: [
@@ -152,6 +154,81 @@ class SettingsScreen extends StatelessWidget {
     await auth.logout();
     if (!context.mounted) return;
     // AuthGate 监听 auth 状态，会自动切回登录页。
+  }
+}
+
+/// 默认账户（0.4-C，纯前端记忆）查看与清除。按账本隔离。
+class _DefaultAccountsCard extends StatefulWidget {
+  const _DefaultAccountsCard();
+
+  @override
+  State<_DefaultAccountsCard> createState() => _DefaultAccountsCardState();
+}
+
+class _DefaultAccountsCardState extends State<_DefaultAccountsCard> {
+  Map<String, String> _defs = {};
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    _load();
+  }
+
+  Future<void> _load() async {
+    final defs = await AppScope.of(context).ledger.defaultAccounts;
+    if (!mounted) return;
+    setState(() => _defs = defs);
+  }
+
+  String _name(String? uuid) {
+    if (uuid == null) return '未设置';
+    final found =
+        AppScope.of(context).ledger.accounts.where((x) => x.uuid == uuid);
+    return found.isEmpty ? '（已删除）' : found.first.display;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const kinds = [
+      ('expense', '默认支出'),
+      ('income', '默认收入'),
+      ('transferOut', '默认转账来源'),
+      ('transferIn', '默认转账目标'),
+    ];
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionTitle('默认账户'),
+          const SizedBox(height: 4),
+          for (final k in kinds)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(child: Text(k.$2, style: const TextStyle(fontSize: 14))),
+                  Text(_name(_defs[k.$1]), style: AppTheme.muted),
+                ],
+              ),
+            ),
+          if (_defs.isNotEmpty)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () async {
+                  await AppScope.of(context).ledger.clearDefaultAccounts();
+                  await _load();
+                },
+                child: const Text('清除全部默认',
+                    style: TextStyle(color: AppColors.warn)),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

@@ -39,7 +39,7 @@ const lid = domain.DefaultLedgerID
 
 func accountByID(t *testing.T, svc *Service, id int64) AccountView {
 	t.Helper()
-	accounts, err := svc.ListAccounts(lid)
+	accounts, err := svc.ListAccounts(lid, false)
 	if err != nil {
 		t.Fatalf("list accounts: %v", err)
 	}
@@ -96,22 +96,22 @@ func TestAccountTransactionBalanceExport(t *testing.T) {
 	svc := newTestService(t)
 	registerOwner(t, svc)
 
-	cash, err := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY")
+	cash, err := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY", "", "", "", "")
 	if err != nil {
 		t.Fatalf("create cash: %v", err)
 	}
-	food, err := svc.CreateAccount(lid, "Expenses:Food:CNY", "", "Expenses", "2026-08-01", "CNY")
+	food, err := svc.CreateAccount(lid, "Expenses:Food:CNY", "", "Expenses", "2026-08-01", "CNY", "", "", "", "")
 	if err != nil {
 		t.Fatalf("create food: %v", err)
 	}
 
 	// 重名账户被拒
-	if _, err := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY"); !errors.Is(err, domain.ErrConflict) {
+	if _, err := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY", "", "", "", ""); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("重名账户应返回 ErrConflict，实际 %v", err)
 	}
 
 	// 非法类型被拒
-	if _, err := svc.CreateAccount(lid, "X:Bad", "", "Nope", "2026-08-01", ""); !errors.Is(err, domain.ErrInvalid) {
+	if _, err := svc.CreateAccount(lid, "X:Bad", "", "Nope", "2026-08-01", "", "", "", "", ""); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("非法类型应返回 ErrInvalid，实际 %v", err)
 	}
 
@@ -156,8 +156,8 @@ func TestBalanceValidationRejectsUnbalanced(t *testing.T) {
 	svc := newTestService(t)
 	registerOwner(t, svc)
 
-	cash, _ := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY")
-	food, _ := svc.CreateAccount(lid, "Expenses:Food:CNY", "", "Expenses", "2026-08-01", "CNY")
+	cash, _ := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY", "", "", "", "")
+	food, _ := svc.CreateAccount(lid, "Expenses:Food:CNY", "", "Expenses", "2026-08-01", "CNY", "", "", "", "")
 
 	// 借贷不平衡
 	_, err := svc.CreateTransaction(lid, "2026-08-02", "*", "坏账", []PostingInput{
@@ -181,8 +181,8 @@ func TestDeleteSemantics(t *testing.T) {
 	svc := newTestService(t)
 	registerOwner(t, svc)
 
-	cash, _ := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY")
-	food, _ := svc.CreateAccount(lid, "Expenses:Food:CNY", "", "Expenses", "2026-08-01", "CNY")
+	cash, _ := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY", "", "", "", "")
+	food, _ := svc.CreateAccount(lid, "Expenses:Food:CNY", "", "Expenses", "2026-08-01", "CNY", "", "", "", "")
 
 	created, _ := svc.CreateTransaction(lid, "2026-08-02", "*", "早餐", []PostingInput{
 		{AccountID: cash.ID, Commodity: "CNY", Amount: "-10.00"},
@@ -200,34 +200,52 @@ func TestDeleteSemantics(t *testing.T) {
 		t.Fatalf("删除后交易应为 0，实际 %d", len(txns))
 	}
 
-	// 再记一笔，然后删除账户：其引用交易应被连带删除
+	// 再记一笔，然后关闭账户：其引用交易应保留（Beancount close 语义，0.4-A 起）
 	_, _ = svc.CreateTransaction(lid, "2026-08-03", "*", "买菜", []PostingInput{
 		{AccountID: cash.ID, Commodity: "CNY", Amount: "-5.00"},
 		{AccountID: food.ID, Commodity: "CNY", Amount: "5.00"},
 	}, 1)
 	if err := svc.DeleteAccount(lid, cash.UUID); err != nil {
-		t.Fatalf("delete account: %v", err)
+		t.Fatalf("close account: %v", err)
 	}
-	if txns, _ := svc.ListTransactions(lid); len(txns) != 0 {
-		t.Fatalf("删账户后其引用交易应被连带删除，剩余 %d 笔", len(txns))
+	// close 后引用交易应保留（不再连带软删）
+	if txns, _ := svc.ListTransactions(lid); len(txns) != 1 {
+		t.Fatalf("关账户后其引用交易应保留（close 语义），实际 %d 笔", len(txns))
+	}
+	// 已关闭账户默认列表不出现，include_closed 才出现且带 close_date
+	open, _ := svc.ListAccounts(lid, false)
+	for _, a := range open {
+		if a.ID == cash.ID {
+			t.Fatalf("已关闭账户不应出现在默认列表")
+		}
+	}
+	closed, _ := svc.ListAccounts(lid, true)
+	var foundClosed bool
+	for _, a := range closed {
+		if a.ID == cash.ID {
+			if a.CloseDate == "" {
+				t.Fatalf("已关闭账户应有 close_date")
+			}
+			foundClosed = true
+		}
+	}
+	if !foundClosed {
+		t.Fatalf("已关闭账户应出现在 include_closed 列表")
 	}
 
-	// 软删后可重建同名账户
-	rebuilt, err := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-04", "CNY")
-	if err != nil {
-		t.Fatalf("软删后重建同名账户应成功，实际 %v", err)
-	}
-	if rebuilt.UUID == cash.UUID {
-		t.Fatalf("重建账户应有新 uuid")
+	// close 后重建同名应失败（Beancount 不允许 close 后再 open 同名，账户名仍占用）
+	_, err := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-04", "CNY", "", "", "", "")
+	if err == nil {
+		t.Fatalf("close 后重建同名账户应失败（账户名仍占用）")
 	}
 }
 
 func TestSyncPushPullAndNaturalKeyMerge(t *testing.T) {
 	svc := newTestService(t)
-	registerOwner(t, svc)
+	owner := registerOwner(t, svc)
 
 	// 在线先建一个「先到者」账户
-	existing, _ := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY")
+	existing, _ := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY", "", "", "", "")
 
 	// push：同名账户合并 + 引用缺失的交易失败
 	req := PushRequest{
@@ -248,7 +266,7 @@ func TestSyncPushPullAndNaturalKeyMerge(t *testing.T) {
 			})},
 		},
 	}
-	res, err := svc.SyncPush(lid, req)
+	res, err := svc.SyncPush(lid, owner.User.ID, req)
 	if err != nil {
 		t.Fatalf("sync push: %v", err)
 	}
@@ -280,6 +298,69 @@ func TestSyncPushPullAndNaturalKeyMerge(t *testing.T) {
 	}
 	if !strings.Contains(joined, "loc-food") {
 		t.Fatalf("pull 应含 loc-food create")
+	}
+}
+
+// TestTransactionCreatedByName 验证：push 端交易由服务端按 token 用户填 created_by，
+// pull 返回的交易实体含 created_by_name（JOIN users.display_name）。
+func TestTransactionCreatedByName(t *testing.T) {
+	svc := newTestService(t)
+	owner := registerOwner(t, svc)
+
+	cash, err := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY", "", "", "", "")
+	if err != nil {
+		t.Fatalf("create cash: %v", err)
+	}
+	food, err := svc.CreateAccount(lid, "Expenses:Food:CNY", "", "Expenses", "2026-08-01", "CNY", "", "", "", "")
+	if err != nil {
+		t.Fatalf("create food: %v", err)
+	}
+
+	req := PushRequest{
+		ClientID: "devB",
+		Changes: []PushChange{
+			{EntityType: domain.EntityTransaction, Entity: jsonRaw(t, map[string]any{
+				"uuid": "loc-txn2", "date": "2026-08-03", "flag": "*", "description": "午餐",
+				"postings": []map[string]string{
+					{"account_uuid": food.UUID, "commodity": "CNY", "amount": "-20.00"},
+					{"account_uuid": cash.UUID, "commodity": "CNY", "amount": "20.00"},
+				},
+			})},
+		},
+	}
+	if _, err := svc.SyncPush(lid, owner.User.ID, req); err != nil {
+		t.Fatalf("sync push: %v", err)
+	}
+
+	// GET /api/transactions 视图也应含 created_by_name
+	views, err := svc.ListTransactions(lid)
+	if err != nil {
+		t.Fatalf("list transactions: %v", err)
+	}
+	var found bool
+	for _, v := range views {
+		if v.Description == "午餐" {
+			found = true
+			if v.CreatedByName != "Alice" {
+				t.Fatalf("列表 created_by_name 应为 Alice，实际 %q", v.CreatedByName)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("列表应包含午餐交易")
+	}
+
+	// pull 实体 JSON 应含 created_by_name: Alice
+	pull, err := svc.SyncPull(lid, 0, "devB")
+	if err != nil {
+		t.Fatalf("sync pull: %v", err)
+	}
+	joined := ""
+	for _, c := range pull.Changes {
+		joined += string(c.Entity)
+	}
+	if !strings.Contains(joined, `"created_by_name":"Alice"`) {
+		t.Fatalf("pull 应含 created_by_name: Alice，实际 %s", joined)
 	}
 }
 

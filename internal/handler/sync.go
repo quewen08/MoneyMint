@@ -40,7 +40,11 @@ func (h *Handler) HandleSyncPush(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	res, err := h.svc.SyncPush(ledgerID, req)
+	var userID int64
+	if uid, ok := auth.UserID(r.Context()); ok {
+		userID = uid
+	}
+	res, err := h.svc.SyncPush(ledgerID, userID, req)
 	if err != nil {
 		writeError(w, err)
 		return

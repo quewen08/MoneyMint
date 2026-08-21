@@ -30,6 +30,7 @@ class LedgerController extends ChangeNotifier {
   int pending = 0;
   bool online = false;
   bool loading = true;
+  bool showClosedAccounts = false; // 账户页「显示已关闭」开关（0.4-A）
   String? lastError; // 最近一次同步的 API 级错误（如 403 未加入账本）
   Set<String> reversedUuids = {};
 
@@ -83,6 +84,21 @@ class LedgerController extends ChangeNotifier {
   Future<void> reload() async {
     final acc = await store.getAllAccounts();
     final tx = await store.getAllTxns();
+    // 排序：先按类型固定顺序；同类型内根分类按 sort_order 升序（子分类跟随其父），
+    // 未设置排序（sort_order=0）时回退按 name，保持旧库稳定展示。
+    final sortOf = <String, int>{for (final a in acc) a.uuid: a.sortOrder};
+    int typeIdx(String t) => typeOrder.indexOf(t);
+    acc.sort((a, b) {
+      final ti = typeIdx(a.type) - typeIdx(b.type);
+      if (ti != 0) return ti;
+      final ka = a.parentUuid != null ? (sortOf[a.parentUuid] ?? 0) : a.sortOrder;
+      final kb = b.parentUuid != null ? (sortOf[b.parentUuid] ?? 0) : b.sortOrder;
+      if (ka != kb) return ka.compareTo(kb);
+      final sa = a.parentUuid != null ? 0 : a.sortOrder;
+      final sb = b.parentUuid != null ? 0 : b.sortOrder;
+      if (sa != sb) return sa.compareTo(sb);
+      return a.name.compareTo(b.name);
+    });
     final bal = await store.computeBalances();
     final net = await store.computeNetWorth(acc);
     final byType = await store.computeBalancesByType(acc);
@@ -132,12 +148,20 @@ class LedgerController extends ChangeNotifier {
     required String type,
     required String openDate,
     String? commodity,
+    String? icon,
+    String? color,
+    String? parentUuid,
+    String? subType,
   }) async {
     final a = await sync.createAccount(
       name: name,
       type: type,
       openDate: openDate,
       commodity: commodity,
+      icon: icon,
+      color: color,
+      parentUuid: parentUuid,
+      subType: subType,
     );
     await reload();
     return a;
@@ -147,12 +171,14 @@ class LedgerController extends ChangeNotifier {
     required String date,
     required String description,
     required List<LocalPosting> postings,
+    List<String>? tags,
     String? reversedOf,
   }) async {
     final t = await sync.createTransaction(
       date: date,
       description: description,
       postings: postings,
+      tags: tags,
       reversedOf: reversedOf,
     );
     await reload();
@@ -191,10 +217,37 @@ class LedgerController extends ChangeNotifier {
     await reload();
   }
 
-  /// 删除账户（连带其引用交易）：本地删除 + 入待推送队列，随后同步。
-  Future<void> deleteAccount(LocalAccount a) async {
-    await sync.deleteAccount(a);
+  /// 关闭账户（Beancount close 语义，0.4-A 起）：本地置 close_date + 入队 op=close，随后同步。
+  /// 不再删除账户与引用交易，历史保留。
+  Future<void> closeAccount(LocalAccount a) async {
+    await sync.closeAccount(a);
     await reload();
+  }
+
+  /// 重排账户顺序（0.4-C 分类拖拽排序）：透传到 SyncService，本地即时重排 + 入队同步。
+  Future<void> reorderAccounts(List<LocalAccount> ordered) async {
+    await sync.reorderAccounts(ordered);
+    await reload();
+  }
+
+  // ---- 默认账户（纯前端记忆，0.4-C，按账本隔离）----
+
+  /// 读取默认账户映射（kind -> uuid）。kind ∈ expense|income|transferOut|transferIn。
+  Future<Map<String, String>> get defaultAccounts =>
+      store.getDefaultAccounts(LedgerApi.ledgerId);
+
+  /// 设置某类交易的默认账户 uuid（并持久化）。
+  Future<void> setDefaultAccount(String kind, String uuid) =>
+      store.setDefaultAccount(LedgerApi.ledgerId, kind, uuid);
+
+  /// 清除当前账本的全部默认账户设置。
+  Future<void> clearDefaultAccounts() =>
+      store.clearDefaultAccounts(LedgerApi.ledgerId);
+
+  /// 切换「显示已关闭」开关（仅影响账户页展示，不影响余额/净资产计算）。
+  void toggleShowClosedAccounts(bool v) {
+    showClosedAccounts = v;
+    notifyListeners();
   }
 
   // ---- 成员管理（P1-B3，仅 owner）----
@@ -222,8 +275,11 @@ class LedgerController extends ChangeNotifier {
   }
 
   /// 按类型筛选账户（保持固定顺序：资产/负债/权益/收入/支出）。
-  List<LocalAccount> accountsOfType(String type) =>
-      accounts.where((a) => a.type == type).toList();
+  /// includeClosed=false（默认）仅返回未关闭账户；true 含已关闭（0.4-A）。
+  List<LocalAccount> accountsOfType(String type, {bool includeClosed = false}) =>
+      accounts
+          .where((a) => a.type == type && (includeClosed || !a.isClosed))
+          .toList();
 
   static const typeOrder = [
     'Assets',

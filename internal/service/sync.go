@@ -114,7 +114,13 @@ func (s *Service) loadEntity(ledgerID int64, typ, uuid string) (json.RawMessage,
 			"display_name":          nullIfEmpty(a.DisplayName),
 			"type":                  a.Type,
 			"open_date":             a.OpenDate,
+			"close_date":            nullIfEmpty(a.CloseDate),
 			"commodity_restriction": nullIfEmpty(a.Restriction),
+			"icon":                  nullIfEmpty(a.Icon),
+			"color":                 nullIfEmpty(a.Color),
+			"parent_uuid":           nullIfEmpty(a.ParentUUID),
+			"sub_type":              nullIfEmpty(a.SubType),
+			"sort_order":            a.SortOrder,
 		})
 	case domain.EntityCommodity:
 		c, err := s.repo.CommodityByUUID(ledgerID, uuid)
@@ -141,11 +147,13 @@ func (s *Service) loadEntity(ledgerID int64, typ, uuid string) (json.RawMessage,
 			})
 		}
 		return json.Marshal(map[string]any{
-			"uuid":        t.UUID,
-			"date":        t.Date,
-			"flag":        t.Flag,
-			"description": t.Description,
-			"postings":    postings,
+			"uuid":           t.UUID,
+			"date":           t.Date,
+			"flag":           t.Flag,
+			"description":    t.Description,
+			"tags":           t.Tags,
+			"created_by_name": nullIfEmpty(t.CreatedByName),
+			"postings":       postings,
 		})
 	default:
 		return nil, fmt.Errorf("未知实体类型 %q", typ)
@@ -153,7 +161,8 @@ func (s *Service) loadEntity(ledgerID int64, typ, uuid string) (json.RawMessage,
 }
 
 // SyncPush 逐条幂等提交离线变更：单条失败不阻塞其余，响应逐条结果。
-func (s *Service) SyncPush(ledgerID int64, req PushRequest) (PushResultOut, error) {
+// userID 为当前请求用户 id，用作离线推送交易的 created_by（服务端权威归因，不信任客户端）。
+func (s *Service) SyncPush(ledgerID, userID int64, req PushRequest) (PushResultOut, error) {
 	results := make([]PushResult, 0, len(req.Changes))
 	accepted := 0
 
@@ -163,7 +172,7 @@ func (s *Service) SyncPush(ledgerID int64, req PushRequest) (PushResultOut, erro
 			op = domain.OpCreate
 		}
 		pr := PushResult{Index: idx, EntityType: c.EntityType}
-		if op != domain.OpCreate && op != domain.OpDelete {
+		if op != domain.OpCreate && op != domain.OpDelete && op != domain.OpClose && op != domain.OpUpdate {
 			pr.Status = "error"
 			pr.Error = fmt.Sprintf("非法 op %q", op)
 			results = append(results, pr)
@@ -175,7 +184,7 @@ func (s *Service) SyncPush(ledgerID int64, req PushRequest) (PushResultOut, erro
 		_ = json.Unmarshal(c.Entity, &idField)
 		pr.UUID = idField.UUID
 
-		res, err := s.applyPushEntity(ledgerID, c.EntityType, op, c.Entity)
+		res, err := s.applyPushEntity(ledgerID, userID, c.EntityType, op, c.Entity)
 		if err != nil {
 			pr.Status = "error"
 			pr.Error = err.Error()
@@ -191,13 +200,15 @@ func (s *Service) SyncPush(ledgerID int64, req PushRequest) (PushResultOut, erro
 		results = append(results, pr)
 	}
 
-	// 分拣顺序：先所有 create（被引用实体先落库），再所有 delete。
+	// 分拣顺序：先所有 create（被引用实体先落库），再所有 delete（交易），
+	// 最后所有 close（账户关闭 = Beancount close，0.4-A 起）。
 	for _, pass := range []struct{ op, typ string }{
 		{domain.OpCreate, domain.EntityCommodity},
 		{domain.OpCreate, domain.EntityAccount},
 		{domain.OpCreate, domain.EntityTransaction},
 		{domain.OpDelete, domain.EntityTransaction},
-		{domain.OpDelete, domain.EntityAccount},
+		{domain.OpClose, domain.EntityAccount},
+		{domain.OpUpdate, domain.EntityAccount}, // 0.4-C 账户排序等字段更新
 	} {
 		for i, c := range req.Changes {
 			op := c.Op
@@ -225,10 +236,17 @@ func (s *Service) SyncPush(ledgerID int64, req PushRequest) (PushResultOut, erro
 	return PushResultOut{Checkpoint: maxSeq, Accepted: accepted, Results: results}, nil
 }
 
-// applyPushEntity 按 op 应用一条推送：create 幂等写入（账户/币种按自然键合并），delete 软删。
-func (s *Service) applyPushEntity(ledgerID int64, typ, op string, raw json.RawMessage) (pushApplyResult, error) {
+// applyPushEntity 按 op 应用一条推送：create 幂等写入（账户/币种按自然键合并），
+// delete 软删（仅交易），close 关闭账户（置 close_date，0.4-A）。
+func (s *Service) applyPushEntity(ledgerID, userID int64, typ, op string, raw json.RawMessage) (pushApplyResult, error) {
 	if op == domain.OpDelete {
 		return s.applyDeleteEntity(ledgerID, typ, raw)
+	}
+	if op == domain.OpClose {
+		return s.applyCloseEntity(ledgerID, typ, raw)
+	}
+	if op == domain.OpUpdate {
+		return s.applyUpdateEntity(ledgerID, typ, raw)
 	}
 	switch typ {
 	case domain.EntityAccount:
@@ -239,6 +257,10 @@ func (s *Service) applyPushEntity(ledgerID int64, typ, op string, raw json.RawMe
 			Type        string `json:"type"`
 			OpenDate    string `json:"open_date"`
 			Restriction string `json:"commodity_restriction"`
+			Icon        string `json:"icon"`
+			Color       string `json:"color"`
+			ParentUUID  string `json:"parent_uuid"`
+			SubType     string `json:"sub_type"`
 		}
 		if err := json.Unmarshal(raw, &e); err != nil {
 			return pushApplyResult{}, err
@@ -254,13 +276,21 @@ func (s *Service) applyPushEntity(ledgerID int64, typ, op string, raw json.RawMe
 		if exists {
 			return pushApplyResult{}, nil
 		}
-		// ② 自然键合并：同账本存在未删除同名账户 → 返回先到者 uuid。
+		// ② 自然键合并：同账本存在未关闭同名账户 → 返回先到者 uuid。
+		//    若同名账户已关闭，不合并（关闭账户不可再记账），走 ③ INSERT（触发同名唯一约束冲突）。
 		existing, err := s.repo.AccountNameExists(ledgerID, e.Name)
 		if err != nil {
 			return pushApplyResult{}, err
 		}
 		if existing != "" {
-			return pushApplyResult{serverUUID: existing}, nil
+			acc, err := s.repo.AccountByUUID(ledgerID, existing)
+			if err != nil {
+				return pushApplyResult{}, err
+			}
+			if acc.CloseDate == "" {
+				return pushApplyResult{serverUUID: existing}, nil
+			}
+			// 同名账户已关闭：不合并，继续走 INSERT（将因同名唯一约束失败而报错，符合预期）。
 		}
 		// ③ 真正插入。
 		if _, err := s.repo.InsertAccount(ledgerID, domain.Account{
@@ -270,6 +300,10 @@ func (s *Service) applyPushEntity(ledgerID int64, typ, op string, raw json.RawMe
 			Type:        e.Type,
 			OpenDate:    e.OpenDate,
 			Restriction: e.Restriction,
+			Icon:        e.Icon,
+			Color:       e.Color,
+			ParentUUID:  e.ParentUUID,
+			SubType:     e.SubType,
 		}); err != nil {
 			return pushApplyResult{}, err
 		}
@@ -314,10 +348,11 @@ func (s *Service) applyPushEntity(ledgerID int64, typ, op string, raw json.RawMe
 
 	case domain.EntityTransaction:
 		var e struct {
-			UUID        string `json:"uuid"`
-			Date        string `json:"date"`
-			Flag        string `json:"flag"`
-			Description string `json:"description"`
+			UUID        string   `json:"uuid"`
+			Date        string   `json:"date"`
+			Flag        string   `json:"flag"`
+			Description string   `json:"description"`
+			Tags        []string `json:"tags"`
 			Postings    []struct {
 				AccountUUID string `json:"account_uuid"`
 				Commodity   string `json:"commodity"`
@@ -348,7 +383,7 @@ func (s *Service) applyPushEntity(ledgerID int64, typ, op string, raw json.RawMe
 			date = time.Now().Format("2006-01-02")
 		}
 
-		txn := domain.Transaction{UUID: e.UUID, Date: date, Flag: flag, Description: e.Description}
+		txn := domain.Transaction{UUID: e.UUID, Date: date, Flag: flag, Description: e.Description, Tags: e.Tags, CreatedBy: userID}
 		for _, p := range e.Postings {
 			accID, err := s.repo.AccountIDByUUID(ledgerID, p.AccountUUID)
 			if err != nil {
@@ -372,6 +407,8 @@ func (s *Service) applyPushEntity(ledgerID int64, typ, op string, raw json.RawMe
 }
 
 // applyDeleteEntity 处理 op=delete 的推送（实体只需 uuid）。
+// 0.4-A 起账户不再支持 delete（改为 close）；此处仅处理交易软删。
+// 兼容：旧客户端若对账户发 op=delete，按 close 语义处理（关闭账户）。
 func (s *Service) applyDeleteEntity(ledgerID int64, typ string, raw json.RawMessage) (pushApplyResult, error) {
 	var e struct {
 		UUID string `json:"uuid"`
@@ -384,13 +421,58 @@ func (s *Service) applyDeleteEntity(ledgerID int64, typ string, raw json.RawMess
 	}
 	switch typ {
 	case domain.EntityAccount:
-		deleted, err := s.repo.SoftDeleteAccount(ledgerID, e.UUID)
-		return pushApplyResult{accepted: deleted}, err
+		// 向前兼容：旧客户端 op=delete account → 按 close 处理。
+		closed, err := s.repo.CloseAccount(ledgerID, e.UUID)
+		return pushApplyResult{accepted: closed}, err
 	case domain.EntityTransaction:
 		deleted, err := s.repo.SoftDeleteTransaction(ledgerID, e.UUID)
 		return pushApplyResult{accepted: deleted}, err
 	default:
 		return pushApplyResult{}, fmt.Errorf("不支持删除实体类型 %q", typ)
+	}
+}
+
+// applyCloseEntity 处理 op=close 的推送（账户关闭，置 close_date）。
+func (s *Service) applyCloseEntity(ledgerID int64, typ string, raw json.RawMessage) (pushApplyResult, error) {
+	var e struct {
+		UUID string `json:"uuid"`
+	}
+	if err := json.Unmarshal(raw, &e); err != nil {
+		return pushApplyResult{}, err
+	}
+	if e.UUID == "" {
+		return pushApplyResult{}, domain.Invalidf("关闭变更缺少 uuid")
+	}
+	switch typ {
+	case domain.EntityAccount:
+		closed, err := s.repo.CloseAccount(ledgerID, e.UUID)
+		return pushApplyResult{accepted: closed}, err
+	default:
+		return pushApplyResult{}, fmt.Errorf("不支持关闭实体类型 %q", typ)
+	}
+}
+
+// applyUpdateEntity 处理 op=update 的推送（0.4-C 起，仅账户排序等字段更新）。
+// 前端已知账户 uuid，无需自然键合并；只更新已存在账户的 sort_order（当前唯一可更新字段）。
+func (s *Service) applyUpdateEntity(ledgerID int64, typ string, raw json.RawMessage) (pushApplyResult, error) {
+	var e struct {
+		UUID      string `json:"uuid"`
+		SortOrder int64  `json:"sort_order"`
+	}
+	if err := json.Unmarshal(raw, &e); err != nil {
+		return pushApplyResult{}, err
+	}
+	if e.UUID == "" {
+		return pushApplyResult{}, domain.Invalidf("更新变更缺少 uuid")
+	}
+	switch typ {
+	case domain.EntityAccount:
+		if err := s.repo.UpdateAccountSortOrder(ledgerID, e.UUID, e.SortOrder); err != nil {
+			return pushApplyResult{}, err
+		}
+		return pushApplyResult{accepted: true}, nil
+	default:
+		return pushApplyResult{}, fmt.Errorf("不支持更新实体类型 %q", typ)
 	}
 }
 

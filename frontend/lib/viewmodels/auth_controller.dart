@@ -45,6 +45,7 @@ class AuthController extends ChangeNotifier {
   Future<void> init() async {
     await LedgerApi.loadToken();
     await LedgerApi.loadLedgerId();
+    await LedgerApi.loadDisplayName();
     if (LedgerApi.loggedIn) {
       try {
         final me = await api.me();
@@ -65,6 +66,7 @@ class AuthController extends ChangeNotifier {
   void _resetLocalAuth() {
     LedgerApi.clearToken();
     LedgerApi.setLedgerId(null);
+    LedgerApi.setDisplayName(null);
     _username = null;
     _ledgers = [];
     _currentLedger = null;
@@ -91,11 +93,12 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// 从 me()/login()/register() 返回的 {user: {...}} 中提取用户名。
+  /// 从 me()/login()/register() 返回的 {user: {...}} 中提取用户名与显示名。
   void _applyUser(Map<String, dynamic> j) {
     final user = j['user'];
     if (user is Map) {
       _username = user['username'] as String? ?? user['display_name'] as String?;
+      LedgerApi.setDisplayName(user['display_name'] as String?);
     }
   }
 
@@ -154,6 +157,7 @@ class AuthController extends ChangeNotifier {
     _ledgers = [];
     _currentLedger = null;
     LedgerApi.setLedgerId(null);
+    LedgerApi.setDisplayName(null);
     notifyListeners();
   }
 }

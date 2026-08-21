@@ -7,9 +7,11 @@ import '../../app/navigation.dart';
 import '../../app/theme.dart';
 import '../../viewmodels/ledger_controller.dart';
 import '../record/record_screen.dart';
+import '../record/record_dialog.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../transactions/transactions_screen.dart';
 import '../accounts/accounts_screen.dart';
+import '../accounts/account_dialog.dart';
 import '../members/members_screen.dart';
 import '../commodities/commodities_screen.dart';
 import '../import_export/import_export_screen.dart';
@@ -53,10 +55,14 @@ class _AppShellState extends State<AppShell> {
   void _select(AppRoute r) => setState(() => _route = r);
 
   void _goRecord() {
-    Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (_) => const RecordScreen()),
-    );
+    if (isWide(context)) {
+      showDialog(context: context, builder: (_) => const RecordDialog());
+    } else {
+      Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => const RecordScreen()),
+      );
+    }
   }
 
   Widget _content() {
@@ -83,10 +89,14 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _goAccountEdit(BuildContext context) {
-    Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (_) => const AccountEditScreen()),
-    );
+    if (isWide(context)) {
+      showDialog(context: context, builder: (_) => const AccountDialog());
+    } else {
+      Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => const AccountEditScreen()),
+      );
+    }
   }
 
   @override

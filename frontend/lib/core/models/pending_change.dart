@@ -1,6 +1,7 @@
 /// 待推送的本地变更（离线产生，联网后清空）。
-/// [op] 区分 create（建账户/记账）与 delete（删除账户/交易），默认 create。
-/// [key] 为实体 uuid：create 时与 entity['uuid'] 一致；delete 时实体仅含 uuid。
+/// [op] 区分 create（建账户/记账）、delete（删除交易）、close（关闭账户）、
+/// update（账户排序等字段更新，0.4-C），默认 create。
+/// [key] 为实体 uuid：create 时与 entity['uuid'] 一致；delete/close/update 时实体仅含 uuid（或部分字段）。
 class PendingChange {
   final String entityType; // account | transaction
   final String op; // create | delete

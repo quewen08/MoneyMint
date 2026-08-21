@@ -158,15 +158,62 @@ class LocalStore {
     return snaps.length;
   }
 
+  /// 默认账户（纯前端记忆，0.4-C）：按账本隔离，kind ∈
+  /// expense | income | transferOut | transferIn，值为账户 uuid。
+  /// 记一笔弹窗按交易类型预选默认账户，提交时回写「上次选择」。
+  Future<Map<String, String>> getDefaultAccounts(int? ledgerId) async {
+    final v = await _meta.record('default_accounts_${ledgerId ?? 0}').get(_db);
+    if (v == null) return {};
+    final map = Map<String, dynamic>.from(v);
+    return map.map((k, val) => MapEntry(k, val as String));
+  }
+
+  Future<void> setDefaultAccount(int? ledgerId, String kind, String uuid) async {
+    final cur = await getDefaultAccounts(ledgerId);
+    cur[kind] = uuid;
+    await _meta.record('default_accounts_${ledgerId ?? 0}').put(_db, cur);
+  }
+
+  Future<void> clearDefaultAccounts(int? ledgerId) async {
+    await _meta.record('default_accounts_${ledgerId ?? 0}').delete(_db);
+  }
+
   /// 应用一条服务器拉回的变更：
   ///   op=create → 按 uuid 幂等 upsert；
-  ///   op=delete → 按 uuid 删除本地记录（P1-B1 删除语义落地）。
+  ///   op=delete → 按 uuid 删除本地记录（仅交易；账户 0.4 起改为 close）；
+  ///   op=close  → 按 uuid 更新账户 close_date（不删除，保留历史交易，0.4-A）；
+  ///   op=update → 按 uuid 全量 upsert（0.4-C 账户排序等字段更新）。
   Future<void> applyChange(
       String entityType, String op, Map<String, dynamic> entity) async {
     final uuid = entity['uuid'] as String?;
+    if (op == 'update') {
+      // 账户字段更新（当前为 sort_order）：按 uuid 全量 upsert即可。
+      if (entityType == 'account' && uuid != null) {
+        await putAccount(LocalAccount.fromMap(entity));
+      }
+      return;
+    }
+    if (op == 'close') {
+      // 账户关闭：更新 close_date，保留账户与引用交易。
+      if (entityType == 'account' && uuid != null) {
+        final rec = await _accounts.record(uuid).get(_db);
+        if (rec != null) {
+          await _accounts.record(uuid).put(_db,
+              {...Map<String, dynamic>.from(rec), 'close_date': entity['close_date']});
+        }
+      }
+      return;
+    }
     if (op == 'delete') {
       if (entityType == 'account' && uuid != null) {
-        await deleteAccount(uuid);
+        // 0.4 起账户不再 delete；兼容旧 pull 数据按 close 处理。
+        final rec = await _accounts.record(uuid).get(_db);
+        if (rec != null) {
+          await _accounts.record(uuid).put(_db,
+              {...Map<String, dynamic>.from(rec), 'close_date': entity['close_date'] ?? ''});
+        } else {
+          await deleteAccount(uuid);
+        }
       } else if (entityType == 'transaction' && uuid != null) {
         await deleteTxn(uuid);
       }

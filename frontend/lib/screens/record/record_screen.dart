@@ -27,7 +27,7 @@ class _RecordScreenState extends State<RecordScreen> {
     super.didChangeDependencies();
     if (_initialized) return;
     _initialized = true;
-    final accounts = AppScope.of(context).ledger.accounts;
+    final accounts = AppScope.of(context).ledger.accounts.where((a) => !a.isClosed).toList();
     final first = accounts.isNotEmpty ? accounts.first.uuid : '';
     _rows
       ..add(_PostingRow(first))
@@ -132,14 +132,15 @@ class _RecordScreenState extends State<RecordScreen> {
             _PostingCard(
               key: ValueKey(_rows[i]),
               row: _rows[i],
-              accounts: ledger.accounts,
+              accounts: ledger.accounts.where((a) => !a.isClosed).toList(),
               onRemove: _rows.length > 2
                   ? () => setState(() => _rows.removeAt(i))
                   : null,
             ),
           TextButton.icon(
             onPressed: () => setState(() {
-              final first = ledger.accounts.isNotEmpty ? ledger.accounts.first.uuid : '';
+              final open = ledger.accounts.where((a) => !a.isClosed).toList();
+              final first = open.isNotEmpty ? open.first.uuid : '';
               _rows.add(_PostingRow(first));
             }),
             icon: const Icon(Icons.add),

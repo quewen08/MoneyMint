@@ -50,12 +50,14 @@ class SectionTitle extends StatelessWidget {
 }
 
 /// 金额文本：等宽数字对齐，按正负着色（负=橙/红，正=绿，零=灰）。
+/// [hidden] 为真时以「••••」蒙层显示（首页隐私开关，0.4-D）。
 class AmountText extends StatelessWidget {
   final String amount; // 定点十进制字符串
   final String commodity;
   final double size;
   final bool signed;
   final FontWeight weight;
+  final bool hidden;
   const AmountText(
     this.amount,
     this.commodity, {
@@ -63,18 +65,21 @@ class AmountText extends StatelessWidget {
     this.size = 15,
     this.signed = true,
     this.weight = FontWeight.w700,
+    this.hidden = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final d = Decimal.tryParse(amount) ?? Decimal.zero;
-    final color = d < Decimal.zero
-        ? AppColors.warn
-        : d > Decimal.zero
-            ? AppColors.green
-            : AppColors.sub;
+    final color = hidden
+        ? AppColors.sub
+        : d < Decimal.zero
+            ? AppColors.warn
+            : d > Decimal.zero
+                ? AppColors.green
+                : AppColors.sub;
     return Text(
-      formatMoney(amount, commodity, signed: signed),
+      hidden ? '••••' : formatMoney(amount, commodity, signed: signed),
       style: TextStyle(
         fontSize: size,
         fontWeight: weight,
@@ -92,6 +97,7 @@ class AccountRow extends StatelessWidget {
   final Map<String, String> balances; // commodity -> 金额串
   final VoidCallback? onTap;
   final Widget? action; // 余额右侧操作（如删除菜单），默认无
+  final bool dimmed; // 视觉降权（已关闭账户，0.4-A）
   const AccountRow({
     super.key,
     required this.name,
@@ -99,6 +105,7 @@ class AccountRow extends StatelessWidget {
     required this.balances,
     this.onTap,
     this.action,
+    this.dimmed = false,
   });
 
   @override
@@ -112,6 +119,10 @@ class AccountRow extends StatelessWidget {
                 .map((e) => AmountText(e.value, e.key, size: 15))
                 .toList(),
           );
+    final nameStyle = TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+        color: dimmed ? AppColors.sub : const Color(0xFF1A1A1A));
     final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
@@ -120,7 +131,7 @@ class AccountRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                Text(name, style: nameStyle),
                 if (subtitle != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
@@ -174,6 +185,7 @@ class LocalAccountRow extends StatelessWidget {
   final Map<String, String> balances;
   final VoidCallback? onTap;
   final Widget? action;
+  final bool dimmed;
   const LocalAccountRow({
     super.key,
     required this.name,
@@ -181,6 +193,7 @@ class LocalAccountRow extends StatelessWidget {
     required this.balances,
     this.onTap,
     this.action,
+    this.dimmed = false,
   });
 
   @override
@@ -190,6 +203,7 @@ class LocalAccountRow extends StatelessWidget {
         balances: balances,
         onTap: onTap,
         action: action,
+        dimmed: dimmed,
       );
 }
 
@@ -224,7 +238,7 @@ void showAppSnack(BuildContext context, String message, {bool warn = false}) {
   );
 }
 
-String todayStr() {
-  final n = DateTime.now();
+String todayStr([DateTime? date]) {
+  final n = date ?? DateTime.now();
   return '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
 }

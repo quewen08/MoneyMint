@@ -34,6 +34,8 @@ const (
 
 	OpCreate = "create"
 	OpDelete = "delete"
+	OpClose  = "close" // 0.4 起：账户「删除」= Beancount close（置 close_date，保留历史交易）
+	OpUpdate = "update" // 0.4-C 起：账户排序等字段更新（不涉及 open/close 语义）
 )
 
 // Account 是账本内的一个账户（Beancount open 指令实体）。
@@ -46,6 +48,11 @@ type Account struct {
 	OpenDate    string
 	CloseDate   string // 空表示未关闭
 	Restriction string // commodity_restriction，空表示无
+	Icon        string // 图标标识（展示用，不影响导出）
+	Color       string // 颜色 hex（展示用）
+	ParentUUID  string // 父账户 uuid（三级分类结构；空为该层级根）
+	SubType     string // 账户子类型（借记账户/信用卡/虚拟账户等，展示用）
+	SortOrder   int64  // 用户自定义排序（0.4-C）；同类型内升序排列
 }
 
 // Posting 是交易中的一条分录。金额为有符号定点十进制字符串。
@@ -65,7 +72,9 @@ type Transaction struct {
 	Date        string
 	Flag        string // * | !
 	Description string
-	CreatedBy   int64 // 创建者用户 id；0 表示无（同步 push 的离线交易无创建者）
+	CreatedBy   int64      // 创建者用户 id；0 表示无（同步 push 的离线交易无创建者）
+	CreatedByName string  // 创建者显示名；由 repository JOIN users 取得，created_by=0 时为空串
+	Tags        []string   // 标签（展示/检索/导出 #tag 用）
 	Postings    []Posting
 }
 

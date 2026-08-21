@@ -31,6 +31,8 @@ class TxnDetailScreen extends StatelessWidget {
                   _Row(label: '日期', value: txn.date),
                   _Row(label: '摘要', value: txn.description.isEmpty ? '(无说明)' : txn.description),
                   _Row(label: '标记', value: txn.flag, tag: true),
+                  if (txn.createdByName != null && txn.createdByName!.isNotEmpty)
+                    _Row(label: '记账人', value: txn.createdByName!),
                 ],
               ),
             ),

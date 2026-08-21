@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,8 +13,11 @@ import (
 // ListTransactions 列出账本内所有未删除交易（含分录），按日期、id 倒序。
 func (s *Store) ListTransactions(ledgerID int64) ([]domain.Transaction, error) {
 	rows, err := s.db.Query(
-		`SELECT id, uuid, date, flag, description FROM transactions
-		 WHERE ledger_id=? AND deleted_at IS NULL ORDER BY date DESC, id DESC`,
+		`SELECT t.id, t.uuid, t.date, t.flag, t.description, t.tags, t.created_by,
+		        u.display_name AS created_by_name
+		 FROM transactions t
+		 LEFT JOIN users u ON t.created_by = u.id
+		 WHERE t.ledger_id=? AND t.deleted_at IS NULL ORDER BY t.date DESC, t.id DESC`,
 		ledgerID,
 	)
 	if err != nil {
@@ -23,10 +27,12 @@ func (s *Store) ListTransactions(ledgerID int64) ([]domain.Transaction, error) {
 	ids := []int64{}
 	for rows.Next() {
 		var t domain.Transaction
-		if err := rows.Scan(&t.ID, &t.UUID, &t.Date, &t.Flag, &t.Description); err != nil {
+		var tags sql.NullString
+		if err := rows.Scan(&t.ID, &t.UUID, &t.Date, &t.Flag, &t.Description, &tags, &t.CreatedBy, &t.CreatedByName); err != nil {
 			rows.Close()
 			return nil, err
 		}
+		t.Tags = parseTags(tags)
 		txns = append(txns, t)
 		ids = append(ids, t.ID)
 	}
@@ -72,17 +78,22 @@ func (s *Store) ListTransactions(ledgerID int64) ([]domain.Transaction, error) {
 // TransactionByUUID 按 uuid 查询单笔未删除交易（含分录，引用账户 uuid）。
 func (s *Store) TransactionByUUID(ledgerID int64, uuid string) (domain.Transaction, error) {
 	var t domain.Transaction
+	var tags sql.NullString
 	err := s.db.QueryRow(
-		`SELECT id, uuid, date, flag, description FROM transactions
-		 WHERE ledger_id=? AND uuid=? AND deleted_at IS NULL`,
+		`SELECT t.id, t.uuid, t.date, t.flag, t.description, t.tags, t.created_by,
+		        u.display_name AS created_by_name
+		 FROM transactions t
+		 LEFT JOIN users u ON t.created_by = u.id
+		 WHERE t.ledger_id=? AND t.uuid=? AND t.deleted_at IS NULL`,
 		ledgerID, uuid,
-	).Scan(&t.ID, &t.UUID, &t.Date, &t.Flag, &t.Description)
+	).Scan(&t.ID, &t.UUID, &t.Date, &t.Flag, &t.Description, &tags, &t.CreatedBy, &t.CreatedByName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Transaction{}, domain.ErrNotFound
 	}
 	if err != nil {
 		return domain.Transaction{}, err
 	}
+	t.Tags = parseTags(tags)
 
 	prows, err := s.db.Query(
 		`SELECT p.account_id, a.uuid, a.name, p.commodity, CAST(p.amount AS TEXT), p.position
@@ -101,6 +112,30 @@ func (s *Store) TransactionByUUID(ledgerID int64, uuid string) (domain.Transacti
 		t.Postings = append(t.Postings, p)
 	}
 	return t, prows.Err()
+}
+
+// parseTags 把 tags 列的 JSON 字符串解析为标签切片（NULL/空/非法 → 空切片）。
+func parseTags(tags sql.NullString) []string {
+	if !tags.Valid || tags.String == "" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(tags.String), &out); err != nil || out == nil {
+		return nil
+	}
+	return out
+}
+
+// marshalTags 把标签切片序列化为 JSON 字符串（空/nil → NULL）。
+func marshalTags(tags []string) any {
+	if len(tags) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(tags)
+	if err != nil {
+		return nil
+	}
+	return string(b)
 }
 
 // CreateTransaction 在线创建一笔不可变交易：在事务内补建币种、写交易与分录、追加 sync_log。
@@ -149,9 +184,9 @@ func (s *Store) saveTransaction(ledgerID int64, txn domain.Transaction, idempote
 		createdBy = txn.CreatedBy
 	}
 	res, err := tx.Exec(
-		`INSERT INTO transactions(ledger_id, uuid, date, flag, description, created_by)
-		 VALUES(?, ?, ?, ?, ?, ?)`,
-		ledgerID, txn.UUID, txn.Date, txn.Flag, txn.Description, createdBy,
+		`INSERT INTO transactions(ledger_id, uuid, date, flag, description, tags, created_by)
+		 VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		ledgerID, txn.UUID, txn.Date, txn.Flag, txn.Description, marshalTags(txn.Tags), createdBy,
 	)
 	if err != nil {
 		return 0, false, fmt.Errorf("写入交易失败: %w", err)
@@ -197,67 +232,25 @@ func (s *Store) SoftDeleteTransaction(ledgerID int64, uuid string) (bool, error)
 	return true, nil
 }
 
-// SoftDeleteAccount 软删账户及其引用交易（事务内），并写各自的 delete 事件。
-// 幂等：不存在/已删返回 false。
-func (s *Store) SoftDeleteAccount(ledgerID int64, uuid string) (bool, error) {
-	var aid int64
-	err := s.db.QueryRow(
-		`SELECT id FROM accounts WHERE ledger_id=? AND uuid=? AND deleted_at IS NULL`,
+// CloseAccount 关闭账户（Beancount close 语义）：置 close_date，保留全部交易引用。
+// 不再软删账户、不连带删除引用交易（0.4-A 起，原 SoftDeleteAccount 语义废弃）。
+// 写 sync_log op=close。幂等：不存在/已关闭返回 false。
+func (s *Store) CloseAccount(ledgerID int64, uuid string) (bool, error) {
+	// 仅匹配未关闭账户（close_date IS NULL）；deleted_at 兼容旧库（0.4 起不再写入）。
+	// close_date 取 date('now')：Beancount close 指令要求 YYYY-MM-DD 格式。
+	res, err := s.db.Exec(
+		`UPDATE accounts SET close_date=date('now'), updated_at=datetime('now')
+		 WHERE ledger_id=? AND uuid=? AND close_date IS NULL AND deleted_at IS NULL`,
 		ledgerID, uuid,
-	).Scan(&aid)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return false, err
-	}
-	defer tx.Rollback()
-
-	// 先软删引用该账户的交易，RETURNING 收集本次实际软删的交易 uuid。
-	rows, err := tx.Query(
-		`UPDATE transactions SET deleted_at=datetime('now')
-		 WHERE ledger_id=? AND deleted_at IS NULL AND id IN (
-			SELECT DISTINCT p.transaction_id FROM postings p
-			JOIN accounts a ON a.id=p.account_id
-			WHERE a.ledger_id=? AND a.uuid=?)
-		 RETURNING uuid`,
-		ledgerID, ledgerID, uuid,
 	)
 	if err != nil {
 		return false, err
 	}
-	txnUUIDs := []string{}
-	for rows.Next() {
-		var u string
-		if err := rows.Scan(&u); err != nil {
-			rows.Close()
-			return false, err
-		}
-		txnUUIDs = append(txnUUIDs, u)
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return false, nil
 	}
-	rows.Close()
-
-	if _, err := tx.Exec(
-		`UPDATE accounts SET deleted_at=datetime('now') WHERE ledger_id=? AND uuid=? AND deleted_at IS NULL`,
-		ledgerID, uuid,
-	); err != nil {
-		return false, err
-	}
-
-	if _, err := appendSyncLogOn(tx, ledgerID, domain.EntityAccount, uuid, domain.OpDelete); err != nil {
-		return false, err
-	}
-	for _, u := range txnUUIDs {
-		if _, err := appendSyncLogOn(tx, ledgerID, domain.EntityTransaction, u, domain.OpDelete); err != nil {
-			return false, err
-		}
-	}
-	if err := tx.Commit(); err != nil {
+	if _, err := appendSyncLogOn(s.db, ledgerID, domain.EntityAccount, uuid, domain.OpClose); err != nil {
 		return false, err
 	}
 	return true, nil

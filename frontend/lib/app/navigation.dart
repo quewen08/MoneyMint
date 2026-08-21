@@ -31,9 +31,11 @@ class NavItem {
   const NavItem(this.route, this.label, this.icon);
 }
 
-/// 移动端底部 3 个 Tab（设计稿：首页 / 流水 / 我的；去掉「账户」）。
+/// 移动端底部 4 个 Tab（0.4-D：首页 / 资产 / 流水 / 我的）。
+/// 「资产」复用 AccountsScreen（含顶部总资产/总负债汇总卡）；PC 侧边栏不变。
 const mobileTabs = [
   NavItem(AppRoute.dashboard, '首页', Icons.home_outlined),
+  NavItem(AppRoute.accounts, '资产', Icons.account_balance_wallet_outlined),
   NavItem(AppRoute.transactions, '流水', Icons.receipt_long_outlined),
   NavItem(AppRoute.settings, '我的', Icons.person_outline),
 ];

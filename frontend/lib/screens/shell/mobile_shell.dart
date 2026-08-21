@@ -26,9 +26,12 @@ class MobileShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ledger = AppScope.of(context).ledger;
+    final tab = mobileTabs.where((t) => t.route == route).toList();
     return Scaffold(
       appBar: AppBar(
-        title: Text(routeTitles[route] ?? '家庭记账'),
+        title: Text(tab.isNotEmpty
+            ? tab.first.label
+            : (routeTitles[route] ?? '家庭记账')),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),

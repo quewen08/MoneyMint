@@ -39,6 +39,7 @@ dependencies:
   sembast: ^3.7.0
   sembast_web: ^2.4.0
   decimal: ^3.0.0
+  fl_chart: ^0.70.0
 
 dev_dependencies:
   flutter_test:
