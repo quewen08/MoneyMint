@@ -54,6 +54,11 @@
 - `newRouter` 签名新增 `webRoot` 参数；`handler.New` 新增 `engine` 参数；`server.New` 增加配置校验前置与备份引擎装配。
 - 备份初始化失败不阻断启动：降级为「无备份模式」并在日志告警，备份端点返回 503。记账是核心功能，不能因备份目录不可用而全家无法记账。
 
+### Fixed
+
+- **Docker 构建卡在 `flutter pub get --enforce-lockfile`（exit 65）**：`pubspec.lock` 由开发机 Flutter 3.38.9 生成，而镜像内为 3.35.1；`meta` / `vm_service` / `test_api` / `crypto` 属于随 SDK 捆绑的包，版本由 SDK 决定而非 pub 解析，两个 SDK 版本不同时 pub 必然要求调整这些包，`--enforce-lockfile` 遂直接判失败（日志表现为 "Would change 40 dependencies"）。
+  改为「正常解析 + lockfile 漂移告警」：不因 SDK 微差阻断整个镜像构建，但一旦 lockfile 真被重新解析，构建日志会明确打印原因、影响与对齐方式，不静默放过。
+
 ### 已知限制
 
 - `POST /api/transactions`（REST 在线记账）的请求结构**不支持 `tags`**，且 handler 使用 `DisallowUnknownFields`，携带 `tags` 会直接 400。标签目前仅支持离线 `POST /api/sync/push` 路径。两条写入路径能力不对等，待后续版本统一。

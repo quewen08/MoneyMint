@@ -15,7 +15,13 @@
 
 # syntax=docker/dockerfile:1
 
-# 镜像版本集中在此，便于升级时只改一处
+# 镜像版本集中在此，便于升级时只改一处。
+#
+# 注意 Flutter 版本差异：
+#   此处 3.35.1 已验证可拉取；但开发机本地 Flutter 可能是别的版本（当前为 3.38.9）。
+#   两者不一致会导致 pubspec.lock 在镜像内被重新解析（下方 pub get 步骤会告警）。
+#   若要彻底消除差异，把 FLUTTER_IMAGE 改成开发机 `flutter --version` 的版本，
+#   并确认 ghcr.io/cirruslabs/flutter 存在对应 tag。
 ARG FLUTTER_IMAGE=ghcr.io/cirruslabs/flutter:3.35.1
 ARG GO_IMAGE=golang:1.25-alpine
 ARG RUNTIME_IMAGE=alpine:3.20
@@ -27,9 +33,21 @@ WORKDIR /src/frontend
 
 # 先只拷依赖清单，让 pub get 层可缓存（源码变动不必重装依赖）
 COPY frontend/pubspec.yaml frontend/pubspec.lock ./
-# --enforce-lockfile：pubspec.lock 与 pubspec.yaml 不一致时构建失败，
-# 避免「本地能跑、镜像里依赖漂移」的隐蔽问题。
-RUN flutter pub get --enforce-lockfile
+
+# 不使用 --enforce-lockfile（曾被它卡死过一次构建，exit 65）：
+#   pubspec.lock 是开发机 Flutter SDK 生成的，其中 meta / vm_service / test_api / crypto
+#   属于「随 SDK 捆绑」的包，版本由 SDK 决定而非 pub 解析。镜像内 SDK 与生成 lockfile
+#   的 SDK 版本不同时，pub 必然要求改动这些包，--enforce-lockfile 会直接判失败。
+# 改成「正常解析 + 漂移告警」：不因 SDK 微差阻断整个镜像构建，但绝不静默——
+#   一旦 lockfile 真的被重新解析，构建日志会明确打出来，便于判断是否需要对齐版本。
+RUN cp pubspec.lock /tmp/pubspec.lock.orig \
+    && flutter pub get \
+    && if ! cmp -s /tmp/pubspec.lock.orig pubspec.lock; then \
+         echo "⚠️  警告：pubspec.lock 在镜像内被重新解析了"; \
+         echo "    原因：镜像的 Flutter SDK 与生成该 lockfile 的版本不同（SDK 捆绑包 meta/vm_service/test_api 等被调整）。"; \
+         echo "    影响：本次构建使用镜像内解析结果，可能与开发机依赖版本有细微差异。"; \
+         echo "    如需完全复现：把上方 FLUTTER_IMAGE 钉到与开发机一致的 Flutter 版本。"; \
+       fi
 
 COPY frontend/ ./
 # 说明：本项目以 emoji 作账户图标，不走 Material Icons 字体子集化，

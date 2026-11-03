@@ -25,7 +25,7 @@
 | 工具 | 版本 / 路径 | 说明 |
 |---|---|---|
 | Go | 1.26.5，`/d/Environment/go/bin` | Git Bash 需 `export PATH="$PATH:/d/Environment/go/bin"` |
-| Flutter | 3.35.1，`/d/Environment/flutter/bin` | 同上需加 PATH |
+| Flutter | 本地 **3.38.9**（Dart 3.10.8），`/d/Environment/flutter/bin` | 同上需加 PATH。**注意**：Docker 镜像内固定用 3.35.1，两者版本差会导致 `pubspec.lock` 在镜像内被重新解析（详见 `Dockerfile` 的 pub get 注释） |
 | Python | 项目内 `.venv` | 仅用于 `bean-check`（`beancount` 包），不污染系统 |
 | GOPROXY | `https://goproxy.cn,direct` | `proxy.golang.org` 国内不可达 |
 | PUB_HOSTED_URL | `https://pub.flutter-io.cn` | 前端 `flutter pub get` 国内镜像 |
