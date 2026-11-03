@@ -20,6 +20,7 @@ var migrations = []struct {
 	{"005_txn_tags", migrate005},
 	{"006_account_close_semantics", migrate006},
 	{"007_account_sort_order", migrate007},
+	{"008_user_admin", migrate008},
 }
 
 // ApplyMigrations 执行所有尚未应用的迁移。
@@ -333,6 +334,43 @@ func migrate006(conn *sql.DB) error {
 		return fmt.Errorf("create accounts name index: %w", err)
 	}
 
+	return nil
+}
+
+// migrate008：引入系统管理员（M1 备份权限前置）。
+//   - users 加 is_admin INTEGER NOT NULL DEFAULT 0
+//   - 旧库补选：若库中不存在任何管理员，把 id 最小的可用用户（status<>'disabled'）置为管理员
+//   - 全新库不预置管理员：由 service.Register 在「首个用户注册」时原子置位，
+//     避免出现「先建了个空管理员行」的诡异状态
+//
+// 为什么需要全局管理员：备份是全库级操作（含所有账本、所有用户），
+// 而账本级 owner 只对一个账本有权限。若允许任意账本 owner 下载全库备份，
+// 等于让 A 家庭拿到 B 家庭的账目 —— 越权。
+func migrate008(conn *sql.DB) error {
+	if ok, err := columnExists(conn, "users", "is_admin"); err != nil {
+		return err
+	} else if !ok {
+		if _, err := conn.Exec(
+			`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`,
+		); err != nil {
+			return fmt.Errorf("add users.is_admin: %w", err)
+		}
+	}
+
+	// 旧库补选：已有数据但无管理员时，自动指定一个，避免升级后无人能备份。
+	var n int
+	if err := conn.QueryRow(`SELECT count(*) FROM users WHERE is_admin=1`).Scan(&n); err != nil {
+		return fmt.Errorf("count admins: %w", err)
+	}
+	if n > 0 {
+		return nil
+	}
+	if _, err := conn.Exec(
+		`UPDATE users SET is_admin=1
+		 WHERE id = (SELECT min(id) FROM users WHERE status <> 'disabled')`,
+	); err != nil {
+		return fmt.Errorf("auto assign admin: %w", err)
+	}
 	return nil
 }
 

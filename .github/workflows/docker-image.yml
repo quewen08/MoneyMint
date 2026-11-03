@@ -1,0 +1,119 @@
+name: build-and-push
+
+# 触发策略：只在打 tag 时发布镜像（本项目是「按版本发布」节奏，不是每次 push 都出镜像）。
+# 手动 workflow_dispatch 用于试构建：此时版本号从 CHANGELOG 顶部读取。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: money-mint
+
+jobs:
+  # ---------- 第一道门：校验不过，绝不产出镜像 ----------
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # verify-version.sh 需要 tag 才能比对，浅克隆只有 1 个提交拿不到 tag
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 关键：必须真的装上 beancount。
+      # 若此步静默失败，后续 go test 会因 BEAN_CHECK_STRICT=1 而失败 —— 这正是设计意图：
+      # 宁可构建失败，也不要「测试全绿但账芯从未被校验」的假绿灯。
+      - name: Install beancount (bean-check)
+        run: |
+          python -m pip install --upgrade pip
+          pip install beancount
+          python -m beancount.scripts.check --help >/dev/null
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="$(grep -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+          fi
+          echo "version=${V}" >> "$GITHUB_OUTPUT"
+          echo "解析出版本：${V}"
+
+      - name: Verify version consistency
+        run: bash scripts/verify-version.sh "${{ steps.ver.outputs.version }}"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test (strict bean-check)
+        env:
+          BEAN_CHECK_STRICT: '1'
+        run: go test ./... -v
+
+      - name: bean-check self check
+        run: bash scripts/check-bean.sh
+
+  # ---------- 第二道门：双架构构建并推送 ----------
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build info
+        id: info
+        run: |
+          echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push (amd64 + arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # arm64 是 NAS 的主力架构，必须与 amd64 一起产出
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BUILD_DATE=${{ steps.info.outputs.date }}
+            BUILD_HASH=${{ steps.info.outputs.hash }}
+            GIT_VERSION=${{ needs.verify.outputs.version }}
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ needs.verify.outputs.version }}
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+          # Flutter 构建很重，缓存是让 CI 可用的关键（首次 8-15 分钟，缓存后 2-4 分钟）
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          {
+            echo "### 镜像已发布"
+            echo ""
+            echo "- 版本：\`${{ needs.verify.outputs.version }}\`"
+            echo "- 架构：linux/amd64, linux/arm64"
+            echo "- 标签：\`${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ needs.verify.outputs.version }}\`、\`:latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"

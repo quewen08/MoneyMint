@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 
+	"familyledger/internal/backup"
 	"familyledger/internal/domain"
 	"familyledger/internal/service"
 )
@@ -16,11 +17,14 @@ import (
 // Handler 持有 service 依赖，暴露各 HTTP 端点方法。
 type Handler struct {
 	svc *service.Service
+	// engine 为备份引擎；为 nil 表示备份功能未启用（初始化失败或显式关闭），
+	// 此时备份端点统一返回 503，而不是伪装成功。
+	engine *backup.Engine
 }
 
 // New 构造 Handler。
-func New(svc *service.Service) *Handler {
-	return &Handler{svc: svc}
+func New(svc *service.Service, engine *backup.Engine) *Handler {
+	return &Handler{svc: svc, engine: engine}
 }
 
 // ---------- 响应辅助 ----------

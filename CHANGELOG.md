@@ -3,6 +3,61 @@
 本项目变更记录遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 风格，
 版本号语义化（[SemVer](https://semver.org/lang/zh-CN/)）。
 
+> 版本号单一事实源：git tag（`vX.Y.Z`）。发布前 `scripts/verify-version.sh` 会校验
+> tag / 本文件顶部版本 / `frontend/pubspec.yaml` 三处一致，不一致则构建失败。
+
+## [0.5.0] - 2026-11-03
+
+「敢上线」版本：补齐工程护栏、容器化与数据备份，让产品从「自己玩」变成「可以给家人开账号、数据丢了能救」。
+本版不新增记账功能，只补可靠性底座。
+
+### Added
+
+- **导出兼容性强制校验（M0-a）**：新增 `BEAN_CHECK_STRICT` 环境变量，严格模式下找不到 `bean-check` 直接让测试失败。此前校验器缺失时测试会静默 skip，CI 里形成「假绿灯」——测试全绿但账芯兼容性从未被验证。
+  - 抽出 `runBeanCheck` 统一校验入口，候选顺序：项目 `.venv`（Windows/POSIX）→ `python3` → `python` → `bean-check`。
+  - 严格区分「校验器不可用」与「账本有错」：前者继续尝试下一候选，后者立即失败。
+  - 新增 `TestExportArchiveBeanCheck`：**多文件目录导出首次纳入 bean-check 校验**（此前只有单文件路径被覆盖）。
+  - 新增 `scripts/check-bean.sh`：确认校验器可用并用最小账本自检，CI 与本地共用。
+- **前端静态托管（M0-b）**：Go 服务可直接托管 Flutter Web 产物，实现「一个进程 + 一个端口」开箱可用。
+  - 新增 `LEDGER_WEB_ROOT`（默认 `./web`）；目录不存在时不阻断服务启动，仅提示未托管前端。
+  - SPA 回退：无扩展名的未命中路径回退 `index.html`；带扩展名的静态资源缺失返回 404（避免浏览器把 HTML 当 JS 解析）。
+  - 分级缓存：`index.html` / `flutter_bootstrap.js` / `manifest.json` 用 `no-cache`，`/assets/`、`/canvaskit/` 用 immutable 长缓存。
+  - 安全：关闭目录列表、路径穿越防护（归一化 + 根目录归属双重校验）、`X-Content-Type-Options: nosniff`。
+- **容器化（M0-c）**：新增三阶段 `Dockerfile`（Flutter builder → Go builder → alpine runtime），单镜像内含前端产物与 Go 静态二进制，非 root 用户运行，带 `HEALTHCHECK`。
+  - 构建信息经 `-ldflags -X` 注入 `buildDate` / `buildHash` / `gitVersion`，启动日志首行打印，便于排障定位版本。
+- **配置集中校验（M0-b/M1）**：`config.Validate()` 在启动时校验备份小时与保留份数范围，非法即快速失败。
+- **版本号治理（M0-d）**：新增 `scripts/verify-version.sh`，校验 git tag / CHANGELOG / pubspec 三处一致；`frontend/pubspec.yaml` 版本由 `1.0.0+1` 修正为 `0.5.0+1`（此前与 CHANGELOG 长期漂移）。
+- **构建与发布链路（M0-e）**：新增 `.github/workflows/docker-image.yml`（tag 触发，先校验后构建，双架构 `linux/amd64` + `linux/arm64` 推送 Docker Hub）、`docker-compose.yml`、`Makefile`。
+
+### Added（M1 数据备份底座）
+
+- **系统管理员角色（M1-a）**：迁移 `008_user_admin` 为 `users` 增加 `is_admin`；首个注册用户在事务内自动置为管理员；旧库升级时若不存在管理员，自动补选 id 最小的可用用户（`status<>'disabled'`）。备份属全库级操作（含全部账本与成员），必须与账本级 owner 区分，否则会出现「A 家庭 owner 下载到 B 家庭账本」的越权。
+  - `/api/auth/me`、注册、登录响应新增 `is_admin`。
+- **一致性快照引擎（M1-b）**：新增 `internal/backup` 包。
+  - 使用 `VACUUM INTO`（参数化）生成快照，**禁止复制数据库文件**——WAL 模式下未 checkpoint 的数据驻留在 `-wal` 中，实测主库 188 KB / WAL 4.1 MB 时直接复制只得到 236/300 条交易，且不报错（形成"看起来有备份、实际数据不全"的假备份）。
+  - 快照后强制 `PRAGMA integrity_check` 与五张核心表行数比对（快照不得多于主库）。
+  - 生成 `manifest.json`（原子写：临时文件 + rename），记录体积、SHA256、行数、耗时、触发方式。
+  - 额外为每个账本导出一份 `.beancount`（从快照库导出，保证严格一致；失败仅告警不影响备份成立）。
+  - 互斥锁 + 30 秒超时：数据库连接池为 1，快照期间独占连接，异常时必须能被中断，避免全站阻塞。
+- **定时调度与保留（M1-c）**：`Scheduler` 提供启动补跑（NAS 常关机，错过定时点是常态）与每日定时；`ApplyRetention` 按「最近 N 份每日 ∪ 最近 M 个月每月一份 ∪ 全部手动备份」清理，删除前逐个过文件名白名单，绝不使用通配符。
+- **备份 API（M1-d）**：`GET /api/backup/list`、`GET /api/backup/download?name=`、`POST /api/backup/run`，全部要求系统管理员。
+  - 下载做四层路径穿越防护（非空 / `filepath.Base` 全等 / 拒绝 `..` 与分隔符 / 白名单正则）+ `Join` 后目录归属二次确认，测试覆盖 10 种攻击写法。
+  - 下载与手动备份写审计日志（操作人、文件名、IP）。
+- **前端备份卡片（M1-e）**：设置页新增「数据备份」卡片，**仅管理员渲染**（非管理员不渲染而非置灰）；展示最近备份时间/份数/占用，支持立即备份、下载最新、展开全量列表、下载任意一份；错误映射为可读中文（401/403/409/503 分别对应不同文案）。
+- **优雅停机**：`main.go` 改用 `http.Server` + `Shutdown`，收到 SIGINT/SIGTERM 后先停止接收新请求，再等待备份任务收尾（上限 15 秒）。
+
+### Changed
+
+- **鉴权范围收窄**：`authMiddleware` 由「白名单外的所有路径都要 token」改为「只对 `/api/` 前缀校验」。原实现会导致访问 `/`（前端入口）直接 401，静态托管无法工作；改后新增前端路由无需回来改白名单。
+- 备份端点不解析 `X-Ledger-Id`、不校验账本成员身份（备份与具体账本无关），仅需登录态，管理员校验在 handler 内完成。
+- `/api/` 下未注册路径在**已登录**时返回 404 JSON（未登录仍先返回 401，不泄露接口是否存在）。
+- `newRouter` 签名新增 `webRoot` 参数；`handler.New` 新增 `engine` 参数；`server.New` 增加配置校验前置与备份引擎装配。
+- 备份初始化失败不阻断启动：降级为「无备份模式」并在日志告警，备份端点返回 503。记账是核心功能，不能因备份目录不可用而全家无法记账。
+
+### 已知限制
+
+- `POST /api/transactions`（REST 在线记账）的请求结构**不支持 `tags`**，且 handler 使用 `DisallowUnknownFields`，携带 `tags` 会直接 400。标签目前仅支持离线 `POST /api/sync/push` 路径。两条写入路径能力不对等，待后续版本统一。
+
 ## [0.4.0] - 2026-08-20
 
 ### Added

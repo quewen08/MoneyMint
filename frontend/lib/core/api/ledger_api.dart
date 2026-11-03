@@ -29,7 +29,24 @@ class LedgerApi {
   /// 清除 token（安全退出）。
   static void clearToken() {
     _token = null;
+    _isAdmin = false;
     html.window.localStorage.remove(_tokenKey);
+  }
+
+  // ---- 系统管理员标记 ----
+  // 控制「数据备份」入口是否可见。不持久化：每次 me()/登录 时从服务端刷新，
+  // 避免本地缓存的旧值让已被取消管理员身份的用户仍看到备份入口。
+  static bool _isAdmin = false;
+  static bool get isAdmin => _isAdmin;
+
+  /// 从登录/me 响应里提取 is_admin（服务端位于 user 对象内）。
+  static void _captureAdmin(Map<String, dynamic> j) {
+    final u = j['user'];
+    if (u is Map && u['is_admin'] is bool) {
+      _isAdmin = u['is_admin'] as bool;
+    } else if (j['is_admin'] is bool) {
+      _isAdmin = j['is_admin'] as bool;
+    }
   }
 
   // ---- 当前账本上下文（P1-C 多账本，持久化于 localStorage）----
@@ -99,6 +116,7 @@ class LedgerApi {
     _check(r);
     final j = jsonDecode(r.body) as Map<String, dynamic>;
     setToken(j['token'] as String);
+    _captureAdmin(j);
     return j;
   }
 
@@ -112,6 +130,7 @@ class LedgerApi {
     _check(r);
     final j = jsonDecode(r.body) as Map<String, dynamic>;
     setToken(j['token'] as String);
+    _captureAdmin(j);
     return j;
   }
 
@@ -127,11 +146,13 @@ class LedgerApi {
     clearToken();
   }
 
-  /// 获取当前登录用户信息（含 role；未加入账本 role 为空串）。
+  /// 获取当前登录用户信息（含 role 与 is_admin；未加入账本 role 为空串）。
   Future<Map<String, dynamic>> me() async {
     final r = await http.get(Uri.parse('$base/api/auth/me'), headers: _headers);
     _check(r);
-    return jsonDecode(r.body) as Map<String, dynamic>;
+    final j = jsonDecode(r.body) as Map<String, dynamic>;
+    _captureAdmin(j);
+    return j;
   }
 
   /// 用当前 token 换取新 token（会话再续 30 天，旧 token 立即失效）。
@@ -310,6 +331,38 @@ class LedgerApi {
   Future<List<int>> exportArchive() async {
     final r = await http.get(
       Uri.parse('$base/api/export/archive'),
+      headers: _headers,
+    );
+    _check(r);
+    return r.bodyBytes;
+  }
+
+  // ---- 备份（全库级，仅系统管理员）----
+
+  /// 列出全部备份记录（含失败记录，按时间倒序）。
+  Future<List<BackupItem>> listBackups() async {
+    final r = await http.get(Uri.parse('$base/api/backup/list'), headers: _headers);
+    _check(r);
+    final j = jsonDecode(r.body) as Map<String, dynamic>;
+    final items = j['items'];
+    if (items is! List) return const [];
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(BackupItem.fromJson)
+        .toList();
+  }
+
+  /// 手动触发一次备份。
+  Future<BackupItem> runBackup() async {
+    final r = await http.post(Uri.parse('$base/api/backup/run'), headers: _headers);
+    _check(r);
+    return BackupItem.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
+  }
+
+  /// 下载指定备份文件（服务端会校验文件名白名单）。
+  Future<List<int>> downloadBackup(String name) async {
+    final r = await http.get(
+      Uri.parse('$base/api/backup/download?name=${Uri.encodeQueryComponent(name)}'),
       headers: _headers,
     );
     _check(r);

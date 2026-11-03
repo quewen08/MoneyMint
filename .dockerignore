@@ -2,8 +2,15 @@
 .git/
 .gitignore
 
+# CI / 文档 / 脚本（构建与运行均不需要；schema.sql 必须保留）
+.github/
+docs/
+scripts/
+*.md
+
 # Python (Go 后端编译不需要)
 .venv/
+.venv_hidden/
 __pycache__/
 
 # Frontend 构建缓存（前端单独 build web 后拷贝进镜像）

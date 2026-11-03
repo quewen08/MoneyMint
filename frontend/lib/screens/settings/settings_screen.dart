@@ -9,6 +9,7 @@ import '../../viewmodels/auth_controller.dart';
 import '../../viewmodels/ledger_controller.dart';
 import '../../widgets/common.dart';
 import '../members/members_screen.dart';
+import 'backup_card.dart';
 import 'sync_screen.dart';
 import 'change_password_screen.dart';
 import 'ledgers_screen.dart';
@@ -61,6 +62,9 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   const _DefaultAccountsCard(),
+                  const SizedBox(height: 12),
+                  // 数据备份（M1）：仅系统管理员可见，内部自行判断是否渲染
+                  const BackupCard(),
                   const SizedBox(height: 12),
                   AppCard(
                     child: Column(

@@ -109,6 +109,9 @@ type User struct {
 	Username     string
 	DisplayName  string
 	PasswordHash string
+	// IsAdmin 表示系统管理员（全局角色，非账本级）。
+	// 首个注册用户自动成为管理员；全库级操作（备份/下载/恢复）仅管理员可执行。
+	IsAdmin bool
 }
 
 // Ledger 是账本及其当前用户在其中的角色（多账本 P1-C）。

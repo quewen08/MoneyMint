@@ -9,7 +9,10 @@ import (
 
 // newRouter 注册所有路由并包裹中间件。路由路径与 HTTP 方法保持不变，
 // 确保前端与既有冒烟脚本无需改动。
-func newRouter(h *handler.Handler, svc *service.Service) http.Handler {
+//
+// webRoot 为前端构建产物目录；非空且存在时，未匹配的路径交由静态托管处理
+// （含 SPA 回退），实现「一个进程 + 一个端口」开箱可用。
+func newRouter(h *handler.Handler, svc *service.Service, webRoot string) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/health", h.HandleHealth)
@@ -77,6 +80,21 @@ func newRouter(h *handler.Handler, svc *service.Service) http.Handler {
 	mux.HandleFunc("/api/export/archive", h.HandleExportArchive)
 	mux.HandleFunc("/api/sync/pull", h.HandleSyncPull)
 	mux.HandleFunc("/api/sync/push", h.HandleSyncPush)
+
+	// 备份（全库级操作，仅系统管理员；权限校验在 handler 内完成）
+	mux.HandleFunc("/api/backup/list", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodGet: h.HandleBackupList,
+	}))
+	mux.HandleFunc("/api/backup/download", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodGet: h.HandleBackupDownload,
+	}))
+	mux.HandleFunc("/api/backup/run", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodPost: h.HandleBackupRun,
+	}))
+
+	// 前端静态资源与 SPA 回退（兜底路由，必须最后注册）。
+	// ServeMux 按最长前缀匹配，所有 /api/ 精确路由优先于此。
+	mux.HandleFunc("/", spaHandler(webRoot))
 
 	// cors 必须包在最外层：浏览器对带 Authorization / X-Ledger-Id 等自定义头的
 	// 请求会先发 OPTIONS 预检，预检请求没有 token，若先经过 authMiddleware 会被 401

@@ -127,3 +127,62 @@ class Member {
         _ => role,
       };
 }
+
+/// 一份账本备份的元信息（对应服务端 manifest.json 的一条记录）。
+///
+/// 备份是全库级产物（含所有账本与成员），仅系统管理员可查看与下载。
+class BackupItem {
+  final String name;
+  final int size;
+  final String sha256;
+  final String trigger; // auto | manual
+  final DateTime createdAt;
+  final int durationMs;
+  final Map<String, int> stats;
+  final String? error;
+
+  BackupItem({
+    required this.name,
+    required this.size,
+    required this.sha256,
+    required this.trigger,
+    required this.createdAt,
+    this.durationMs = 0,
+    this.stats = const {},
+    this.error,
+  });
+
+  /// 是否是一次成功的备份（失败记录只用于排查，不提供下载）。
+  bool get succeeded => error == null || error!.isEmpty;
+
+  bool get isManual => trigger == 'manual';
+
+  /// 易读体积（KB / MB）。
+  String get sizeLabel {
+    if (size >= 1024 * 1024) {
+      return '${(size / 1024 / 1024).toStringAsFixed(1)} MB';
+    }
+    return '${(size / 1024).toStringAsFixed(0)} KB';
+  }
+
+  factory BackupItem.fromJson(Map<String, dynamic> j) {
+    final rawStats = j['stats'];
+    var stats = <String, int>{};
+    if (rawStats is Map) {
+      rawStats.forEach((k, v) {
+        if (v is num) stats[k.toString()] = v.toInt();
+      });
+    }
+    return BackupItem(
+      name: j['name'] as String? ?? '',
+      size: (j['size'] as num?)?.toInt() ?? 0,
+      sha256: j['sha256'] as String? ?? '',
+      trigger: j['trigger'] as String? ?? '',
+      createdAt: DateTime.tryParse(j['created_at'] as String? ?? '')?.toLocal() ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      durationMs: (j['duration_ms'] as num?)?.toInt() ?? 0,
+      stats: stats,
+      error: j['error'] as String?,
+    );
+  }
+}

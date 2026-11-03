@@ -1,0 +1,39 @@
+# FamBean 单容器部署（NAS / 家用服务器）
+#
+# 使用：
+#   1. 复制本目录下的 .env.example 为 .env（或将 FAMBEN_IMAGE 写进环境变量）
+#   2. docker compose up -d
+#   3. 浏览器访问 http://<NAS-IP>:8080
+#
+# 数据位置：./data（数据库 + backups/），请把它放在 NAS 有备份策略的卷上。
+# 说明：本产品面向内网使用。如需外网访问，请自行通过反向代理 / 远程工具实现并启用 HTTPS。
+
+services:
+  famben:
+    # 镜像名通过 FAMBEN_IMAGE 覆盖，例如：
+    #   FAMBEN_IMAGE=yourname/famben:0.5.0 docker compose up -d
+    image: ${FAMBEN_IMAGE:-your-dockerhub-name/famben:latest}
+    container_name: famben
+    restart: unless-stopped
+    ports:
+      - "${FAMBEN_PORT:-8080}:8080"
+    environment:
+      # 时区影响「交易日」与每日备份触发时间，务必与实际所在时区一致
+      TZ: ${TZ:-Asia/Shanghai}
+      # 每日自动备份触发小时（0-23）
+      LEDGER_BACKUP_HOUR: ${LEDGER_BACKUP_HOUR:-3}
+      # 保留份数：最近 N 份每日 + 最近 M 份月度首日
+      LEDGER_BACKUP_KEEP_DAILY: ${LEDGER_BACKUP_KEEP_DAILY:-14}
+      LEDGER_BACKUP_KEEP_MONTHLY: ${LEDGER_BACKUP_KEEP_MONTHLY:-12}
+    volumes:
+      # 数据库与备份都在这里。备份目录默认是 /app/data/backups
+      - ./data:/app/data
+      # 可选：把备份另存到另一块物理磁盘/网络存储，防止单盘故障连备份一起丢。
+      # 启用后需同时设置 LEDGER_BACKUP_DIR=/backup
+      # - /mnt/other-disk/famben-backup:/backup
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s

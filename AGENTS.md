@@ -51,10 +51,12 @@ python3 -m venv .venv
 │   ├── handler/          # 薄 HTTP 适配层
 │   ├── server/           # 组合根：路由 + CORS/auth 中间件 + 依赖装配
 │   ├── auth/auth.go      # bcrypt / token / context 用户态（纯函数）
+│   ├── backup/           # 一致性快照（VACUUM INTO）+ 定时调度 + 保留清理
 │   └── export/{beancount,files}.go  # 单文件 + 多文件目录导出
 ├── frontend/lib/         # Flutter Web：MVVM（models/api/store/sync + viewmodels + screens + widgets + app）
+├── scripts/              # check-bean.sh / verify-version.sh / smoke.sh / local.sh
 ├── export_demo/          # Python/sh 验证参考
-├── data/                 # 运行时 SQLite（git 忽略）
+├── data/                 # 运行时 SQLite（git 忽略）；backups/ 也在其下
 └── docs/                 # design-spec.md / sync-design.md / prototype/index.html
 ```
 
@@ -140,8 +142,14 @@ python3 -m venv .venv
 | `/api/export/archive` | GET | 登录+成员 | 导出多文件目录 zip（main.bean + accounts/ + date/） |
 | `/api/sync/pull` | GET | 登录+成员 | 增量拉取（since + client_id） |
 | `/api/sync/push` | POST | 登录+成员 | 逐条幂等提交离线变更 |
+| `/api/backup/list` | GET | 登录+**系统管理员** | 备份清单（含失败记录，按时间倒序） |
+| `/api/backup/download?name=` | GET | 登录+**系统管理员** | 下载备份；文件名白名单 + 四层穿越防护 |
+| `/api/backup/run` | POST | 登录+**系统管理员** | 手动触发一次备份（进行中返回 409） |
+| `/*`（非 `/api/`） | GET/HEAD | 公开 | 前端静态资源 + SPA 回退（`LEDGER_WEB_ROOT`） |
 
 > 多账本上下文（P1-C）：业务端点需带 `X-Ledger-Id` 头指定账本；缺失回退默认账本 id=1。`viewer` 只读（非 GET 一律 403）、`editor` 可写、`owner` 可管理。
+> 备份端点例外：备份是全库级产物（含全部账本与成员），**不解析 `X-Ledger-Id`、不校验账本成员**，只要求登录态 + 系统管理员（`users.is_admin`）。账本级 owner ≠ 系统管理员，勿混用。
+> 鉴权范围按 `/api/` 前缀划分：非 `/api/` 路径一律放行交由静态托管，新增前端路由无需改白名单。
 > CORS：`Origin: *`，Headers 含 `Content-Type, Authorization, X-Ledger-Id`，Methods 含 `GET,POST,DELETE,PATCH,OPTIONS`。
 
 ---
@@ -149,7 +157,9 @@ python3 -m venv .venv
 ## 8. 约定与惯例（给 AI 的硬约束）
 
 - **金额**：永远用定点十进制字符串或整数最小单位；**禁止**浮点参与金额运算/存储。导出按 commodity precision 格式化。
-- **Beancount 兼容**：导出文本必须能过 `bean-check`。改 `internal/export/beancount.go` / `files.go` 后必须重新跑 bean-check。
+- **Beancount 兼容**：导出文本必须能过 `bean-check`。改 `internal/export/beancount.go` / `files.go` 后必须重新跑 bean-check。**测试中 `BEAN_CHECK_STRICT=1` 时找不到校验器即失败**，不要改回静默跳过（那会形成「测试全绿但账芯从未被验证」的假绿灯）。
+- **备份必须用 `VACUUM INTO`，禁止复制 db 文件**：库运行在 WAL 模式，未 checkpoint 的数据在 `-wal` 里。实测主库 188 KB / WAL 4.1 MB 时直接复制只得到 236/300 条记录，且**不报错**。快照后必须过 `PRAGMA integrity_check` 与行数比对。
+- **全库级操作要系统管理员**：备份/下载/恢复涉及所有账本与用户，校验 `users.is_admin`，不能用账本级 `owner` 代替。
 - **迁移优先**：任何 schema 改动走 `migrate.go`，幂等、记录 `schema_migrations`。
 - **借贷平衡**：后端 `handleCreateTransaction` 按币种平衡校验；前端记一笔页实时指示。
 - **UUID 引用**：同步实体一律用 `uuid` 互引，勿用服务端自增 `id` 跨端传递；注意在线用 `account_id`、离线 push 用 `account_uuid`（§6）。
@@ -198,4 +208,44 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o familyledger ./cmd/server
 ```
 
 > 本机 `bean-check.exe` 直接运行静默返回 1（Windows 包装脚本问题），改用 `.venv/Scripts/python.exe -m beancount.scripts.check` 校验。
+
+### 10.1 统一命令入口
+
+本机 Windows 无 `make`，用 `scripts/local.sh`；Linux/CI 用 `Makefile`（两者命令一一对应）。
+
+```bash
+bash scripts/local.sh check    # vet + 全量测试（严格 bean-check）+ 版本校验 + bean-check 自检
+bash scripts/local.sh smoke    # 端到端：起服务→注册→记账→导出→bean-check→备份→下载→穿越防护
+bash scripts/local.sh dev      # 起后端并托管 frontend/build/web
+bash scripts/local.sh web      # flutter build web --release
+bash scripts/local.sh test-web # flutter analyze lib
+```
+
+### 10.2 环境变量
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `LEDGER_DB` | `data/ledger.db` | SQLite 路径 |
+| `LISTEN` | `:8080` | 监听地址 |
+| `LEDGER_SCHEMA` | `schema.sql` | 初始 DDL（仅首次建库用） |
+| `LEDGER_WEB_ROOT` | `./web` | 前端产物目录；不存在则不托管前端，服务仍启动 |
+| `LEDGER_BACKUP_ENABLED` | `true` | 自动备份开关 |
+| `LEDGER_BACKUP_DIR` | `{DBPath 目录}/backups` | 备份目录（可指向外部挂载盘防单盘故障） |
+| `LEDGER_BACKUP_HOUR` | `3` | 每日触发小时（0-23，按进程时区） |
+| `LEDGER_BACKUP_KEEP_DAILY` | `14` | 每日备份保留份数 |
+| `LEDGER_BACKUP_KEEP_MONTHLY` | `12` | 月度备份保留份数 |
+| `BEAN_CHECK_STRICT` | 空 | 测试用；`1` 时找不到 bean-check 直接失败（CI 必设） |
+
+> `config.Validate()` 在启动时校验备份小时与保留份数范围，非法即刻失败。
+
+### 10.3 容器化
+
+```bash
+docker build -t famben:dev .                                  # 三阶段：Flutter → Go → alpine
+docker run -d -p 8080:8080 -v $(pwd)/data:/app/data famben:dev
+docker compose up -d                                          # 家用部署（见 docker-compose.yml）
+```
+
+镜像只在打 tag 时由 GitHub Actions 构建并推送 Docker Hub（`linux/amd64` + `linux/arm64`），
+workflow 先跑完校验（版本一致 + 严格 bean-check）才允许推镜像。
 > 建议用 Nginx/Caddy 反代加 HTTPS；前端部署把 `api.dart` 的 `http://localhost:8080` 改为 NAS 地址。

@@ -7,48 +7,82 @@ import (
 	"familyledger/internal/domain"
 )
 
-// CreateUser 创建账号；用户名已存在返回 domain.ErrConflict。
-func (s *Store) CreateUser(username, passwordHash, displayName string) (int64, error) {
-	exists, err := s.UsernameExists(username)
+// CreateUser 创建账号，返回新用户 id 与是否成为系统管理员。
+//
+// 首个注册用户自动成为管理员（M1）：判断与插入在同一事务内完成，
+// 避免并发注册时两个请求都认为自己是第一个。
+// 用户名已存在返回 domain.ErrConflict。
+func (s *Store) CreateUser(username, passwordHash, displayName string) (int64, bool, error) {
+	tx, err := s.db.Begin()
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
-	if exists {
-		return 0, domain.ErrConflict
+	defer tx.Rollback()
+
+	var dup int
+	if err := tx.QueryRow(`SELECT count(*) FROM users WHERE username=?`, username).Scan(&dup); err != nil {
+		return 0, false, err
 	}
-	res, err := s.db.Exec(
-		`INSERT INTO users(username, password_hash, display_name) VALUES(?, ?, ?)`,
-		username, passwordHash, displayName,
+	if dup > 0 {
+		return 0, false, domain.ErrConflict
+	}
+
+	var total int
+	if err := tx.QueryRow(`SELECT count(*) FROM users`).Scan(&total); err != nil {
+		return 0, false, err
+	}
+	isAdmin := total == 0
+
+	res, err := tx.Exec(
+		`INSERT INTO users(username, password_hash, display_name, is_admin) VALUES(?, ?, ?, ?)`,
+		username, passwordHash, displayName, boolToInt(isAdmin),
 	)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
-	return res.LastInsertId()
+	id, _ := res.LastInsertId()
+
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return id, isAdmin, nil
+}
+
+// boolToInt 把 bool 转成 SQLite 的 0/1。
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // UserByUsername 按用户名查询用户。
 func (s *Store) UserByUsername(username string) (domain.User, error) {
 	var u domain.User
+	var admin int
 	err := s.db.QueryRow(
-		`SELECT id, username, display_name, password_hash FROM users WHERE username=?`,
+		`SELECT id, username, display_name, password_hash, is_admin FROM users WHERE username=?`,
 		username,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &admin)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.User{}, domain.ErrNotFound
 	}
+	u.IsAdmin = admin == 1
 	return u, err
 }
 
 // UserByID 按 id 查询用户。
 func (s *Store) UserByID(id int64) (domain.User, error) {
 	var u domain.User
+	var admin int
 	err := s.db.QueryRow(
-		`SELECT id, username, display_name, password_hash FROM users WHERE id=?`,
+		`SELECT id, username, display_name, password_hash, is_admin FROM users WHERE id=?`,
 		id,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &admin)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.User{}, domain.ErrNotFound
 	}
+	u.IsAdmin = admin == 1
 	return u, err
 }
 

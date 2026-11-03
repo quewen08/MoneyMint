@@ -11,6 +11,8 @@ type UserInfo struct {
 	Username    string `json:"username"`
 	DisplayName string `json:"display_name,omitempty"`
 	Role        string `json:"role"`
+	// IsAdmin 是系统管理员标记（全局角色）。前端据此决定是否展示备份入口。
+	IsAdmin bool `json:"is_admin"`
 }
 
 // AuthResult 是注册/登录成功的返回。
@@ -33,7 +35,7 @@ func (s *Service) Register(username, password, displayName string) (AuthResult, 
 	if err != nil {
 		return AuthResult{}, err
 	}
-	uid, err := s.repo.CreateUser(username, hash, displayName)
+	uid, isAdmin, err := s.repo.CreateUser(username, hash, displayName)
 	if err != nil {
 		return AuthResult{}, err
 	}
@@ -61,7 +63,7 @@ func (s *Service) Register(username, password, displayName string) (AuthResult, 
 	}
 	return AuthResult{
 		Token: token,
-		User:  UserInfo{ID: uid, Username: username, DisplayName: displayName, Role: role},
+		User:  UserInfo{ID: uid, Username: username, DisplayName: displayName, Role: role, IsAdmin: isAdmin},
 	}, nil
 }
 
@@ -81,7 +83,7 @@ func (s *Service) Login(username, password string) (AuthResult, error) {
 	}
 	return AuthResult{
 		Token: token,
-		User:  UserInfo{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, Role: ""},
+		User:  UserInfo{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, Role: "", IsAdmin: u.IsAdmin},
 	}, nil
 }
 
@@ -100,7 +102,19 @@ func (s *Service) Me(userID int64) (UserInfo, error) {
 	if err != nil {
 		return UserInfo{}, err
 	}
-	return UserInfo{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, Role: ""}, nil
+	return UserInfo{
+		ID: u.ID, Username: u.Username, DisplayName: u.DisplayName,
+		Role: "", IsAdmin: u.IsAdmin,
+	}, nil
+}
+
+// IsAdmin 判断用户是否为系统管理员（全库级操作的前置校验）。
+func (s *Service) IsAdmin(userID int64) (bool, error) {
+	u, err := s.repo.UserByID(userID)
+	if err != nil {
+		return false, err
+	}
+	return u.IsAdmin, nil
 }
 
 // Refresh 用当前有效 token 换取新 token（再续 30 天），旧 token 立即失效。

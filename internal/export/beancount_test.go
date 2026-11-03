@@ -2,7 +2,6 @@ package export
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -113,28 +112,10 @@ func TestExportTags(t *testing.T) {
 		t.Fatalf("导出应将标签写为 tags 元数据，实际：\n%s", text)
 	}
 
-	// 若环境中存在 bean-check，则校验导出文件能通过 bean-check（退出码 0）。
+	// 校验导出文件能通过 bean-check（严格模式见 BEAN_CHECK_STRICT）。
 	beanFile := filepath.Join(dir, "out.bean")
 	if err := os.WriteFile(beanFile, []byte(text), 0o644); err != nil {
 		t.Fatalf("write bean: %v", err)
 	}
-	// 优先用 venv 的 python -m beancount.scripts.check（输出稳定、退出码可靠）；
-	// 其次回退 PATH 上的 bean-check 命令。t.TempDir 返回原生 Windows 路径，python 可直接读取。
-	for _, cand := range [][]string{
-		{filepath.Join("..", "..", ".venv", "Scripts", "python.exe"), "-m", "beancount.scripts.check"},
-		{"bean-check"},
-	} {
-		args := append(append([]string{}, cand[1:]...), beanFile)
-		cmd := exec.Command(cand[0], args...)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			if _, ok := err.(*exec.Error); ok {
-				t.Logf("bean-check 不可用（%s），跳过校验", cand[0])
-				continue
-			}
-			t.Fatalf("bean-check 校验失败(%v): %v\n输出:\n%s", cand, err, string(out))
-		}
-		t.Logf("bean-check 通过（%v）", cand)
-		break
-	}
+	runBeanCheck(t, beanFile)
 }

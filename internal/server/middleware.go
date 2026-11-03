@@ -26,17 +26,28 @@ func cors(next http.Handler) http.Handler {
 	})
 }
 
-// authMiddleware 包裹所有业务路由：
+// authMiddleware 包裹所有路由：
+//   - 非 /api/ 前缀（前端静态资源与 SPA 入口）完全放行，交由 static.go 处理
 //   - 放行 /api/health 与公开认证端点（register/login）
-//   - 其余路由必须携带有效 Bearer token，否则 401
+//   - 其余 /api/ 路由必须携带有效 Bearer token，否则 401
 //   - 认证自服务端点（me/logout/change-password/refresh）仅需登录态
 //   - 账本管理端点（/api/ledgers）仅需登录态（具体权限在 service 层校验）
 //   - 业务端点按 X-Ledger-Id（缺失回退默认账本）解析账本，校验成员身份，
 //     viewer 只读（非 GET 一律 403），通过后注入 user id + ledger id + role 到 context
+//
+// 鉴权范围按 /api/ 前缀划分（而非逐一列白名单）：这样新增前端路由、
+// 新增静态资源都无需回来改这里，也避免「忘了加白名单导致页面 401」。
 func authMiddleware(svc *service.Service, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if path == "/api/health" || path == "/api/auth/register" || path == "/api/auth/login" {
+		reqPath := r.URL.Path
+
+		// 非 API 路径：静态文件与 SPA 入口，鉴权由前端登录态自行控制。
+		if !strings.HasPrefix(reqPath, "/api/") && reqPath != "/api" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if reqPath == "/api/health" || reqPath == "/api/auth/register" || reqPath == "/api/auth/login" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -52,14 +63,21 @@ func authMiddleware(svc *service.Service, next http.Handler) http.Handler {
 			return
 		}
 
-		switch path {
+		switch reqPath {
 		case "/api/auth/me", "/api/auth/logout", "/api/auth/change-password", "/api/auth/refresh":
 			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))
 			return
 		}
 
 		// 账本管理端点：仅需登录态，创建/设置权限由 service 层校验。
-		if path == "/api/ledgers" || strings.HasPrefix(path, "/api/ledgers/") {
+		if reqPath == "/api/ledgers" || strings.HasPrefix(reqPath, "/api/ledgers/") {
+			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))
+			return
+		}
+
+		// 备份端点：全库级操作，与具体账本无关（备份包含所有账本），
+		// 因此不解析 X-Ledger-Id、不校验账本成员身份；管理员校验在 handler 内完成。
+		if strings.HasPrefix(reqPath, "/api/backup/") {
 			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))
 			return
 		}

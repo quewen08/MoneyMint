@@ -52,6 +52,62 @@ func accountByID(t *testing.T, svc *Service, id int64) AccountView {
 	return AccountView{}
 }
 
+// TestFirstUserBecomesAdmin 首个注册用户自动成为系统管理员，后续用户不是。
+//
+// 管理员承担全库级操作（备份下载/恢复），而账本级 owner 只有单账本权限，
+// 二者不能混用，否则会出现「A 家庭 owner 能下载 B 家庭账本」的越权。
+func TestFirstUserBecomesAdmin(t *testing.T) {
+	svc := newTestService(t)
+
+	first := registerOwner(t, svc)
+	if !first.User.IsAdmin {
+		t.Fatal("首个注册用户应成为系统管理员")
+	}
+
+	second, err := svc.Register("bob", "secret123", "Bob")
+	if err != nil {
+		t.Fatalf("register bob: %v", err)
+	}
+	if second.User.IsAdmin {
+		t.Fatal("第二个用户不应成为系统管理员")
+	}
+
+	// Me 也应返回一致的标记（前端据此控制备份入口可见性）
+	me, err := svc.Me(first.User.ID)
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	if !me.IsAdmin {
+		t.Fatal("Me 应返回 is_admin=true")
+	}
+	meBob, err := svc.Me(second.User.ID)
+	if err != nil {
+		t.Fatalf("me bob: %v", err)
+	}
+	if meBob.IsAdmin {
+		t.Fatal("bob 的 Me 不应返回 is_admin=true")
+	}
+
+	// 登录路径同样带回标记
+	lr, err := svc.Login("alice", "secret123")
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if !lr.User.IsAdmin {
+		t.Fatal("登录响应应包含 is_admin=true")
+	}
+
+	// IsAdmin 查询接口
+	ok, err := svc.IsAdmin(first.User.ID)
+	if err != nil || !ok {
+		t.Fatalf("IsAdmin(alice) 期望 true, nil；实际 %v, %v", ok, err)
+	}
+	ok, err = svc.IsAdmin(second.User.ID)
+	if err != nil || ok {
+		t.Fatalf("IsAdmin(bob) 期望 false, nil；实际 %v, %v", ok, err)
+	}
+}
+
 func TestRegisterLoginOwner(t *testing.T) {
 	svc := newTestService(t)
 
