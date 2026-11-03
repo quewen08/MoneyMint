@@ -1,40 +1,79 @@
-# FamBean 单容器部署（NAS / 家用服务器）
+# FamBean 部署示例（NAS / 家用服务器 / 单机 Docker）
 #
-# 使用：
-#   1. 复制本目录下的 .env.example 为 .env（或将 FAMBEN_IMAGE 写进环境变量）
-#   2. docker compose up -d
-#   3. 浏览器访问 http://<NAS-IP>:8080
+# ── 三步启动 ──────────────────────────────────────────────────────────
+#   1. 把 image 里的 YOUR_DOCKERHUB_USER 换成你的 Docker Hub 用户名
+#      （或者：cp .env.example .env，然后改 .env 里的 FAMBEN_IMAGE）
+#      若启动时报 "invalid reference format"，就是这处没改 —— 占位符带大写字母，
+#      Docker 镜像名不允许大写，所以改之前一定是启动不了的。
 #
-# 数据位置：./data（数据库 + backups/），请把它放在 NAS 有备份策略的卷上。
-# 说明：本产品面向内网使用。如需外网访问，请自行通过反向代理 / 远程工具实现并启用 HTTPS。
+#   2. 建数据目录并交给容器用户 —— 这一步不能省：
+#        mkdir -p ./data
+#        sudo chown -R 10001:10001 ./data
+#      镜像内以非 root 用户（uid 10001）运行，目录属主不对会导致
+#      「数据库无法创建 / 备份写入失败」，且日志里的报错不一定直观。
+#
+#   3. docker compose up -d
+#
+# ── 启动之后 ──────────────────────────────────────────────────────────
+#   浏览器打开 http://<主机IP>:8080
+#   ⚠️ 第一个注册的账号会自动成为系统管理员，只有管理员能看到并操作
+#      「设置 → 数据备份」。所以请先用你自己常用的账号注册。
+#
+# ── 数据放在哪 ────────────────────────────────────────────────────────
+#   ./data/ledger.db     数据库
+#   ./data/backups/      自动备份（每日一次，保留最近 14 份 + 每月 1 份）
+#   请把 data 放在有快照/备份策略的卷上；强烈建议再挂一块盘做异地备份，
+#   见文件末尾可选段。
+#
+# ── 外网访问 ──────────────────────────────────────────────────────────
+#   本产品面向内网。需要外网访问请自行用反向代理 / 内网穿透 / 远程桌面，
+#   并务必启用 HTTPS —— 账本数据不要明文跑在公网上。
 
 services:
   famben:
-    # 镜像名与 .github/workflows/docker-image.yml 的 IMAGE_NAME 保持一致（money-mint）。
-    # 可通过环境变量覆盖，例如：
-    #   FAMBEN_IMAGE=yourname/money-mint:0.5.0 docker compose up -d
-    image: ${FAMBEN_IMAGE:-your-dockerhub-name/money-mint:latest}
+    # 固定版本比 latest 稳妥：升级是可预期的动作，而不是某次重启后突然变了。
+    # 想跟随最新版就改成 :latest。
+    image: ${FAMBEN_IMAGE:-YOUR_DOCKERHUB_USER/money-mint:0.5.0}
     container_name: famben
     restart: unless-stopped
+
     ports:
+      # 左边是主机端口，被占用就改这个（比如 18080）
       - "${FAMBEN_PORT:-8080}:8080"
+
     environment:
-      # 时区影响「交易日」与每日备份触发时间，务必与实际所在时区一致
+      # 时区决定「交易日」归属与每日备份触发时间，务必与实际时区一致
       TZ: ${TZ:-Asia/Shanghai}
-      # 每日自动备份触发小时（0-23）
+
+      # 每日自动备份触发小时（0-23，按容器时区）
       LEDGER_BACKUP_HOUR: ${LEDGER_BACKUP_HOUR:-3}
-      # 保留份数：最近 N 份每日 + 最近 M 份月度首日
+      # 保留策略：最近 N 份每日备份 + 最近 M 个月的每月一份
       LEDGER_BACKUP_KEEP_DAILY: ${LEDGER_BACKUP_KEEP_DAILY:-14}
       LEDGER_BACKUP_KEEP_MONTHLY: ${LEDGER_BACKUP_KEEP_MONTHLY:-12}
+
+      # 备份目录；留空 = /app/data/backups（与数据库同盘）
+      # 若挂载了第二块盘（见下方 volumes），设成 /backup
+      LEDGER_BACKUP_DIR: ${LEDGER_BACKUP_DIR:-}
+
     volumes:
-      # 数据库与备份都在这里。备份目录默认是 /app/data/backups
-      - ./data:/app/data
-      # 可选：把备份另存到另一块物理磁盘/网络存储，防止单盘故障连备份一起丢。
-      # 启用后需同时设置 LEDGER_BACKUP_DIR=/backup
-      # - /mnt/other-disk/famben-backup:/backup
+      # 数据库 + 备份。用绝对路径更稳，避免在不同目录执行 compose 时数据跑散。
+      # NAS 上一般形如 /volume1/docker/famben/data
+      - ${FAMBEN_DATA:-./data}:/app/data
+
+      # ── 可选：备份另存到另一块物理盘 ──
+      # 单盘同时存数据库和备份，等于没有备份（盘坏了一起没）。
+      # 启用方式：取消下面两行注释，并把上面的 LEDGER_BACKUP_DIR 设为 /backup
+      # - /volume2/famben-backup:/backup
+
     healthcheck:
       test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8080/api/health"]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 10s
+
+    # 可选：限制资源，防止备份时把 NAS 内存吃满（按机器实际情况调）
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 512M
