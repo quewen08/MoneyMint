@@ -1,13 +1,25 @@
 name: build-and-push
 
-# 触发策略：只在打 tag 时发布镜像（本项目是「按版本发布」节奏，不是每次 push 都出镜像）。
-# 手动 workflow_dispatch 用于试构建：此时版本号从 CHANGELOG 顶部读取。
+# 触发策略：
+#   - push develop/master：只跑校验（go vet + test + bean-check + 版本一致），不产镜像
+#     → 相当于免费的 CI 守护，每次提交就知道有没有破坏账芯
+#   - push tag v*：校验通过后构建 amd64+arm64 并推送 Docker Hub
+#   - workflow_dispatch：手动触发；默认只校验，勾选 push_image 才真正推镜像
 on:
   push:
+    branches: [develop, master]
     tags: ['v*']
+  pull_request:
   workflow_dispatch:
+    inputs:
+      push_image:
+        description: '同时构建并推送镜像到 Docker Hub'
+        type: boolean
+        default: false
 
 env:
+  # 镜像名沿用老板既有的 Docker Hub 仓库名（money-mint），
+  # 与 docker-compose.yml 的默认镜像保持一致，改一处必须同步另一处。
   IMAGE_NAME: money-mint
 
 jobs:
@@ -66,8 +78,13 @@ jobs:
         run: bash scripts/check-bean.sh
 
   # ---------- 第二道门：双架构构建并推送 ----------
+  # 仅两种情况产镜像：
+  #   1) 推 tag v*（正式发布）
+  #   2) 手动 workflow_dispatch 且勾选了 push_image
+  # 普通分支 push 只跑上面的校验，不会动 Docker Hub。
   build:
     needs: verify
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.push_image == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
