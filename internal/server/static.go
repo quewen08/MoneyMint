@@ -95,24 +95,22 @@ func serveStatic(w http.ResponseWriter, r *http.Request, fullPath, cleanPath str
 
 // setStaticCacheHeaders 按资源性质设置缓存策略。
 //
-// 入口类文件必须 no-cache：它们引用了带哈希的资源名，缓存旧入口会导致
-// 升级后仍加载旧资源（Flutter Web 的经典坑）。
-// 带哈希的 assets/canvaskit 可长缓存，文件名变化即天然失效。
+// 分两类：
+//   - /assets/、/canvaskit/：文件名带内容 hash，内容变则名字变 → 永久缓存
+//   - 其余（main.dart.js、flutter.js、index.html、manifest 等）：文件名不带 hash，
+//     版本更新后内容变了名字不变 → 一律 no-cache
+//
+// no-cache 的代价只是每次一个 304 请求（这些文件都很小）；而缓存它们会出新问题：
+// 一旦浏览器持有旧 main.dart.js，新部署后用户仍跑旧代码，直到缓存过期
+// （实测后果：反代地址修复上线后，用户浏览器在缓存期内仍请求旧 API 地址）。
 func setStaticCacheHeaders(w http.ResponseWriter, cleanPath string) {
 	switch {
-	case cleanPath == "/index.html",
-		strings.HasSuffix(cleanPath, "/index.html"),
-		cleanPath == "/flutter_bootstrap.js",
-		cleanPath == "/flutter_service_worker.js",
-		cleanPath == "/version.json":
-		w.Header().Set("Cache-Control", "no-cache")
-
 	case strings.HasPrefix(cleanPath, "/assets/"),
 		strings.HasPrefix(cleanPath, "/canvaskit/"):
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 
 	default:
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Header().Set("Cache-Control", "no-cache")
 	}
 }
 

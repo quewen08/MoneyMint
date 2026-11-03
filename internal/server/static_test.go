@@ -83,6 +83,36 @@ func TestStaticAssetCacheHeaders(t *testing.T) {
 	}
 }
 
+// TestHashlessEntryNotCached 不带内容 hash 的入口资源必须 no-cache。
+//
+// main.dart.js 是全部业务代码且文件名固定：一旦被缓存，新部署后浏览器
+// 仍会执行旧代码（实测后果：API 地址修复上线后用户浏览器仍请求旧地址）。
+func TestHashlessEntryNotCached(t *testing.T) {
+	h := spaHandler(newWebRoot(t))
+
+	// newWebRoot 里没有 main.dart.js，补一个
+	root := newWebRoot(t)
+	if err := os.WriteFile(filepath.Join(root, "main.dart.js"), []byte("//app entry"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h = spaHandler(root)
+
+	rec := doGet(h, "/main.dart.js")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /main.dart.js 期望 200，实际 %d", rec.Code)
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+		t.Fatalf("main.dart.js 不带内容 hash，必须 no-cache，实际 %q", cc)
+	}
+
+	rec = doGet(h, "/flutter.js")
+	if rec.Code == http.StatusOK {
+		if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+			t.Fatalf("flutter.js 期望 no-cache，实际 %q", cc)
+		}
+	}
+}
+
 // TestMissingAssetReturns404 缺失的静态资源必须 404，不能回退成 index.html。
 //
 // 若回退，浏览器会把 HTML 当 JS 解析，产生难以定位的错误。
