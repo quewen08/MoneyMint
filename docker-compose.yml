@@ -37,7 +37,7 @@ services:
   famben:
     # 固定版本比 latest 稳妥：升级是可预期的动作，而不是某次重启后突然变了。
     # 想跟随最新版就改成 :latest。
-    image: ${FAMBEN_IMAGE:-YOUR_DOCKERHUB_USER/money-mint:0.5.1}
+    image: ${FAMBEN_IMAGE:-YOUR_DOCKERHUB_USER/money-mint:0.5.0}
     container_name: famben
     restart: unless-stopped
 

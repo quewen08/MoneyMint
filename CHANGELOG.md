@@ -6,24 +6,6 @@
 > 版本号单一事实源：git tag（`vX.Y.Z`）。发布前 `scripts/verify-version.sh` 会校验
 > tag / 本文件顶部版本 / `frontend/pubspec.yaml` 三处一致，不一致则构建失败。
 
-## [0.5.1] - 2026-11-03
-
-修复 0.5.0 容器化落地时暴露的两个实际问题。**镜像行为有变化，已部署 0.5.0 的建议升级。**
-
-### Fixed
-
-- **bind mount 数据目录权限导致容器启动即失败**（`set WAL: unable to open database file (14)`）：镜像以非 root 用户（uid 10001）运行，而宿主机挂载目录通常由 docker/root 创建、属主不是 10001。SQLite 在 WAL 模式下除主库文件外还要在同目录创建 `-wal` / `-shm`，目录不可写即失败。
-  - 新增 `docker-entrypoint.sh`：启动瞬间把数据目录属主修正为 10001，随即用 `su-exec` 降权执行，最终服务进程（PID 1）仍是非 root。**部署方不再需要手工 `chown`**。
-  - 需要「全程非 root」时，在 compose 指定 `user: "10001:10001"`，入口脚本检测到非 root 会跳过修正直接执行。
-  - 属主已正确则跳过递归 chown，避免每次启动都全量遍历数据目录。
-  - 修正失败（只读挂载 / ACL 限制）只告警不阻断，交由后续 SQLite 报错定位。
-- **数据库不可写时的报错无法指导操作**：原样只有一句 `set WAL: unable to open database file (14)`，使用者无从下手。现在会附带排查建议：目录可写性要求、WAL 需要同目录可写、只读挂载、NAS 的 ACL 权限，并直接给出 `chown 10001:10001 <目录>` 命令。
-
-### Changed
-
-- Dockerfile 运行阶段不再声明 `USER app`，改由入口脚本降权——只有入口阶段是 root，服务进程始终是 10001。
-- `docker-compose.yml` 与 `.env.example` 的默认镜像版本更新为 `0.5.1`，并补充 `user:` 可选配置说明。
-
 ## [0.5.0] - 2026-11-03
 
 「敢上线」版本：补齐工程护栏、容器化与数据备份，让产品从「自己玩」变成「可以给家人开账号、数据丢了能救」。
@@ -71,11 +53,18 @@
 - `/api/` 下未注册路径在**已登录**时返回 404 JSON（未登录仍先返回 401，不泄露接口是否存在）。
 - `newRouter` 签名新增 `webRoot` 参数；`handler.New` 新增 `engine` 参数；`server.New` 增加配置校验前置与备份引擎装配。
 - 备份初始化失败不阻断启动：降级为「无备份模式」并在日志告警，备份端点返回 503。记账是核心功能，不能因备份目录不可用而全家无法记账。
+- Dockerfile 运行阶段不再声明 `USER app`，改由入口脚本降权——只有入口阶段是 root，服务进程始终是 10001。
 
 ### Fixed
 
 - **Docker 构建卡在 `flutter pub get --enforce-lockfile`（exit 65）**：`pubspec.lock` 由开发机 Flutter 3.38.9 生成，而镜像内为 3.35.1；`meta` / `vm_service` / `test_api` / `crypto` 属于随 SDK 捆绑的包，版本由 SDK 决定而非 pub 解析，两个 SDK 版本不同时 pub 必然要求调整这些包，`--enforce-lockfile` 遂直接判失败（日志表现为 "Would change 40 dependencies"）。
   改为「正常解析 + lockfile 漂移告警」：不因 SDK 微差阻断整个镜像构建，但一旦 lockfile 真被重新解析，构建日志会明确打印原因、影响与对齐方式，不静默放过。
+- **bind mount 数据目录权限导致容器启动即失败**（`set WAL: unable to open database file (14)`）：镜像以非 root 用户（uid 10001）运行，而宿主机挂载目录通常由 docker/root 创建、属主不是 10001。SQLite 在 WAL 模式下除主库文件外还要在同目录创建 `-wal` / `-shm`，目录不可写即失败。
+  - 新增 `docker-entrypoint.sh`：启动瞬间把数据目录属主修正为 10001，随即用 `su-exec` 降权执行，最终服务进程（PID 1）仍是非 root。**部署方不再需要手工 `chown`**。
+  - 需要「全程非 root」时，在 compose 指定 `user: "10001:10001"`，入口脚本检测到非 root 会跳过修正直接执行。
+  - 属主已正确则跳过递归 chown，避免每次启动都全量遍历数据目录；修正失败（只读挂载 / ACL）只告警不阻断。
+  - 注：预置一个空 db 文件并不能绕过该问题——文件存在只解决一半，目录可写才是根因。
+- **数据库不可写时的报错无法指导操作**：原样只有一句 `set WAL: unable to open database file (14)`，使用者无从下手。现在会附带排查建议：目录可写性要求、WAL 需要同目录可写、只读挂载、NAS 的 ACL 权限，并直接给出 `chown 10001:10001 <目录>` 命令。
 
 ### 已知限制
 
