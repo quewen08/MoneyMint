@@ -1,3 +1,0 @@
-No fambean process found by name
-Binary exists: D:\Project\Self\FamBean\data\fambean.exe
-No running process holds that binary path
