@@ -81,7 +81,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
 FROM ${RUNTIME_IMAGE}
 
 # tzdata：交易日与「每月起始日」依赖本地时区；ca-certificates：未来外部调用需要
-RUN apk add --no-cache ca-certificates tzdata \
+# su-exec：入口脚本降权用（比 gosu 轻量，alpine 官方仓库有）
+RUN apk add --no-cache ca-certificates tzdata su-exec \
     && adduser -D -u 10001 -h /app app
 
 WORKDIR /app
@@ -89,12 +90,19 @@ WORKDIR /app
 COPY --from=go-builder /out/server /app/server
 COPY --from=web-builder /src/frontend/build/web /app/web
 COPY schema.sql /app/schema.sql
+COPY docker-entrypoint.sh /entrypoint.sh
 
 # 数据目录（挂载点）：数据库与 backups/ 都落在这里
-RUN mkdir -p /app/data && chown -R app:app /app
+RUN mkdir -p /app/data \
+    && chmod +x /entrypoint.sh \
+    && chown -R app:app /app
 
-# 非 root 运行：容器逃逸后的影响面最小化
-USER app
+# 这里刻意不写 USER：
+#   容器以 root 启动，唯一目的是让入口脚本把 bind mount 过来的数据目录
+#   属主修正为 10001（否则 SQLite 建 -wal/-shm 会失败，报 error 14）。
+#   脚本随后立即用 su-exec 降权，最终的服务进程（PID 1）仍是非 root 的 10001。
+#   如需「全程非 root」，在 compose 里指定 user: "10001:10001" 即可，
+#   此时入口脚本检测到非 root 会跳过修正直接 exec。
 
 ENV LEDGER_DB=/app/data/ledger.db \
     LEDGER_SCHEMA=/app/schema.sql \
@@ -109,4 +117,5 @@ VOLUME ["/app/data"]
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD wget -q -O- http://127.0.0.1:8080/api/health >/dev/null 2>&1 || exit 1
 
-ENTRYPOINT ["/app/server"]
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/app/server"]

@@ -241,10 +241,19 @@ bash scripts/local.sh test-web # flutter analyze lib
 ### 10.3 容器化
 
 ```bash
-docker build -t famben:dev .                                  # 三阶段：Flutter → Go → alpine
-docker run -d -p 8080:8080 -v $(pwd)/data:/app/data famben:dev
+docker build -t money-mint:dev .                              # 三阶段：Flutter → Go → alpine
+docker run -d -p 8080:8080 -v $(pwd)/data:/app/data money-mint:dev
 docker compose up -d                                          # 家用部署（见 docker-compose.yml）
 ```
+
+> **数据目录权限**：容器由 `docker-entrypoint.sh` 以 root 启动，先把数据目录属主修正为 10001，
+> 随即用 `su-exec` 降权执行，PID 1 始终是非 root 的服务进程。因此 bind mount 到任意目录都能用，
+> 部署方无需手工 `chown`。若要「全程非 root」，compose 里指定 `user: "10001:10001"`，
+> 入口脚本检测到非 root 会跳过修正（此时需自行保证目录对 10001 可写）。
+>
+> **为什么必须修属主**：SQLite 在 WAL 模式下除主库文件外还要在同目录创建 `-wal` / `-shm`，
+> 目录不可写会报 `unable to open database file (14)`。预置一个空 db 文件并不能绕过——
+> 文件存在只解决一半，目录权限才是根因。
 
 镜像只在打 tag 时由 GitHub Actions 构建并推送 Docker Hub（`linux/amd64` + `linux/arm64`），
 workflow 先跑完校验（版本一致 + 严格 bean-check）才允许推镜像。
