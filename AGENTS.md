@@ -198,10 +198,14 @@ curl -s -X POST http://127.0.0.1:8080/api/transactions -H "$AUTH" -H 'Content-Ty
 curl -s http://127.0.0.1:8080/api/export -H "$AUTH" -o data/family.beancount
 .venv/Scripts/python.exe -m beancount.scripts.check data/family.beancount   # 退出码 0 通过
 
-# 前端
+# 前端（本地开发：dev server 与后端端口不同，必须注入 API 地址）
 cd frontend && export PATH="$PATH:/d/Environment/flutter/bin"
 export PUB_HOSTED_URL="https://pub.flutter-io.cn"
-flutter pub get && flutter run -d chrome
+flutter pub get
+flutter run -d chrome --dart-define=API_BASE=http://localhost:8080
+
+# 生产构建（同域部署无需注入，API 走相对路径；跨域部署才需要 --dart-define）
+flutter build web --release
 
 # 部署 NAS（纯 Go 免 CGO）
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o familyledger ./cmd/server

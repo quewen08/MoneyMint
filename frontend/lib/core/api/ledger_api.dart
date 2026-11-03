@@ -393,5 +393,19 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
-/// 默认后端地址。部署到 NAS 时改这里或注入覆盖。
-const kDefaultApiBase = 'http://localhost:8080';
+/// 后端 API 地址。
+///
+/// 默认为**空**（同域相对路径）：前端与 API 同端口部署（Go 服务托管前端）时，
+/// 请求自动发往当前访问的域名——反向代理、直连、换端口、HTTPS 都无需任何改动。
+///
+/// 仅在两种场景需要注入：
+///   1. 本地开发（flutter run 的 dev server 端口与后端 8080 不同）：
+///        flutter run -d chrome --dart-define=API_BASE=http://localhost:8080
+///   2. 前端与后端分离部署（不同域名）：
+///        flutter build web --dart-define=API_BASE=https://api.example.com
+///
+/// 历史教训：此前这里硬编码 'http://localhost:8080'，构建时被编译进 JS。
+/// 通过反向代理访问时，页面 JS 发的 API 请求指向的是「访问者自己电脑的 8080」，
+/// 表现为：NAS 本机一切正常，换设备或走域名后 API 全挂（HTTPS 下还会被
+/// 浏览器按混合内容直接拦截）。
+const kDefaultApiBase = String.fromEnvironment('API_BASE', defaultValue: '');
