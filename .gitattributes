@@ -1,0 +1,32 @@
+# 行尾策略（Windows 开发环境专用补丁）
+#
+# 背景：本仓库历史内容为 CRLF（Windows 默认），Go / Dart / SQL 均能正常处理，
+# 但以下文件在 CRLF 下会出实质故障，必须强制 LF：
+#
+#   1. shell 脚本：shebang 会变成 "#!/usr/bin/env bash\r"，
+#      Linux/CI 执行时报 "bad interpreter: No such file or directory"
+#   2. Dockerfile：`\` 续行符后跟 CR 时不再视为续行（\<CR> ≠ \），
+#      多行 RUN 会被截断成多条非法指令
+#   3. CI workflow / compose：部分解析器对 CRLF 敏感
+#
+# 注意：这里故意不使用 `* text=auto eol=lf`，以免重写仓库中几百个既有文件的行尾。
+
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+.dockerignore   text eol=lf
+Makefile        text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+
+# 二进制资源，禁止任何行尾或编码转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.woff  binary
+*.woff2 binary
+*.ttf  binary
+*.otf  binary
+*.zip  binary
+*.db   binary
