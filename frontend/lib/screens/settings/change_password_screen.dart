@@ -83,6 +83,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   obscureText: true,
                   decoration: const InputDecoration(labelText: '确认新密码'),
                 ),
+                const SizedBox(height: 12),
+                Text(
+                  '保存成功后本机自动换取新登录态，其他已登录设备将全部退出，需重新登录。',
+                  style: TextStyle(fontSize: 12, height: 1.5, color: AppColors.sub),
+                ),
               ],
             ),
           ),

@@ -32,6 +32,9 @@ class SettingsScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               child: Column(
                 children: [
+                  // 身份卡（F-8）：头像点 + 用户名 + 系统管理员 / 账本角色徽章。
+                  _IdentityCard(auth: auth),
+                  const SizedBox(height: 12),
                   AppCard(
                     onTap: () => Navigator.push(
                       context,
@@ -72,7 +75,7 @@ class SettingsScreen extends StatelessWidget {
                         _SetRow(
                           label: '账本管理',
                           trailing: Text(
-                            '${auth.currentLedger?.name ?? '—'} ›',
+                            '${auth.currentLedger?.name ?? '—'}（当前） ›',
                             style: const TextStyle(color: AppColors.blue),
                           ),
                           onTap: () => Navigator.push(
@@ -113,6 +116,9 @@ class SettingsScreen extends StatelessWidget {
                                 builder: (_) => const ChangePasswordScreen()),
                           ),
                         ),
+                        // 开放注册开关（B-4 / F-8）：仅系统管理员可见可操作，
+                        // 切换持久化到服务端 app_settings，对所有端生效。
+                        if (auth.isAdmin) const _RegistrationRow(),
                         _SetRow(
                           label: '主题',
                           trailing: const Text('跟随系统 ›', style: AppTheme.muted),
@@ -232,6 +238,148 @@ class _DefaultAccountsCardState extends State<_DefaultAccountsCard> {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// 身份卡（F-8）：头像点（名字散列色）+ 用户名 + 角色徽章。
+/// 两层角色分开标注：系统管理员（全局）与 owner（账本级）。
+class _IdentityCard extends StatelessWidget {
+  final AuthController auth;
+  const _IdentityCard({required this.auth});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = auth.username ?? '未登录';
+    final role = auth.role;
+    return AppCard(
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.softOf(name),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              name.characters.first.toUpperCase(),
+              style: const TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.ink),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    if (auth.isAdmin) ...[
+                      _badge('系统管理员', AppColors.blue),
+                      const SizedBox(width: 6),
+                    ],
+                    _badge(
+                      role == 'owner'
+                          ? '账本所有者'
+                          : role == 'editor'
+                              ? '可编辑'
+                              : role == 'viewer'
+                                  ? '只读'
+                                  : '未加入账本',
+                      role == 'owner'
+                          ? AppColors.green
+                          : role.isEmpty
+                              ? AppColors.sub
+                              : AppColors.ink,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _badge(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+      );
+}
+
+/// 开放注册开关（B-4）：仅系统管理员渲染。切换即调服务端并持久化。
+class _RegistrationRow extends StatefulWidget {
+  const _RegistrationRow();
+
+  @override
+  State<_RegistrationRow> createState() => _RegistrationRowState();
+}
+
+class _RegistrationRowState extends State<_RegistrationRow> {
+  bool? _enabled; // null = 加载中
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final v = await AppScope.of(context).auth.api.registrationEnabled();
+    if (!mounted) return;
+    setState(() => _enabled = v);
+  }
+
+  Future<void> _toggle(bool v) async {
+    setState(() => _busy = true);
+    try {
+      await AppScope.of(context).auth.api.setRegistrationEnabled(v);
+      if (!mounted) return;
+      setState(() {
+        _enabled = v;
+        _busy = false;
+      });
+      showAppSnack(context, v ? '已开放注册' : '已关闭注册');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      showAppSnack(context, '切换失败（需系统管理员）: $e', warn: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = _enabled ?? false;
+    return _SetRow(
+      label: '开放注册',
+      enabled: _enabled != null && !_busy,
+      trailing: _busy
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_enabled == null ? '…' : (v ? '开放' : '关闭'),
+                    style: AppTheme.muted),
+                Switch(value: v, onChanged: _enabled == null ? null : _toggle),
+              ],
+            ),
     );
   }
 }

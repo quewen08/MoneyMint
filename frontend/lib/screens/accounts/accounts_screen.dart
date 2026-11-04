@@ -7,6 +7,7 @@ import '../../core/models/account.dart';
 import '../../viewmodels/ledger_controller.dart';
 import '../../utils/money.dart';
 import '../../widgets/common.dart';
+import '../../widgets/revamp.dart';
 import '../transactions/transactions_screen.dart';
 import '../categories/categories_screen.dart';
 import 'account_detail_screen.dart';
@@ -83,60 +84,74 @@ class _AccountsList extends StatelessWidget {
           );
         }
         final hasClosed = ledger.accounts.any((a) => a.isClosed);
+        // F-5：移动端渐变头（全宽）+ 内容区；PC 保持白卡汇总。
+        final groups = [
+          if (hasClosed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const Spacer(),
+                  Text('显示已关闭',
+                      style: TextStyle(color: AppColors.sub, fontSize: 13)),
+                  Switch(
+                    value: ledger.showClosedAccounts,
+                    onChanged: ledger.toggleShowClosedAccounts,
+                  ),
+                ],
+              ),
+            ),
+          for (final type in LedgerController.typeOrder)
+            if (ledger
+                .accountsOfType(type, includeClosed: ledger.showClosedAccounts)
+                .isNotEmpty)
+              AccountGroup(
+                title: _typeLabel(type),
+                rows: ledger
+                    .accountsOfType(type, includeClosed: ledger.showClosedAccounts)
+                    .map((a) {
+                  return LocalAccountRow(
+                    name: a.display,
+                    subtitle: a.isClosed
+                        ? '已关闭${a.closeDate != null ? ' · ${a.closeDate}' : ''}'
+                        : (a.restriction != null ? '限定 ${a.restriction}' : null),
+                    balances: ledger.balances[a.uuid] ?? {},
+                    dimmed: a.isClosed,
+                    emoji: (a.icon?.isNotEmpty == true) ? a.icon! : null,
+                    iconBg: AppColors.softOf(a.uuid, hexColor: a.color),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AccountDetailScreen(account: a),
+                      ),
+                    ),
+                    action: _AccountMenu(account: a),
+                  );
+                }).toList(),
+              ),
+        ];
+        if (!wide) {
+          return ListView(
+            padding: const EdgeInsets.only(bottom: 24),
+            children: [
+              _HeroAssets(ledger: ledger),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(children: groups),
+              ),
+            ],
+          );
+        }
         return Center(
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: wide ? 900 : double.infinity),
+            constraints: const BoxConstraints(maxWidth: 900),
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
                 _AssetSummary(ledger: ledger),
                 const SizedBox(height: 8),
-                if (hasClosed)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        const Spacer(),
-                        Text('显示已关闭',
-                            style:
-                                TextStyle(color: AppColors.sub, fontSize: 13)),
-                        Switch(
-                          value: ledger.showClosedAccounts,
-                          onChanged: ledger.toggleShowClosedAccounts,
-                        ),
-                      ],
-                    ),
-                  ),
-                for (final type in LedgerController.typeOrder)
-                  if (ledger
-                      .accountsOfType(type,
-                          includeClosed: ledger.showClosedAccounts)
-                      .isNotEmpty)
-                    AccountGroup(
-                      title: _typeLabel(type),
-                      rows: ledger
-                          .accountsOfType(type,
-                              includeClosed: ledger.showClosedAccounts)
-                          .map((a) {
-                        return LocalAccountRow(
-                          name: a.display,
-                          subtitle: a.isClosed
-                              ? '已关闭${a.closeDate != null ? ' · ${a.closeDate}' : ''}'
-                              : (a.restriction != null
-                                  ? '限定 ${a.restriction}'
-                                  : null),
-                          balances: ledger.balances[a.uuid] ?? {},
-                          dimmed: a.isClosed,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => AccountDetailScreen(account: a),
-                            ),
-                          ),
-                          action: _AccountMenu(account: a),
-                        );
-                      }).toList(),
-                    ),
+                ...groups,
               ],
             ),
           ),
@@ -155,7 +170,86 @@ class _AccountsList extends StatelessWidget {
       };
 }
 
-/// 顶部汇总卡：总资产 / 总负债 / 净资产（0.4-D「资产」页）。
+/// 移动端资产页渐变头（F-5）：净资产大字 + 总资产/总负债。
+class _HeroAssets extends StatelessWidget {
+  final LedgerController ledger;
+  const _HeroAssets({required this.ledger});
+
+  String _money(Map<String, String> m) {
+    if (m.isEmpty) return '—';
+    return m.entries.map((e) => formatMoney(e.value, e.key)).join('  ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final assets = ledger.byType['Assets'] ?? {};
+    final liabs = ledger.byType['Liabilities'] ?? {};
+    final net = ledger.netWorth;
+    return HeroHeader(
+      leading: const Text('资产',
+          style: TextStyle(
+              fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+      summary: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('净资产（资产 − 负债）',
+              style: TextStyle(
+                  fontSize: 12, color: Colors.white.withValues(alpha: .72))),
+          const SizedBox(height: 4),
+          Text(
+            net.isEmpty ? '¥ 0.00' : _money(net),
+            style: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              color: Colors.white,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _heroCol('总资产', _money(assets)),
+              ),
+              Container(
+                  width: 1,
+                  height: 30,
+                  color: Colors.white.withValues(alpha: .22),
+                  margin: const EdgeInsets.symmetric(horizontal: 14)),
+              Expanded(
+                child: _heroCol('总负债', _money(liabs)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 30), // 给上浮卡让位
+        ],
+      ),
+    );
+  }
+
+  Widget _heroCol(String lb, String v) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(lb,
+              style: TextStyle(
+                  fontSize: 12, color: Colors.white.withValues(alpha: .72))),
+          const SizedBox(height: 3),
+          Text(
+            v,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      );
+}
+
+/// 顶部汇总卡（PC 宽屏）：总资产 / 总负债 / 净资产。
 class _AssetSummary extends StatelessWidget {
   final LedgerController ledger;
   const _AssetSummary({required this.ledger});

@@ -27,6 +27,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   final _searchCtl = TextEditingController();
   final Set<String> _tags = {};
   String? _account; // 账户筛选 uuid（null=全部）
+  String? _member; // 成员筛选（F-6：按 createdByName，null=全部成员）
   String? _dateFrom;
   String? _dateTo;
   bool _includeClosed = false;
@@ -47,6 +48,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   bool get _hasFilter =>
       _account != widget.filterAccountUuid ||
       _tags.isNotEmpty ||
+      _member != null ||
       _dateFrom != null ||
       _dateTo != null ||
       _searchCtl.text.isNotEmpty ||
@@ -75,6 +77,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     setState(() {
       _tags.clear();
       _account = widget.filterAccountUuid;
+      _member = null;
       _dateFrom = null;
       _dateTo = null;
       _searchCtl.clear();
@@ -93,6 +96,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     if (_dateFrom != null && t.date.compareTo(_dateFrom!) < 0) return false;
     if (_dateTo != null && t.date.compareTo(_dateTo!) > 0) return false;
     if (_tags.isNotEmpty && !t.tags.any((tg) => _tags.contains(tg))) return false;
+    // F-6：成员筛选（记账人）。createdByName 为空的本地交易视作「我」记的，
+    // 选择了成员后这些无名交易不再展示，避免误认为该成员漏记。
+    if (_member != null) {
+      final name = t.createdByName;
+      if (name == null || name.isEmpty || name != _member) return false;
+    }
     final q = _searchCtl.text.trim().toLowerCase();
     if (q.isNotEmpty) {
       final hay = [
@@ -119,6 +128,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         final allTags = <String>{
           for (final t in ledger.txns) ...t.tags,
         }.toList()..sort();
+        // 成员列表（F-6）：当前账本内出现过的记账人。
+        final members = <String>{
+          for (final t in ledger.txns)
+            if (t.createdByName != null && t.createdByName!.isNotEmpty) t.createdByName!,
+        }.toList()..sort();
         final accountOpts = ledger.accounts
             .where((a) => _includeClosed || !a.isClosed || a.uuid == _account)
             .toList();
@@ -139,6 +153,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   _tags.add(tg);
                 }
               }),
+              members: members,
+              member: _member,
+              onMember: (v) => setState(() => _member = v),
               accountOpts: accountOpts,
               account: _account,
               onAccount: (v) => setState(() => _account = v),
@@ -184,6 +201,9 @@ class _FilterBar extends StatelessWidget {
   final List<String> allTags;
   final Set<String> selectedTags;
   final void Function(String) onToggleTag;
+  final List<String> members;
+  final String? member;
+  final void Function(String?) onMember;
   final List<LocalAccount> accountOpts;
   final String? account;
   final void Function(String?) onAccount;
@@ -202,6 +222,9 @@ class _FilterBar extends StatelessWidget {
     required this.allTags,
     required this.selectedTags,
     required this.onToggleTag,
+    required this.members,
+    required this.member,
+    required this.onMember,
     required this.accountOpts,
     required this.account,
     required this.onAccount,
@@ -264,6 +287,19 @@ class _FilterBar extends StatelessWidget {
               ),
             ],
           ),
+          if (members.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            // F-6：成员筛选 chips（彩色圆点标识记账人）。
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                _memberChip('全部成员', null, member == null, () => onMember(null)),
+                for (final m in members)
+                  _memberChip(m, m, member == m, () => onMember(member == m ? null : m)),
+              ],
+            ),
+          ],
           if (allTags.isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
@@ -329,6 +365,38 @@ class _FilterBar extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+  /// 成员 chip：彩色圆点标识记账人，色值按名字稳定散列。
+  Widget _memberChip(String label, String? value, bool on, VoidCallback onTap) {
+    final dotColor = value == null ? AppColors.blue : AppColors.softOf(value);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: on ? AppColors.blue.withValues(alpha: .12) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: on ? AppColors.blue : AppColors.line),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (value != null) ...[
+              Container(width: 8, height: 8,
+                  decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+              const SizedBox(width: 5),
+            ],
+            Text(label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: on ? AppColors.blue : AppColors.ink,
+                  fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                )),
+          ],
+        ),
       ),
     );
   }

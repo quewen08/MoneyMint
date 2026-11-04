@@ -7,6 +7,7 @@ import '../../app/scope.dart';
 import '../../app/theme.dart';
 import '../../core/models/account.dart';
 import '../../core/models/transaction.dart';
+import '../../viewmodels/ledger_controller.dart';
 import '../../utils/money.dart';
 import '../../widgets/charts.dart';
 import '../../widgets/common.dart';
@@ -126,6 +127,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             _RankCard(ledger: ledger, txns: txns),
                           ],
                         ),
+                  const SizedBox(height: 24),
+                  // 成员贡献（F-7）：家庭账本特有——谁记了多少笔、花了多少。
+                  PcSectionTitle('成员贡献'),
+                  const SizedBox(height: 12),
+                  _MemberContributionCard(ledger: ledger, txns: txns),
                   const SizedBox(height: 24),
                   // 试算平衡
                   PcSectionTitle('试算平衡'),
@@ -455,6 +461,133 @@ Decimal _sumByType(
     }
   }
   return sum;
+}
+
+/// 成员贡献卡（F-7）：按记账人聚合笔数与支出金额（主币种口径），占比条可视化。
+/// 家庭共享账本的独有报表：回答「这个月谁在记账、谁花得多」。
+class _MemberContributionCard extends StatelessWidget {
+  final LedgerController ledger;
+  final List<LocalTxn> txns;
+  const _MemberContributionCard({required this.ledger, required this.txns});
+
+  @override
+  Widget build(BuildContext context) {
+    // 主币种口径：与趋势/排行一致，避免跨币种直加。
+    final totals = <String, Decimal>{};
+    for (final t in txns) {
+      for (final p in t.postings) {
+        totals[p.commodity] = (totals[p.commodity] ?? Decimal.zero) +
+            (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
+      }
+    }
+    final commodity = totals.isEmpty
+        ? 'CNY'
+        : totals.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+
+    // 按成员聚合。
+    final count = <String, int>{};
+    final expense = <String, Decimal>{};
+    final accByUuid = {for (final a in ledger.accounts) a.uuid: a};
+    for (final t in txns) {
+      final name = t.createdByName;
+      if (name == null || name.isEmpty) continue;
+      count[name] = (count[name] ?? 0) + 1;
+      for (final p in t.postings) {
+        if (p.commodity != commodity) continue;
+        final acc = accByUuid[p.accountUuid];
+        if (acc == null || acc.type != 'Expenses') continue;
+        expense[name] = (expense[name] ?? Decimal.zero) +
+            (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
+      }
+    }
+    if (count.isEmpty) {
+      return const AppCard(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: EmptyState('还没有带记账人的交易（联网同步后显示成员署名）'),
+        ),
+      );
+    }
+    final ranked = count.keys.toList()
+      ..sort((a, b) => (expense[b] ?? Decimal.zero).compareTo(expense[a] ?? Decimal.zero));
+    final totalExpense = expense.values.fold(Decimal.zero, (s, v) => s + v);
+
+    return AppCard(
+      child: Column(
+        children: [
+          for (var i = 0; i < ranked.length; i++) ...[
+            if (i > 0) const Divider(height: 18, color: AppColors.line),
+            Builder(builder: (ctx) {
+              final name = ranked[i];
+              final exp = expense[name] ?? Decimal.zero;
+              final pct = totalExpense > Decimal.zero
+                  ? exp.toDouble() / totalExpense.toDouble()
+                  : 0.0;
+              return Row(
+                children: [
+                  // 成员头像点：色值按名字稳定散列（与流水页成员筛选 chips 一致）。
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: AppColors.softOf(name),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      name.characters.first.toUpperCase(),
+                      style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(name,
+                                  style: const TextStyle(
+                                      fontSize: 14, fontWeight: FontWeight.w600)),
+                            ),
+                            Text(
+                              formatMoney(exp.toStringAsFixed(2), commodity, signed: false),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: pct.clamp(0.0, 1.0),
+                            minHeight: 5,
+                            backgroundColor: AppColors.line.withValues(alpha: .5),
+                            valueColor: const AlwaysStoppedAnimation(AppColors.blue),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('${count[name]} 笔',
+                      style: const TextStyle(fontSize: 11, color: AppColors.sub)),
+                ],
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _TrialBalance extends StatelessWidget {

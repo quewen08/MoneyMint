@@ -98,6 +98,9 @@ class AccountRow extends StatelessWidget {
   final VoidCallback? onTap;
   final Widget? action; // 余额右侧操作（如删除菜单），默认无
   final bool dimmed; // 视觉降权（已关闭账户，0.4-A）
+  /// 彩色图标（F-5）：emoji + 淡底色；为空则不显示（旧行为）。
+  final String? emoji;
+  final Color? iconBg;
   const AccountRow({
     super.key,
     required this.name,
@@ -106,6 +109,8 @@ class AccountRow extends StatelessWidget {
     this.onTap,
     this.action,
     this.dimmed = false,
+    this.emoji,
+    this.iconBg,
   });
 
   @override
@@ -127,6 +132,19 @@ class AccountRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
+          if (emoji != null) ...[
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: iconBg ?? AppColors.blue.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              alignment: Alignment.center,
+              child: Text(emoji!, style: const TextStyle(fontSize: 16)),
+            ),
+            const SizedBox(width: 10),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,6 +204,8 @@ class LocalAccountRow extends StatelessWidget {
   final VoidCallback? onTap;
   final Widget? action;
   final bool dimmed;
+  final String? emoji;
+  final Color? iconBg;
   const LocalAccountRow({
     super.key,
     required this.name,
@@ -194,6 +214,8 @@ class LocalAccountRow extends StatelessWidget {
     this.onTap,
     this.action,
     this.dimmed = false,
+    this.emoji,
+    this.iconBg,
   });
 
   @override
@@ -204,6 +226,8 @@ class LocalAccountRow extends StatelessWidget {
         onTap: onTap,
         action: action,
         dimmed: dimmed,
+        emoji: emoji,
+        iconBg: iconBg,
       );
 }
 

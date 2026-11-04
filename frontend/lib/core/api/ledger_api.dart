@@ -155,6 +155,31 @@ class LedgerApi {
     return j;
   }
 
+  /// ---- 系统设置（B-4 注册开关）----
+
+  /// 查询注册是否开放。公开端点（无需登录，注册页在登录前就要用）；
+  /// 查询失败按开放处理，避免服务端抖动误锁注册入口。
+  Future<bool> registrationEnabled() async {
+    try {
+      final r = await http.get(Uri.parse('$base/api/settings/registration'));
+      if (r.statusCode != 200) return true;
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      return j['enabled'] as bool? ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// 设置注册开关（仅系统管理员；owner 运行时切换，持久化到 app_settings）。
+  Future<void> setRegistrationEnabled(bool enabled) async {
+    final r = await http.post(
+      Uri.parse('$base/api/settings/registration'),
+      headers: _headers,
+      body: jsonEncode({'enabled': enabled}),
+    );
+    _check(r);
+  }
+
   /// 用当前 token 换取新 token（会话再续 30 天，旧 token 立即失效）。
   Future<String> refresh() async {
     final r = await http.post(

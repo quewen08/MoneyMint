@@ -17,6 +17,10 @@ class AuthController extends ChangeNotifier {
   String? _username;
   String? get username => _username;
 
+  /// 系统管理员标记（全局角色，M1）：决定备份卡 / 开放注册开关等入口可见性。
+  bool _isAdmin = false;
+  bool get isAdmin => _isAdmin;
+
   List<Ledger> _ledgers = [];
   List<Ledger> get ledgers => _ledgers;
 
@@ -68,6 +72,7 @@ class AuthController extends ChangeNotifier {
     LedgerApi.setLedgerId(null);
     LedgerApi.setDisplayName(null);
     _username = null;
+    _isAdmin = false;
     _ledgers = [];
     _currentLedger = null;
   }
@@ -98,6 +103,7 @@ class AuthController extends ChangeNotifier {
     final user = j['user'];
     if (user is Map) {
       _username = user['username'] as String? ?? user['display_name'] as String?;
+      _isAdmin = user['is_admin'] as bool? ?? false;
       LedgerApi.setDisplayName(user['display_name'] as String?);
     }
   }
@@ -154,6 +160,7 @@ class AuthController extends ChangeNotifier {
   Future<void> logout() async {
     await api.logout();
     _username = null;
+    _isAdmin = false;
     _ledgers = [];
     _currentLedger = null;
     LedgerApi.setLedgerId(null);
