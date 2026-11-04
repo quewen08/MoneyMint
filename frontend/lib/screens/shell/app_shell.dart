@@ -6,8 +6,8 @@ import '../../app/scope.dart';
 import '../../app/navigation.dart';
 import '../../app/theme.dart';
 import '../../viewmodels/ledger_controller.dart';
-import '../record/record_screen.dart';
 import '../record/record_dialog.dart';
+import '../record/record_sheet.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../transactions/transactions_screen.dart';
 import '../accounts/accounts_screen.dart';
@@ -58,9 +58,11 @@ class _AppShellState extends State<AppShell> {
     if (isWide(context)) {
       showDialog(context: context, builder: (_) => const RecordDialog());
     } else {
-      Navigator.push<bool>(
-        context,
-        MaterialPageRoute(builder: (_) => const RecordScreen()),
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => const RecordSheet(),
       );
     }
   }
