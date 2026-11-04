@@ -32,19 +32,21 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   AppRoute _route = AppRoute.dashboard;
-  /// 已执行过 init 的控制器实例（原因同 AuthGate：热重载会重建 AppScope，
-  /// 一次性 bool 门闩会让新控制器永远不被 init）。
+  /// 已执行过 init 的控制器实例。
+  ///
+  /// 检查放 build 而非 didChangeDependencies：AppScope.updateShouldNotify
+  /// 恒为 false，热重载更新 scope 时 didChangeDependencies 不会重跑，
+  /// 新控制器的 init 会被漏掉（实测踩坑：刷新后先正常、热重载后永远转圈）。
   LedgerController? _initedLedger;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
+  void _ensureInited(BuildContext context) {
     final ledger = AppScope.of(context).ledger;
     if (_initedLedger == ledger) return;
     _initedLedger = ledger;
     if (kDebugMode) {
-      debugPrint('[shell] 挂载，init ledger=#${identityHashCode(ledger)}');
+      debugPrint('[shell] init ledger=#${identityHashCode(ledger)}');
     }
+    // init 为 async，首个 notifyListeners 在 await 之后，构建期调用安全。
     ledger.init();
     html.window.onOnline.listen((_) {
       if (!mounted) return;
@@ -107,6 +109,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    _ensureInited(context);
     final content = _content();
     final wide = isWide(context);
     final fab = wide && _route == AppRoute.accounts

@@ -35,30 +35,27 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   /// 已执行过 init 的控制器实例。
   ///
-  /// 不能用一次性 bool 门闩：flutter run 的热重载会重跑 MyApp.build，
-  /// AppScope 随之重建出全新的 AuthController——旧门闩挡住 init 后，
-  /// 新控制器 ready 永远 false，页面表现为「先正常、刷新/热重载后永远转圈」。
-  /// 按实例判断：同一个控制器只 init 一次，换了实例（热重载/热重启）自动重跑。
+  /// 两个坑都不能踩：
+  /// 1. 不能用一次性 bool 门闩：热重载会重建 AppScope，换新控制器后
+  ///    旧门闩挡住 init，ready 永远 false。
+  /// 2. 检查不能只放 didChangeDependencies：AppScope.updateShouldNotify
+  ///    恒为 false，热重载更新 scope 时 didChangeDependencies 不会重跑，
+  ///    而 build 必定重跑（整树从根重建）——所以检查放 build 里。
   AuthController? _initedAuth;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final auth = AppScope.of(context).auth;
-    if (_initedAuth == auth) return;
-    _initedAuth = auth;
-    auth.init();
-  }
 
   @override
   Widget build(BuildContext context) {
     final auth = AppScope.of(context).auth;
+    if (_initedAuth != auth) {
+      _initedAuth = auth;
+      // init 是 async 且首个 notifyListeners 在 await 之后，
+      // 构建期调用不会同步触发 setState。
+      auth.init();
+    }
     return ListenableBuilder(
       listenable: auth,
       builder: (context, _) {
         // 诊断打点（debug）：观察控制器实例号与登录态。
-        // 若刷新后出现「auth=#不同实例 ready=false」且不再有 init 日志，
-        // 即热重载重建了 AppScope 但 AuthGate 的 _initialized 门闩挡住了 init。
         if (kDebugMode) {
           debugPrint(
               '[gate] auth=#${identityHashCode(auth)} ready=${auth.ready} '
