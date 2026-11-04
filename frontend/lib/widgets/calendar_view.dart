@@ -12,20 +12,43 @@ class CalendarView extends StatefulWidget {
   final List<LocalTxn> txns;
   /// 点击某天（含交易的日期）回调，参数为 yyyy-MM-dd。
   final void Function(String date) onSelectDate;
-  const CalendarView({super.key, required this.txns, required this.onSelectDate});
+  /// 受控月份（F-4 账单页）：传入后月份切换由父组件持有，
+  /// 与头部汇总/排行/列表联动；为 null 时内部自管理（旧行为）。
+  final DateTime? month;
+  /// 受控模式下月份切换回调。
+  final void Function(DateTime month)? onMonthChanged;
+  const CalendarView({
+    super.key,
+    required this.txns,
+    required this.onSelectDate,
+    this.month,
+    this.onMonthChanged,
+  });
 
   @override
   State<CalendarView> createState() => _CalendarViewState();
 }
 
 class _CalendarViewState extends State<CalendarView> {
-  late DateTime _cursor;
+  late DateTime _internal;
 
   @override
   void initState() {
     super.initState();
-    _cursor = DateTime.now();
+    _internal = widget.month ?? DateTime.now();
   }
+
+  @override
+  void didUpdateWidget(covariant CalendarView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 父组件持有月份时跟随外部状态（避免父级重建导致视图不刷新）。
+    if (widget.month != null && widget.month != oldWidget.month) {
+      _internal = widget.month!;
+    }
+  }
+
+  /// 当前展示的月份：受控优先，否则内部状态。
+  DateTime get _cursor => widget.month ?? _internal;
 
   String get _prefix =>
       '${_cursor.year}-${_cursor.month.toString().padLeft(2, '0')}';
@@ -61,9 +84,13 @@ class _CalendarViewState extends State<CalendarView> {
       {for (final t in widget.txns) if (t.date.startsWith(_prefix)) t.date};
 
   void _shift(int months) {
-    setState(() {
-      _cursor = DateTime(_cursor.year, _cursor.month + months);
-    });
+    final next = DateTime(_cursor.year, _cursor.month + months);
+    if (widget.onMonthChanged != null) {
+      // 受控模式：通知父组件，由父组件传入新 month 触发重建。
+      widget.onMonthChanged!(next);
+    } else {
+      setState(() => _internal = next);
+    }
   }
 
   @override

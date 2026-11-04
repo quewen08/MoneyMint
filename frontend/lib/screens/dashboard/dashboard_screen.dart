@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/scope.dart';
 import '../../app/navigation.dart';
 import '../../app/theme.dart';
+import '../../core/models/account.dart';
 import '../../core/models/transaction.dart';
 import '../../viewmodels/ledger_controller.dart';
 import '../../utils/money.dart';
@@ -12,6 +13,7 @@ import '../../widgets/calendar_view.dart';
 import '../../widgets/charts.dart';
 import '../../widgets/common.dart';
 import '../../widgets/privacy.dart';
+import '../../widgets/revamp.dart';
 import '../transactions/txn_detail_screen.dart';
 import '../transactions/transactions_screen.dart';
 
@@ -342,7 +344,17 @@ class _TxnTile extends StatelessWidget {
   }
 }
 
-/// 移动端账单首页（0.4-D）：当月收入/支出/结余大卡 + 月历 + 最近交易 + 眼睛隐私开关。
+/// 移动端账单页（F-4 改版）：HeroHeader 渐变汇总 + 日历/列表两视图 + 支出排行 + 最近交易。
+///
+/// 能力迁移核对（重构前盘点，防丢功能）：
+/// - 隐私眼睛开关（Privacy 持久化 + AmountText 蒙层）→ 移至头部右上
+/// - 当月收支结余（主币种口径，避免跨币种直加）→ SummaryRow
+/// - 月历（每日净值、点击跳当日流水）→ 日历 Tab（CalendarView 受控月份，与汇总联动）
+/// - 最近交易（点击进详情）→ 保留
+/// - 下拉刷新同步 → 保留
+/// - 全量流水入口 → 头部右上 📋（落地后已移除 mobile_shell AppBar 的过渡期入口）
+/// - 月份切换（原型 ‹ 2026年11月 ›）→ 新增，联动汇总/日历/列表/排行
+/// - 支出排行（二级分类 TopN + 占比条）→ 新增
 class _MobileBillHome extends StatefulWidget {
   const _MobileBillHome();
 
@@ -352,6 +364,8 @@ class _MobileBillHome extends StatefulWidget {
 
 class _MobileBillHomeState extends State<_MobileBillHome> {
   bool _hide = false;
+  bool _listMode = false; // false = 日历视图，true = 列表视图
+  DateTime _month = DateTime.now();
 
   @override
   void initState() {
@@ -363,6 +377,13 @@ class _MobileBillHomeState extends State<_MobileBillHome> {
     setState(() => _hide = !_hide);
     Privacy.save(_hide);
   }
+
+  void _shiftMonth(int months) {
+    setState(() => _month = DateTime(_month.year, _month.month + months));
+  }
+
+  String get _monthPrefix =>
+      '${_month.year}-${_month.month.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -376,68 +397,134 @@ class _MobileBillHomeState extends State<_MobileBillHome> {
         final accByUuid = {
           for (final a in ledger.accounts) a.uuid: a,
         };
-        // 选交易总额最大的币种作为本月收支展示口径（避免跨币种直接相加）。
+        // 选交易总额最大的币种作为展示口径（避免跨币种直接相加）。
         final totals = <String, Decimal>{};
         for (final t in ledger.txns) {
           for (final p in t.postings) {
-            totals[p.commodity] =
-                (totals[p.commodity] ?? Decimal.zero) + (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
+            totals[p.commodity] = (totals[p.commodity] ?? Decimal.zero) +
+                (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
           }
         }
         final commodity = totals.isEmpty
             ? 'CNY'
             : totals.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
-        final now = DateTime.now();
-        final prefix = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+
+        // 所选月份的收支结余 + 当月交易（按日倒序）+ 支出排行（二级分类）。
         var income = Decimal.zero;
         var expense = Decimal.zero;
+        final monthTxns = <LocalTxn>[];
+        final catTotals = <String, Decimal>{}; // key = 'Expenses:二级'
         for (final t in ledger.txns) {
-          if (!t.date.startsWith(prefix)) continue;
+          if (!t.date.startsWith(_monthPrefix)) continue;
+          monthTxns.add(t);
           for (final p in t.postings) {
             if (p.commodity != commodity) continue;
             final acc = accByUuid[p.accountUuid];
             if (acc == null) continue;
-            final amt = Decimal.tryParse(p.amount) ?? Decimal.zero;
+            final amt = (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
             if (acc.type == 'Income') {
-              income += amt.abs();
+              income += amt;
             } else if (acc.type == 'Expenses') {
-              expense += amt.abs();
+              expense += amt;
+              // 归并到二级分类（Expenses:X:Y 的分录记到 Expenses:X）；
+              // 直接记在二级上的分录自然落位，三级及更深向上归并。
+              final parts = acc.name.split(':');
+              if (parts.length >= 2) {
+                final key = parts.take(2).join(':');
+                catTotals[key] = (catTotals[key] ?? Decimal.zero) + amt;
+              }
             }
           }
         }
         final balance = income - expense;
+        monthTxns.sort((a, b) => b.date.compareTo(a.date));
+
+        final expenseStr =
+            _hide ? '••••' : formatMoney(expense.toStringAsFixed(2), commodity, signed: false);
+        final incomeStr =
+            _hide ? '••••' : formatMoney(income.toStringAsFixed(2), commodity, signed: false);
+        final balanceStr =
+            _hide ? '••••' : formatMoney(balance.toStringAsFixed(2), commodity, signed: false);
 
         return RefreshIndicator(
           onRefresh: () => ledger.syncNow().then((_) {}),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            padding: const EdgeInsets.only(bottom: 24),
             children: [
-              Row(
-                children: [
-                  const Text('本月账单',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-                  const Spacer(),
-                  IconButton(
-                    icon: Icon(_hide ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+              HeroHeader(
+                leading: _MonthSwitcher(
+                  month: _month,
+                  onShift: _shiftMonth,
+                  hidden: _hide,
+                ),
+                actions: [
+                  HeroAction(
+                    icon: _hide
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
                     tooltip: _hide ? '显示金额' : '隐藏金额',
-                    onPressed: _toggleHide,
+                    onTap: _toggleHide,
+                  ),
+                  HeroAction(
+                    icon: Icons.receipt_long_outlined,
+                    tooltip: '全部流水',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TransactionsScreen()),
+                    ),
                   ),
                 ],
+                summary: SummaryRow(
+                  expense: expenseStr,
+                  income: incomeStr,
+                  balance: balanceStr,
+                  balancePositive: balance >= Decimal.zero,
+                  expenseLabel: '${_month.month}月支出',
+                  incomeLabel: '${_month.month}月收入',
+                ),
+                bottomGap: 34,
               ),
-              _MonthSummary(income: income, expense: expense, balance: balance, commodity: commodity, hidden: _hide),
-              const SizedBox(height: 16),
-              const SectionTitle('当月明细'),
-              CalendarView(
-                txns: ledger.txns,
-                onSelectDate: (date) => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => TransactionsScreen(filterDate: date),
-                  ),
+              const SizedBox(height: 12),
+              UpliftCard(
+                child: Column(
+                  children: [
+                    _ViewSeg(listMode: _listMode, onChanged: (v) => setState(() => _listMode = v)),
+                    const SizedBox(height: 12),
+                    if (!_listMode)
+                      CalendarView(
+                        txns: ledger.txns,
+                        month: _month,
+                        onMonthChanged: (m) => setState(() => _month = m),
+                        onSelectDate: (date) => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TransactionsScreen(filterDate: date),
+                          ),
+                        ),
+                      )
+                    else
+                      _MonthList(
+                        ledger: ledger,
+                        txns: monthTxns,
+                        commodity: commodity,
+                        hidden: _hide,
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
-              const SectionTitle('最近交易'),
+              _ExpenseRanking(
+                catTotals: catTotals,
+                accounts: ledger.accounts,
+                total: expense,
+                commodity: commodity,
+                hidden: _hide,
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SectionTitle('最近交易'),
+              ),
               _RecentTxns(ledger: ledger, hidden: _hide),
             ],
           ),
@@ -447,87 +534,281 @@ class _MobileBillHomeState extends State<_MobileBillHome> {
   }
 }
 
-/// 当月收入/支出/结余大卡。
-class _MonthSummary extends StatelessWidget {
-  final Decimal income;
-  final Decimal expense;
-  final Decimal balance;
-  final String commodity;
+/// 头部月份切换器：‹ 2026年11月 ›（白色，渐变头上）。
+class _MonthSwitcher extends StatelessWidget {
+  final DateTime month;
+  final void Function(int months) onShift;
   final bool hidden;
-  const _MonthSummary({
-    required this.income,
-    required this.expense,
-    required this.balance,
-    required this.commodity,
-    required this.hidden,
-  });
-
-  String _money(Decimal v) => hidden
-      ? '••••'
-      : formatMoney(v.toStringAsFixed(2), commodity, signed: false);
+  const _MonthSwitcher({required this.month, required this.onShift, this.hidden = false});
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('本月结余（收入 − 支出）', style: AppTheme.muted),
-          const SizedBox(height: 6),
-          Text(
-            _money(balance),
-            style: TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-              color: hidden
-                  ? AppColors.sub
-                  : balance < Decimal.zero
-                      ? AppColors.warn
-                      : AppColors.ink,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _iconBtn(Icons.chevron_left, '上一月', () => onShift(-1)),
+        Expanded(
+          child: Text(
+            '${month.year}年${month.month}月',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
             ),
           ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(child: _Item(label: '收入', value: _money(income), color: AppColors.green)),
-              const SizedBox(width: 12),
-              Expanded(child: _Item(label: '支出', value: _money(expense), color: AppColors.warn)),
-            ],
+        ),
+        _iconBtn(Icons.chevron_right, '下一月', () => onShift(1)),
+      ],
+    );
+  }
+
+  Widget _iconBtn(IconData icon, String tip, VoidCallback onTap) => IconButton(
+        visualDensity: VisualDensity.compact,
+        icon: Icon(icon, color: Colors.white.withValues(alpha: .85), size: 22),
+        tooltip: tip,
+        onPressed: onTap,
+      );
+}
+
+/// 日历/列表两段切换（原型 seg，紧凑版内嵌卡顶）。
+class _ViewSeg extends StatelessWidget {
+  final bool listMode;
+  final void Function(bool) onChanged;
+  const _ViewSeg({required this.listMode, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget seg(String label, bool value) {
+      final on = listMode == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => onChanged(value),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            decoration: BoxDecoration(
+              color: on ? AppColors.blue : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                color: on ? Colors.white : AppColors.sub,
+              ),
+            ),
           ),
-        ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(11),
       ),
+      child: Row(children: [seg('日历', false), seg('列表', true)]),
     );
   }
 }
 
-class _Item extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  const _Item({required this.label, required this.value, required this.color});
+/// 列表视图：当月交易按日分组（当日合计带符号染色）。
+class _MonthList extends StatelessWidget {
+  final LedgerController ledger;
+  final List<LocalTxn> txns;
+  final String commodity;
+  final bool hidden;
+  const _MonthList({
+    required this.ledger,
+    required this.txns,
+    required this.commodity,
+    this.hidden = false,
+  });
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+  Widget build(BuildContext context) {
+    if (txns.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: EmptyState('这个月还没有交易'),
+      );
+    }
+    // 按日分组（txns 已按日期倒序）。
+    final groups = <String, List<LocalTxn>>{};
+    for (final t in txns) {
+      groups.putIfAbsent(t.date, () => []).add(t);
+    }
+    final accByUuid = {for (final a in ledger.accounts) a.uuid: a};
+    return Column(
+      children: [
+        for (final entry in groups.entries) ...[
           Row(
             children: [
-              Container(width: 4, height: 12, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(width: 6),
-              Text(label, style: AppTheme.muted),
+              Text('${entry.key.substring(5)} 日',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Divider(height: 1, color: AppColors.line.withValues(alpha: .7)),
+              ),
+              const SizedBox(width: 8),
+              Builder(builder: (ctx) {
+                var net = Decimal.zero;
+                for (final t in entry.value) {
+                  for (final p in t.postings) {
+                    if (p.commodity != commodity) continue;
+                    final acc = accByUuid[p.accountUuid];
+                    if (acc == null) continue;
+                    if (acc.type == 'Income' || acc.type == 'Expenses') {
+                      net += Decimal.tryParse(p.amount) ?? Decimal.zero;
+                    }
+                  }
+                }
+                final pos = net >= Decimal.zero;
+                return Text(
+                  hidden
+                      ? '••••'
+                      : formatMoney(net.toStringAsFixed(2), commodity, signed: pos),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: hidden ? AppColors.sub : (pos ? AppColors.green : AppColors.warn),
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                );
+              }),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
-          ),
+          const SizedBox(height: 2),
+          for (final t in entry.value)
+            _TxnTile(ledger: ledger, txn: t, hidden: hidden),
+          const SizedBox(height: 6),
         ],
-      );
+      ],
+    );
+  }
+}
+
+/// 支出排行（二级分类 Top5 + 占比条），隐藏金额时只显示结构与占比。
+class _ExpenseRanking extends StatelessWidget {
+  final Map<String, Decimal> catTotals;
+  final List<LocalAccount> accounts;
+  final Decimal total;
+  final String commodity;
+  final bool hidden;
+  const _ExpenseRanking({
+    required this.catTotals,
+    required this.accounts,
+    required this.total,
+    required this.commodity,
+    this.hidden = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (catTotals.isEmpty) return const SizedBox.shrink();
+    final ranked = catTotals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top = ranked.take(5).toList();
+
+    // 找二级分类账户本身（或其子账户）取 icon/color 展示。
+    LocalAccount? findAcc(String key) {
+      for (final a in accounts) {
+        if (a.name == key) return a;
+      }
+      for (final a in accounts) {
+        if (a.name.startsWith('$key:')) return a;
+      }
+      return null;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('支出排行',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                const Spacer(),
+                Text('Top ${top.length} · $commodity',
+                    style: const TextStyle(fontSize: 11, color: AppColors.sub)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (final e in top) ...[
+              Builder(builder: (ctx) {
+                final acc = findAcc(e.key);
+                // Decimal 的 `/` 在 dart:math 语境下推断不稳，改用 double 计算占比。
+                final pct = total.toDouble() > 0
+                    ? e.value.toDouble() / total.toDouble()
+                    : 0.0;
+                return Row(
+                  children: [
+                    CategoryIcon(
+                      emoji: (acc?.icon?.isNotEmpty == true) ? acc!.icon! : '🏷️',
+                      color: AppColors.softOf(e.key, hexColor: acc?.color),
+                      size: 34,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  accountDisplayName(acc ?? LocalAccount(uuid: e.key, name: e.key, type: '', openDate: '')),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              Text(
+                                hidden ? '••••' : formatMoney(e.value.toStringAsFixed(2), commodity, signed: false),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              value: pct.clamp(0.0, 1.0),
+                              minHeight: 5,
+                              backgroundColor: AppColors.line.withValues(alpha: .5),
+                              valueColor: AlwaysStoppedAnimation(AppColors.blue),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '${(pct * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.sub,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                );
+              }),
+              const SizedBox(height: 12),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -30,12 +30,6 @@ class MobileShell extends StatelessWidget {
             ? tab.first.label
             : (routeTitles[route] ?? '家庭记账')),
         actions: [
-          // 过渡期流水入口：F-6 在账单页内建 📋 后移除。
-          IconButton(
-            tooltip: '交易流水',
-            icon: const Icon(Icons.receipt_long_outlined),
-            onPressed: () => onSelect(AppRoute.transactions),
-          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: ListenableBuilder(

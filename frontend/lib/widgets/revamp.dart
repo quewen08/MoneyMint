@@ -176,12 +176,17 @@ class SummaryRow extends StatelessWidget {
   final String income;
   final String balance;
   final bool balancePositive;
+  /// 标签可配置：账单页切换历史月份时显示「11月支出」而非「本月支出」。
+  final String expenseLabel;
+  final String incomeLabel;
   const SummaryRow({
     super.key,
     required this.expense,
     required this.income,
     required this.balance,
     required this.balancePositive,
+    this.expenseLabel = '本月支出',
+    this.incomeLabel = '本月收入',
   });
 
   @override
@@ -194,11 +199,11 @@ class SummaryRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _col('本月支出', expense, 22, Colors.white),
+          child: _col(expenseLabel, expense, 22, Colors.white),
         ),
         vline,
         Expanded(
-          child: _col('本月收入', income, 18, Colors.white),
+          child: _col(incomeLabel, income, 18, Colors.white),
         ),
         vline,
         Expanded(
