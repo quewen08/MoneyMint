@@ -12,12 +12,31 @@ import (
 
 // ListTransactions 列出账本内所有未删除交易（含分录），按日期、id 倒序。
 func (s *Store) ListTransactions(ledgerID int64) ([]domain.Transaction, error) {
+	return s.listTransactions(ledgerID, false)
+}
+
+// ListDeletedTransactions 列出回收站内的交易（已软删），按删除时间、id 倒序。
+//
+// 与 ListTransactions 共用同一套装载逻辑，只是筛选条件相反——回收站不引入新表，
+// 依赖 002_delete_semantics 引入的 deleted_at。
+func (s *Store) ListDeletedTransactions(ledgerID int64) ([]domain.Transaction, error) {
+	return s.listTransactions(ledgerID, true)
+}
+
+// listTransactions 是两条列表查询的共同实现（deleted=false 取未删、true 取已删）。
+func (s *Store) listTransactions(ledgerID int64, deleted bool) ([]domain.Transaction, error) {
+	where := "t.deleted_at IS NULL"
+	order := "t.date DESC, t.id DESC"
+	if deleted {
+		where = "t.deleted_at IS NOT NULL"
+		order = "t.deleted_at DESC, t.id DESC"
+	}
 	rows, err := s.db.Query(
 		`SELECT t.id, t.uuid, t.date, t.flag, t.description, t.tags, t.created_by,
-		        u.display_name AS created_by_name
+		        u.display_name AS created_by_name, t.deleted_at
 		 FROM transactions t
 		 LEFT JOIN users u ON t.created_by = u.id
-		 WHERE t.ledger_id=? AND t.deleted_at IS NULL ORDER BY t.date DESC, t.id DESC`,
+		 WHERE t.ledger_id=? AND `+where+` ORDER BY `+order,
 		ledgerID,
 	)
 	if err != nil {
@@ -28,15 +47,22 @@ func (s *Store) ListTransactions(ledgerID int64) ([]domain.Transaction, error) {
 	for rows.Next() {
 		var t domain.Transaction
 		var tags sql.NullString
-		if err := rows.Scan(&t.ID, &t.UUID, &t.Date, &t.Flag, &t.Description, &tags, &t.CreatedBy, &t.CreatedByName); err != nil {
+		var deletedAt sql.NullString
+		if err := rows.Scan(&t.ID, &t.UUID, &t.Date, &t.Flag, &t.Description, &tags, &t.CreatedBy, &t.CreatedByName, &deletedAt); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		t.Tags = parseTags(tags)
+		if deletedAt.Valid {
+			t.DeletedAt = deletedAt.String
+		}
 		txns = append(txns, t)
 		ids = append(ids, t.ID)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	if len(ids) == 0 {
 		return txns, nil
@@ -47,7 +73,9 @@ func (s *Store) ListTransactions(ledgerID int64) ([]domain.Transaction, error) {
 		return nil, err
 	}
 	prows, err := s.db.Query(
-		`SELECT p.transaction_id, p.account_id, a.uuid, a.name, p.commodity, CAST(p.amount AS TEXT), p.position
+		`SELECT p.transaction_id, p.account_id, a.uuid, a.name,
+		        COALESCE(NULLIF(a.display_name, ''), a.name) AS display,
+		        p.commodity, CAST(p.amount AS TEXT), p.position
 		 FROM postings p JOIN accounts a ON a.id=p.account_id
 		 WHERE p.transaction_id `+query+` ORDER BY p.transaction_id, p.position`,
 		args...,
@@ -61,7 +89,7 @@ func (s *Store) ListTransactions(ledgerID int64) ([]domain.Transaction, error) {
 	for prows.Next() {
 		var tid int64
 		var p domain.Posting
-		if err := prows.Scan(&tid, &p.AccountID, &p.AccountUUID, &p.AccountName, &p.Commodity, &p.Amount, &p.Position); err != nil {
+		if err := prows.Scan(&tid, &p.AccountID, &p.AccountUUID, &p.AccountName, &p.AccountDisplay, &p.Commodity, &p.Amount, &p.Position); err != nil {
 			return nil, err
 		}
 		byTxn[tid] = append(byTxn[tid], p)
@@ -210,6 +238,59 @@ func (s *Store) saveTransaction(ledgerID int64, txn domain.Transaction, idempote
 		return 0, false, err
 	}
 	return txnID, true, nil
+}
+
+// RestoreTransaction 从回收站恢复一笔交易：清空 deleted_at，并写 sync_log op=create
+// 让其他设备重新拉回这笔交易（客户端只认 create/delete/update/close 四种 op，
+// 恢复复用 create 语义，不引入新 op，旧客户端也能正确合并）。
+// 幂等：不存在或未删除返回 false。
+func (s *Store) RestoreTransaction(ledgerID int64, uuid string) (bool, error) {
+	res, err := s.db.Exec(
+		`UPDATE transactions SET deleted_at=NULL
+		 WHERE ledger_id=? AND uuid=? AND deleted_at IS NOT NULL`,
+		ledgerID, uuid,
+	)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return false, nil
+	}
+	if _, err := appendSyncLogOn(s.db, ledgerID, domain.EntityTransaction, uuid, domain.OpCreate); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ClosedAccountsOfTransaction 返回该交易分录引用到的「已关闭」账户名。
+//
+// 恢复前必须检查：记账不允许引用已关闭账户（0.4-A 起的约束），
+// 否则恢复出来的交易会是一条账本内无法新建、却能通过导出校验的脏数据。
+// 返回展示名优先（「现金」比 `Assets:Cash` 更适合直接弹给用户看）。
+func (s *Store) ClosedAccountsOfTransaction(ledgerID int64, uuid string) ([]string, error) {
+	rows, err := s.db.Query(
+		`SELECT DISTINCT COALESCE(NULLIF(a.display_name, ''), a.name) AS label
+		 FROM postings p
+		 JOIN transactions t ON t.id = p.transaction_id
+		 JOIN accounts a ON a.id = p.account_id
+		 WHERE t.ledger_id=? AND t.uuid=? AND a.close_date IS NOT NULL
+		 ORDER BY label`,
+		ledgerID, uuid,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
 }
 
 // SoftDeleteTransaction 软删一笔交易并写 sync_log delete。幂等：已删/不存在返回 false。

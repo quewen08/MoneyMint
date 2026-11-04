@@ -60,9 +60,12 @@ type Posting struct {
 	AccountID   int64  // 在线记账时引用服务端 id
 	AccountUUID string // 离线同步时引用账户 uuid
 	AccountName string // 展示用（列表接口内联账户名）
-	Commodity   string
-	Amount      string
-	Position    int
+	// AccountDisplay 是账户展示名（「现金」），无展示名时回落为 Beancount 全名。
+	// 与 AccountName 分开：导出/校验依赖全名，界面展示用展示名。
+	AccountDisplay string
+	Commodity      string
+	Amount         string
+	Position       int
 }
 
 // Transaction 是一笔不可变交易。
@@ -76,6 +79,7 @@ type Transaction struct {
 	CreatedByName string  // 创建者显示名；由 repository JOIN users 取得，created_by=0 时为空串
 	Tags        []string   // 标签（展示/检索/导出 #tag 用）
 	Postings    []Posting
+	DeletedAt   string // 软删时间（回收站用）；空串表示未删除
 }
 
 // Commodity 是账本内的币种/商品（Beancount commodity 指令）。

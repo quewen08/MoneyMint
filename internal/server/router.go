@@ -49,6 +49,13 @@ func newRouter(h *handler.Handler, svc *service.Service, webRoot string) http.Ha
 		http.MethodGet:  h.HandleListTransactions,
 		http.MethodPost: h.HandleCreateTransaction,
 	}))
+	// 交易回收站（M3）：列表 + 恢复。字面量路径比 {uuid} 更具体，ServeMux 优先匹配。
+	mux.HandleFunc("/api/transactions/trash", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodGet: h.HandleListTrash,
+	}))
+	mux.HandleFunc("/api/transactions/{uuid}/restore", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodPost: h.HandleRestoreTransaction,
+	}))
 	mux.HandleFunc("/api/transactions/{uuid}", methodSwitch(map[string]http.HandlerFunc{
 		http.MethodDelete: h.HandleDeleteTransaction,
 	}))

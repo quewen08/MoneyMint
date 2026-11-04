@@ -128,6 +128,84 @@ class Member {
       };
 }
 
+/// 回收站里的一条分录（服务端 PostingView 的精简版）。
+class TrashPosting {
+  /// Beancount 全名（`Assets:Cash`），排障与导出对账用。
+  final String account;
+
+  /// 界面展示名（「现金」）；服务端无展示名时回落为全名。
+  final String accountDisplay;
+  final String commodity;
+  final String amount;
+  const TrashPosting({
+    required this.account,
+    required this.accountDisplay,
+    required this.commodity,
+    required this.amount,
+  });
+
+  factory TrashPosting.fromJson(Map<String, dynamic> j) => TrashPosting(
+        account: j['account'] as String? ?? '',
+        accountDisplay: (j['account_display'] as String?)?.isNotEmpty == true
+            ? j['account_display'] as String
+            : (j['account'] as String? ?? ''),
+        commodity: j['commodity'] as String? ?? 'CNY',
+        amount: j['amount'] as String? ?? '0',
+      );
+}
+
+/// 回收站条目：服务端已软删（deleted_at 非空）的交易。
+///
+/// 与流水页不同，这份数据只存在于服务端——本地库在删除时已把它移除了，
+/// 所以回收站必须联网才能看（离线时页面给出明确提示，不做假空态）。
+class TrashItem {
+  final String uuid;
+  final String date;
+  final String flag;
+  final String description;
+  final List<String> tags;
+  final String deletedAt;
+  final String createdByName;
+  final List<TrashPosting> postings;
+
+  TrashItem({
+    required this.uuid,
+    required this.date,
+    required this.flag,
+    required this.description,
+    required this.tags,
+    required this.deletedAt,
+    required this.createdByName,
+    required this.postings,
+  });
+
+  /// 金额展示口径：优先「损益科目」那条分录（与流水页 txnHeadline 一致）。
+  TrashPosting? get headline {
+    for (final p in postings) {
+      if (p.account.startsWith('Expenses:') || p.account.startsWith('Income:')) {
+        return p;
+      }
+    }
+    return postings.isEmpty ? null : postings.first;
+  }
+
+  /// 分录摘要：`现金 -10.00  ·  食品 10.00`（用展示名，与流水页口径一致）。
+  String get flow => postings.map((p) => '${p.accountDisplay} ${p.amount}').join('  ·  ');
+
+  factory TrashItem.fromJson(Map<String, dynamic> j) => TrashItem(
+        uuid: j['uuid'] as String? ?? '',
+        date: j['date'] as String? ?? '',
+        flag: j['flag'] as String? ?? '*',
+        description: j['description'] as String? ?? '',
+        tags: (j['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+        deletedAt: j['deleted_at'] as String? ?? '',
+        createdByName: j['created_by_name'] as String? ?? '',
+        postings: (j['postings'] as List? ?? const [])
+            .map((e) => TrashPosting.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
 /// 一份账本备份的元信息（对应服务端 manifest.json 的一条记录）。
 ///
 /// 备份是全库级产物（含所有账本与成员），仅系统管理员可查看与下载。

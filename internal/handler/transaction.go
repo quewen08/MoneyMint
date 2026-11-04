@@ -64,6 +64,39 @@ func (h *Handler) HandleCreateTransaction(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusCreated, created)
 }
 
+// HandleListTrash 列出回收站内的交易（已软删，按删除时间倒序）。
+func (h *Handler) HandleListTrash(w http.ResponseWriter, r *http.Request) {
+	ledgerID, ok := auth.LedgerID(r.Context())
+	if !ok {
+		writeError(w, domain.ErrForbidden)
+		return
+	}
+	items, err := h.svc.ListDeletedTransactions(ledgerID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"transactions": items})
+}
+
+// HandleRestoreTransaction 从回收站恢复一笔交易。
+func (h *Handler) HandleRestoreTransaction(w http.ResponseWriter, r *http.Request) {
+	ledgerID, ok := auth.LedgerID(r.Context())
+	if !ok {
+		writeError(w, domain.ErrForbidden)
+		return
+	}
+	if err := h.svc.RestoreTransaction(ledgerID, r.PathValue("uuid")); err != nil {
+		if err == domain.ErrNotFound {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "交易不存在或未被删除"})
+			return
+		}
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // HandleDeleteTransaction 按 uuid 软删一笔交易。
 func (h *Handler) HandleDeleteTransaction(w http.ResponseWriter, r *http.Request) {
 	ledgerID, ok := auth.LedgerID(r.Context())

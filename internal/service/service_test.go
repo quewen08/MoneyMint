@@ -296,6 +296,88 @@ func TestDeleteSemantics(t *testing.T) {
 	}
 }
 
+func TestTrashRestore(t *testing.T) {
+	svc := newTestService(t)
+	registerOwner(t, svc)
+
+	cash, _ := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY", "", "", "", "")
+	food, _ := svc.CreateAccount(lid, "Expenses:Food:CNY", "", "Expenses", "2026-08-01", "CNY", "", "", "", "")
+	created, _ := svc.CreateTransaction(lid, "2026-08-02", "*", "早餐", []PostingInput{
+		{AccountID: cash.ID, Commodity: "CNY", Amount: "-10.00"},
+		{AccountID: food.ID, Commodity: "CNY", Amount: "10.00"},
+	}, 1)
+
+	// 未删除时回收站为空
+	if trash, err := svc.ListDeletedTransactions(lid); err != nil || len(trash) != 0 {
+		t.Fatalf("未删除时回收站应为空，实际 %d（err=%v）", len(trash), err)
+	}
+
+	if err := svc.DeleteTransaction(lid, created.UUID); err != nil {
+		t.Fatalf("delete txn: %v", err)
+	}
+	trash, err := svc.ListDeletedTransactions(lid)
+	if err != nil {
+		t.Fatalf("list trash: %v", err)
+	}
+	if len(trash) != 1 {
+		t.Fatalf("回收站应有 1 条，实际 %d", len(trash))
+	}
+	if trash[0].UUID != created.UUID || trash[0].DeletedAt == "" {
+		t.Fatalf("回收站条目应带 uuid 与删除时间，实际 %+v", trash[0])
+	}
+	if len(trash[0].Postings) != 2 {
+		t.Fatalf("回收站条目应保留分录，实际 %d 条", len(trash[0].Postings))
+	}
+	if txns, _ := svc.ListTransactions(lid); len(txns) != 0 {
+		t.Fatalf("已删除交易不应出现在正常列表，实际 %d", len(txns))
+	}
+
+	// 恢复：回到正常列表、回收站清空、重复恢复幂等返回 NotFound
+	if err := svc.RestoreTransaction(lid, created.UUID); err != nil {
+		t.Fatalf("restore txn: %v", err)
+	}
+	if txns, _ := svc.ListTransactions(lid); len(txns) != 1 {
+		t.Fatalf("恢复后正常列表应有 1 条，实际 %d", len(txns))
+	}
+	if trash, _ := svc.ListDeletedTransactions(lid); len(trash) != 0 {
+		t.Fatalf("恢复后回收站应为空，实际 %d", len(trash))
+	}
+	if err := svc.RestoreTransaction(lid, created.UUID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("重复恢复应返回 ErrNotFound，实际 %v", err)
+	}
+
+	// 恢复必须对其他设备可见：sync_log 里应有一条 transaction/create 指向该 uuid
+	pull, err := svc.SyncPull(lid, 0, "trash-test")
+	if err != nil {
+		t.Fatalf("sync pull: %v", err)
+	}
+	var restoreSeen bool
+	for _, c := range pull.Changes {
+		if c.EntityType == domain.EntityTransaction && c.Op == domain.OpCreate &&
+			strings.Contains(string(c.Entity), created.UUID) {
+			restoreSeen = true
+		}
+	}
+	if !restoreSeen {
+		t.Fatalf("恢复后应写入 sync_log op=create（否则其他设备拉不回这笔交易）")
+	}
+
+	// 引用已关闭账户的交易不允许恢复（否则账本内出现不可再创建的脏数据）
+	if err := svc.DeleteTransaction(lid, created.UUID); err != nil {
+		t.Fatalf("delete again: %v", err)
+	}
+	if err := svc.DeleteAccount(lid, cash.UUID); err != nil {
+		t.Fatalf("close account: %v", err)
+	}
+	err = svc.RestoreTransaction(lid, created.UUID)
+	if err == nil {
+		t.Fatalf("引用已关闭账户的交易不应允许恢复")
+	}
+	if !strings.Contains(err.Error(), "已关闭") {
+		t.Fatalf("错误信息应说明账户已关闭，实际 %v", err)
+	}
+}
+
 func TestSyncPushPullAndNaturalKeyMerge(t *testing.T) {
 	svc := newTestService(t)
 	owner := registerOwner(t, svc)

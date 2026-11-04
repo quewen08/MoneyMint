@@ -258,6 +258,33 @@ class LedgerApi {
     _check(r);
   }
 
+  // ---- 交易回收站（M3）----
+
+  /// 列出回收站（服务端已软删交易），按删除时间倒序。
+  ///
+  /// 只走服务端：交易被删时本地库已移除该条，离线状态下拿不到。
+  Future<List<TrashItem>> listTrash() async {
+    final r = await http.get(
+      Uri.parse('$base/api/transactions/trash'),
+      headers: _headers,
+    );
+    _check(r);
+    final j = jsonDecode(r.body) as Map<String, dynamic>;
+    return (j['transactions'] as List? ?? const [])
+        .map((e) => TrashItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 从回收站恢复一笔交易（服务端会写 sync_log op=create，其他设备随后拉回）。
+  Future<void> restoreTransaction(String uuid) async {
+    final r = await http.post(
+      Uri.parse('$base/api/transactions/$uuid/restore'),
+      headers: _headers,
+      body: '{}',
+    );
+    _check(r);
+  }
+
   // ---- 账本管理（P1-C 多账本）----
 
   /// 列出当前用户所属的全部账本（含角色）。

@@ -22,6 +22,17 @@
   - 用 `ListView.separated` 而非 `DataTable`：家庭账本动辄数千笔，`DataTable` 一次性构建全部行、无虚拟化。
 - **流水页独立路由自带 Scaffold + AppBar**：新增 `embedded` 参数区分「shell 内容」与「Navigator.push 的独立页」。此前从账单 📋 / 账户详情进来是无 AppBar 的裸 Column（没有返回键，也无法切账本）。
 
+### Added（M3 交易回收站）
+
+- **回收站（M3）**：删除的交易不再「人间蒸发」，可逐条找回。底层不新增表——复用 002 引入的 `deleted_at`，此前软删数据一直在库里，只是没有任何入口能看见。
+  - 新增 `GET /api/transactions/trash`（列表，按删除时间倒序）与 `POST /api/transactions/{uuid}/restore`（恢复）。
+  - 恢复 = 清空 `deleted_at` + 写 `sync_log op=create`。**故意复用 create 而不是新增 `op=restore`**：客户端只认 create/delete/update/close 四种 op，复用 create 让旧客户端也能把交易拉回来，不引入协议版本分裂。
+  - 恢复前校验引用账户：交易若引用了已关闭账户（0.4-A 起禁止记账引用关闭账户），直接拒绝并说明是哪个账户（用展示名「现金」而非 `Assets:Cash`），避免恢复出账本内不可再创建的脏数据。
+  - 只读成员（viewer）可查看回收站（GET 放行），恢复被中间件以 403 拦截，无需额外判断。
+  - 前端 `screens/transactions/trash_screen.dart`：流水页筛选栏新增回收站入口；列表展示说明/标签/日期/分录摘要/删除时间/记账人/金额，逐条「恢复」；恢复后立即同步一次，流水与余额同步刷新。
+  - 回收站数据只来自服务端（删除时本地库已移除该条），因此离线时明确提示「需要联网」，而不是显示成空回收站。
+  - `domain.Posting` 新增 `AccountDisplay`（展示名），与 `AccountName`（Beancount 全名）分开：导出/校验依赖全名，界面展示用展示名。
+
 ### Fixed
 
 - **日历每日金额恒为 0.00**：原实现把当日所有 postings 金额直接相加，而复式记账下借贷必然平衡、相加恒为零。改为按科目类型计算「收入 − 支出」，资产/负债/权益之间的转移不计入。`CalendarView` 新增 `accountTypes` 参数；不传时保持旧行为。

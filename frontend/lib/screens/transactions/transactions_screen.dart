@@ -15,6 +15,7 @@ import '../../widgets/common.dart';
 import '../../widgets/calendar_view.dart';
 import '../../widgets/ledger_switcher.dart';
 import '../../widgets/revamp.dart';
+import 'trash_screen.dart';
 import 'txn_detail_screen.dart';
 
 class TransactionsScreen extends StatefulWidget {
@@ -219,6 +220,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               onToggleCalendar: (v) => setState(() => _calendar = v),
               hasFilter: _hasFilter,
               onClear: _clearFilters,
+              onOpenTrash: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TrashScreen()),
+              ),
             ),
             Expanded(
               child: _calendar
@@ -312,6 +317,7 @@ class _FilterBar extends StatelessWidget {
   final void Function(bool) onToggleCalendar;
   final bool hasFilter;
   final VoidCallback onClear;
+  final VoidCallback onOpenTrash;
   const _FilterBar({
     required this.searchCtl,
     required this.onSearch,
@@ -333,6 +339,7 @@ class _FilterBar extends StatelessWidget {
     required this.onToggleCalendar,
     required this.hasFilter,
     required this.onClear,
+    required this.onOpenTrash,
   });
 
   @override
@@ -380,6 +387,12 @@ class _FilterBar extends StatelessWidget {
                 ],
                 selected: {calendar},
                 onSelectionChanged: (s) => onToggleCalendar(s.first),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: '回收站',
+                icon: const Icon(Icons.delete_outline, size: 20),
+                onPressed: onOpenTrash,
               ),
             ],
           ),

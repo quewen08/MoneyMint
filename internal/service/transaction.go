@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"time"
 
 	"familyledger/internal/domain"
@@ -101,6 +102,84 @@ func (s *Service) CreateTransaction(ledgerID int64, date, flag, description stri
 		return TransactionCreated{}, err
 	}
 	return TransactionCreated{ID: id, UUID: txn.UUID, Date: date, Postings: len(postings)}, nil
+}
+
+// TrashPostingView 是回收站分录视图：account 保留 Beancount 全名，
+// account_display 是给人看的账户名（「现金」）。
+type TrashPostingView struct {
+	Account        string `json:"account"`
+	AccountDisplay string `json:"account_display"`
+	Commodity      string `json:"commodity"`
+	Amount         string `json:"amount"`
+}
+
+// TrashItemView 是回收站条目视图（在普通交易视图上加删除时间）。
+type TrashItemView struct {
+	UUID          string             `json:"uuid"`
+	Date          string             `json:"date"`
+	Flag          string             `json:"flag"`
+	Description   string             `json:"description"`
+	Tags          []string           `json:"tags"`
+	DeletedAt     string             `json:"deleted_at"`
+	CreatedByName string             `json:"created_by_name"`
+	Postings      []TrashPostingView `json:"postings"`
+}
+
+// ListDeletedTransactions 列出回收站（已软删交易），按删除时间倒序。
+func (s *Service) ListDeletedTransactions(ledgerID int64) ([]TrashItemView, error) {
+	txns, err := s.repo.ListDeletedTransactions(ledgerID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TrashItemView, 0, len(txns))
+	for _, t := range txns {
+		v := TrashItemView{
+			UUID:          t.UUID,
+			Date:          t.Date,
+			Flag:          t.Flag,
+			Description:   t.Description,
+			Tags:          t.Tags,
+			DeletedAt:     t.DeletedAt,
+			CreatedByName: t.CreatedByName,
+			Postings:      make([]TrashPostingView, 0, len(t.Postings)),
+		}
+		for _, p := range t.Postings {
+			display := p.AccountDisplay
+			if display == "" {
+				display = p.AccountName
+			}
+			v.Postings = append(v.Postings, TrashPostingView{
+				Account:        p.AccountName,
+				AccountDisplay: display,
+				Commodity:      p.Commodity,
+				Amount:         p.Amount,
+			})
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+// RestoreTransaction 从回收站恢复一笔交易。
+//
+// 恢复前校验引用账户：已关闭账户不允许再被记账引用，若交易的任一科目已关闭，
+// 直接拒绝并告知是哪个账户，而不是恢复出一条账本内不可再创建的脏数据。
+func (s *Service) RestoreTransaction(ledgerID int64, uuid string) error {
+	closed, err := s.repo.ClosedAccountsOfTransaction(ledgerID, uuid)
+	if err != nil {
+		return err
+	}
+	if len(closed) > 0 {
+		return domain.Invalidf("交易引用的账户「%s」已关闭，无法恢复（可先重新开启该账户或改为冲正）", strings.Join(closed, "」「"))
+	}
+	restored, err := s.repo.RestoreTransaction(ledgerID, uuid)
+	if err != nil {
+		return err
+	}
+	if !restored {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 // DeleteTransaction 软删一笔交易。
