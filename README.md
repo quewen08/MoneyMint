@@ -1,4 +1,4 @@
-# FamilyLedger 家庭协作记账
+# FamBean 家庭协作记账
 
 跑在 NAS 个人云上的**家庭协作复式记账**应用，数据模型对标 [Beancount](https://beancount.github.io/)。
 前端为 Flutter Web（PWA，浏览器访问），后端为 Go + SQLite（可平滑切换 Postgres）。
@@ -6,12 +6,15 @@
 - **数据自持**：账本数据全部保存在你自己的 NAS 上，不上传第三方。
 - **离线优先**：断网也能记账，联网后自动增量同步。
 - **标准兼容**：可导出标准 `.beancount` 文本，通过 `bean-check` 校验。
+- **自动备份**：每日一致性快照（WAL 安全），保留策略自动清理，浏览器直接下载。
 
 ## 特性
 
 - **复式记账**：Beancount 五大账户类型（资产/负债/权益/收入/支出），按币种借贷平衡校验，金额定点十进制无浮点误差。
 - **家庭共享**：一个家庭一个账本，`owner` / `editor` / `viewer` 三级角色权限，成员管理内置。
 - **多账本**：一个账号可属于多个账本，数据完全隔离，随时切换。
+- **自动备份**：每日 `VACUUM INTO` 一致性快照（含未 checkpoint 的 WAL 数据），附带 per-账本 Beancount 导出；保留最近 N 份每日 + M 个月月度，手动备份永不清理。
+- **账号安全**：系统管理员 + 账本 owner 双层角色；注册开关（部署配置或界面切换）；CLI 密码重置兜底。
 - **离线多端同步**：append-only + 不可变交易 + 全局水位，增量 pull / 逐条幂等 push，天然几乎无冲突。
 - **标准导出**：单文件或多文件目录（`main.bean` + `accounts/` + `date/`）两种导出，解压后可直接 `bean-check`。
 - **PWA**：可安装、离线壳、IndexedDB 本地真相源。
@@ -23,8 +26,35 @@
 | 后端 | Go 1.26 + 标准库 + [`modernc.org/sqlite`](https://gitlab.com/cznic/sqlite)（纯 Go，免 CGO） |
 | 前端 | Flutter Web 3.35+（MVVM 分层）+ sembast_web（IndexedDB） |
 | 导出校验 | 项目内 Python venv + `beancount` |
+| 部署 | Docker 多阶段构建（amd64 / arm64），单容器单端口 |
 
-## 快速开始
+## 快速开始（Docker，推荐）
+
+```bash
+# 1. 构建（或使用 CI 发布的镜像）
+docker build -t yourname/money-mint:0.5.0 .
+
+# 2. 准备数据目录
+mkdir -p ./data
+
+# 3. 启动（数据 / 备份 / 前端 / API 全在这个容器里）
+docker run -d --name famben -p 8080:8080 \
+  -e TZ=Asia/Shanghai \
+  -e LEDGER_OWNER_USER=awen \
+  -e LEDGER_OWNER_PASSWORD=你的密码 \
+  -v $(pwd)/data:/app/data \
+  yourname/money-mint:0.5.0
+
+# 4. 浏览器打开 http://<主机IP>:8080 ，用预设的 owner 账号登录
+```
+
+仓库内附带 [`docker-compose.yml`](docker-compose.yml)（含健康检查 / 备份保留 / 可选第二块盘异地备份），
+配合 [`.env.example`](.env.example) 使用更方便。
+
+> 空库 + 未设置 `LEDGER_OWNER_USER` 时，**首个注册的账号自动成为系统管理员**；
+> 设置了则跳过注册直接用预设账号登录（见下文「账号与权限」）。
+
+## 从源码运行
 
 ### 环境要求
 
@@ -32,49 +62,75 @@
 - Flutter 3.35+
 - Python 3.x（仅用于导出校验，装进项目 `.venv`，不污染系统）
 
-### 1. 启动后端
-
 ```bash
-export PATH="$PATH:/go/bin"        # 若 shell 未识别 go
-LEDGER_DB=data/ledger.db go run ./cmd/server   # 默认监听 :8080，LISTEN=:9000 可覆盖
+# 后端（前端与 API 同域托管，需先构建前端）
+(cd frontend && flutter build web --release)
+LEDGER_DB=data/ledger.db LEDGER_WEB_ROOT=frontend/build/web go run ./cmd/server
+
+# 前端开发模式（dev server 与后端端口不同，需注入 API 地址）
+cd frontend && flutter run -d chrome --dart-define=API_BASE=http://localhost:8080
 ```
 
-首次启动自动建库并执行迁移。健康检查：
+健康检查：`curl http://127.0.0.1:8080/api/health` → `{"status":"ok"}`
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `LEDGER_DB` | `data/ledger.db` | SQLite 数据库路径 |
+| `LISTEN` | `:8080` | HTTP 监听地址 |
+| `LEDGER_WEB_ROOT` | `./web` | 前端产物目录；不存在则只提供 API |
+| `LEDGER_OWNER_USER` / `LEDGER_OWNER_PASSWORD` | 空 | 预设 owner 账号（空库时生效，自动成为系统管理员） |
+| `LEDGER_REGISTRATION_ENABLED` | `true` | 注册开关初始值（之后可在界面修改并持久化） |
+| `LEDGER_BACKUP_ENABLED` | `true` | 自动备份开关 |
+| `LEDGER_BACKUP_DIR` | `{DB 目录}/backups` | 备份目录（可指向第二块盘） |
+| `LEDGER_BACKUP_HOUR` | `3` | 每日备份触发小时 |
+| `LEDGER_BACKUP_KEEP_DAILY` / `LEDGER_BACKUP_KEEP_MONTHLY` | `14` / `12` | 备份保留策略 |
+| `TZ` | `Asia/Shanghai` | 时区（交易日与备份时间依赖它） |
+
+## 账号与权限
+
+### 两层角色
+
+| 角色 | 管什么 | 典型操作 |
+|---|---|---|
+| **系统管理员**（`users.is_admin`，全局唯一层级） | 全库级 | 数据备份 / 下载 / 还原、注册开关 |
+| **账本 owner**（`ledger_members.role`，账本级） | 单个账本 | 成员邀请 / 改角色 / 移除 / 重置成员密码、账本设置 |
+
+首个账号 / 预设的 `LEDGER_OWNER_USER` 自动成为系统管理员兼账本 owner。
+
+### 注册开关
+
+- **部署配置**：`LEDGER_REGISTRATION_ENABLED=false`（初始值）
+- **界面切换**：系统管理员随时修改（持久化，之后以界面值为准）
+- 关闭后新用户注册返回 403；已注册成员不受影响
+
+### 忘记密码
+
+| 谁 | 怎么办 |
+|---|---|
+| 普通成员 | 请账本 owner 在成员管理中重置（自动注销其全部会话） |
+| owner / 管理员 | 由另一位系统管理员重置（互救）；**单人家庭的兜底**：到服务器执行 CLI |
 
 ```bash
-curl http://127.0.0.1:8080/api/health   # {"status":"ok"}
+# 服务器上直接执行（不经 HTTP，无需登录）
+./server -reset-password awen -new-password 新密码
+# Docker：
+docker exec famben /app/server -reset-password awen -new-password 新密码
 ```
 
-### 2. 启动前端
+重置后该用户全部会话立即失效，用新密码重新登录。
 
-```bash
-cd frontend
-export PUB_HOSTED_URL="https://pub.flutter-io.cn"   # 国内 pub 镜像
-flutter pub get
-flutter run -d chrome        # 开发模式
-# 或 flutter build web --release 后托管 build/web 产物（部署到 NAS）
-```
+## 自动备份
 
-### 3. 验证导出的 .beancount
-
-```bash
-# 一次性：创建验证环境
-python3 -m venv .venv
-.venv/Scripts/python.exe -m pip install beancount
-
-# 每次导出后校验（退出码 0、无报错即通过）
-.venv/Scripts/python.exe -m beancount.scripts.check data/family.beancount
-```
-
-> 注：Windows 下 `bean-check.exe` 直接运行可能静默失败，建议用上述 `python -m beancount.scripts.check` 方式。
+- 每日 `LEDGER_BACKUP_HOUR` 点（启动时若超过 24h 未备份会补跑一次）。
+- 快照用 SQLite `VACUUM INTO` 生成，**完整性校验 + 行数比对**后才写入清单；
+  同目录附每账本一份 `.beancount` 文本。
+- 清理策略：最近 14 份每日 ∪ 最近 12 个月每月一份 ∪ 全部手动备份。
+- 下载前先看 SHA256 与行数清单：`GET /api/backup/list`（仅系统管理员）。
+- ⚠️ 请勿直接复制 `ledger.db` 文件当备份——WAL 模式下会丢数据且不报错。
 
 ## 使用文档
-
-### 账号与权限
-
-- **注册**：首个注册用户创建默认账本并成为 `owner`；后续用户仅建账号，需 owner 在成员管理中按用户名邀请。
-- **角色**：`owner` 管理成员与账本设置 / `editor` 可写 / `viewer` 只读。
-- **鉴权**：业务端点需 `Authorization: Bearer <token>`；多账本下还需 `X-Ledger-Id` 头指定账本（未带时回退默认账本）。
 
 ### 离线同步
 
@@ -83,14 +139,7 @@ python3 -m venv .venv
 
 ### API 端点
 
-完整端点清单（认证 / 账户 / 交易 / 成员 / 账本 / 同步 / 导出）见 [`AGENTS.md`](AGENTS.md) §7。
-
-### 导出
-
-| 端点 | 说明 |
-|---|---|
-| `GET /api/export` | 导出单文件 `.beancount` 文本 |
-| `GET /api/export/archive` | 导出多文件目录（`main.bean` + `accounts/` + `date/`），打包 zip 下载 |
+完整端点清单（认证 / 账户 / 交易 / 成员 / 账本 / 同步 / 导出 / 备份 / 设置）见 [`AGENTS.md`](AGENTS.md) §7。
 
 快速验证示例：
 
@@ -122,45 +171,48 @@ curl -s $B/api/export -H "$AUTH" -o data/family.beancount
 ```
 .
 ├── schema.sql            # 数据库 DDL（含 Beancount 映射注释）
-├── cmd/server/           # Go 后端入口
+├── cmd/server/           # Go 后端入口（含 CLI：密码重置）
 ├── internal/             # 后端分层
-│   ├── config/           # 集中配置（环境变量）
+│   ├── config/           # 集中配置（环境变量 + 启动校验）
 │   ├── domain/           # 领域模型 + 哨兵错误
 │   ├── db/               # 开库 + 增量迁移
 │   ├── repository/       # 数据访问层（SQL 集中于此）
-│   ├── service/          # 业务逻辑层（校验/事务/同步/权限）
+│   ├── service/          # 业务逻辑层（校验/事务/同步/权限/备份调度）
 │   ├── handler/          # HTTP 适配层
-│   ├── server/           # 路由 + CORS/鉴权中间件
+│   ├── server/           # 路由 + CORS/鉴权中间件 + 前端静态托管
 │   ├── auth/             # 认证纯函数（bcrypt/token/context）
+│   ├── backup/           # 一致性快照 + 定时调度 + 保留清理
 │   └── export/           # DB → .beancount 导出器（单文件 + 多文件目录）
 ├── frontend/             # Flutter Web 应用（MVVM 分层）
-├── export_demo/          # 验证脚本（建库导出 / 双端同步模拟）
-├── data/                 # 运行时 SQLite 文件（git 忽略）
-└── docs/                 # 设计规格 / 同步协议 / 低保真原型
+├── scripts/              # check-bean / verify-version / smoke / local.sh
+├── Dockerfile            # 三阶段构建（Flutter → Go → alpine）
+├── docker-compose.yml    # 家用部署示例
+├── data/                 # 运行时 SQLite 与 backups/（git 忽略）
+└── docs/                 # 设计规格 / 同步协议 / 原型 / 任务书
 ```
 
 前端 `frontend/lib/` 按 `app / core / viewmodels / widgets / screens` 分层（详见 [`AGENTS.md`](AGENTS.md) §3.1）。
 
-## 部署到 NAS
-
-纯 Go 驱动免 CGO，一条命令交叉编译：
+## 从源码交叉编译到 NAS
 
 ```bash
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o familyledger ./cmd/server   # ARM64 NAS
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o familyledger ./cmd/server   # x86_64 NAS
-
-# NAS 上运行（docker / 后台进程均可）
-LEDGER_DB=/path/to/data/ledger.db ./familyledger
 ```
 
-建议用反向代理（Nginx/Caddy）加 HTTPS；前端将 `flutter build web --release` 产物托管，并把
-`frontend/lib/core/api/ledger_api.dart` 中的 `kDefaultApiBase` 改为 NAS 地址。
+前端与 API 同端口部署（Go 托管 Flutter 产物），反向代理只需把 `/` 转到后端端口，
+HTTPS / 换端口 / 域名均零配置；前后端分离部署时用
+`flutter build web --dart-define=API_BASE=https://api.example.com` 注入。
+
+建议用反向代理（Nginx / Caddy / Cloudflare）加 HTTPS——账本数据不要明文跑公网。
 
 ## 相关文档
 
-- [`AGENTS.md`](AGENTS.md) — 开发上下文：架构 / 约定 / 数据库 Schema / 验证记录（面向开发者与 AI 助手）
+- [`AGENTS.md`](AGENTS.md) — 开发上下文：架构 / 约定 / Schema / 端点清单（面向开发者与 AI 助手）
 - [`docs/design-spec.md`](docs/design-spec.md) — 产品设计规格
 - [`docs/sync-design.md`](docs/sync-design.md) — 离线同步协议设计
+- [`docs/m2-plan.md`](docs/m2-plan.md) — 备份还原 + Beancount 导入方案
+- [`docs/frontend-revamp-tasks.md`](docs/frontend-revamp-tasks.md) — 前端改版任务清单
 - [`CHANGELOG.md`](CHANGELOG.md) — 版本变更记录
 
 ## 许可证
