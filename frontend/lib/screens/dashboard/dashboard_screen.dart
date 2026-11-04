@@ -1,5 +1,5 @@
-/// 首页（设计稿「首页」）：净资产大字号 + 资产/负债/权益分组 + 最近交易。
-/// 0.4-B：顶部加四宫格指标 + 近 12 月趋势迷你折线。
+/// 首页 / 账单（设计稿「账单」）：渐变汇总头 + 日历/列表 + 支出排行 + 最近交易。
+/// 0.4-B：四宫格指标 + 近 12 月趋势；批 4 / F-10：宽屏 ≥1200 排三栏（日历 / 排行 / 汇总+快捷）。
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../app/scope.dart';
@@ -12,121 +12,23 @@ import '../../utils/money.dart';
 import '../../widgets/calendar_view.dart';
 import '../../widgets/charts.dart';
 import '../../widgets/common.dart';
+import '../../widgets/ledger_switcher.dart';
 import '../../widgets/privacy.dart';
 import '../../widgets/revamp.dart';
+import '../record/record_dialog.dart';
 import '../transactions/txn_detail_screen.dart';
 import '../transactions/transactions_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
+  /// 0.4-D 之前：>1024 走独立的 PC 仪表盘（净资产卡 + 四宫格 + 趋势 + 资产负债权益分组）。
+  /// 批 4 / F-10 起：两端统一走「账单首页」——PC 在 ≥1200 时排成三栏，
+  /// 避免同一份数据维护两套视觉。净资产/四宫格/趋势已并入宽屏右栏，功能不丢。
   @override
-  Widget build(BuildContext context) {
-    // 0.4-D：<1024 走移动端「账单首页」，>1024 保持原 PC 仪表盘。
-    if (!isWide(context)) {
-      return const _MobileBillHome();
-    }
-    final ledger = AppScope.of(context).ledger;
-    final wide = isWide(context); // 走到这里必为宽屏（窄屏已提前返回）
-    return ListenableBuilder(
-      listenable: ledger,
-      builder: (context, _) {
-        if (ledger.loading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final assetRows =
-            ledger.accountsOfType('Assets').map(_toRow(ledger)).toList();
-        final liabRows =
-            ledger.accountsOfType('Liabilities').map(_toRow(ledger)).toList();
-        final equityRows =
-            ledger.accountsOfType('Equity').map(_toRow(ledger)).toList();
-        final groups = <Widget>[
-          if (wide)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: AccountGroup(title: '资产', rows: assetRows)),
-                const SizedBox(width: 12),
-                Expanded(child: AccountGroup(title: '负债', rows: liabRows)),
-                const SizedBox(width: 12),
-                Expanded(child: AccountGroup(title: '权益', rows: equityRows)),
-              ],
-            )
-          else ...[
-            AccountGroup(title: '资产', rows: assetRows),
-            const SizedBox(height: 8),
-            AccountGroup(title: '负债', rows: liabRows),
-            const SizedBox(height: 8),
-            AccountGroup(title: '权益', rows: equityRows),
-          ],
-        ];
-
-        // 净资产卡 + 四宫格指标
-        final netWorth = ledger.netWorth;
-        final totalAssets = ledger.byType['Assets'] ?? {};
-        final totalLiabs = ledger.byType['Liabilities'] ?? {};
-        final totalIncome = ledger.byType['Income'] ?? {};
-        final totalExpense = ledger.byType['Expenses'] ?? {};
-
-        return RefreshIndicator(
-          onRefresh: () => ledger.syncNow().then((_) {}),
-          child: SingleChildScrollView(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: wide ? 1100 : double.infinity),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _NetWorthCard(netWorth: netWorth),
-                      const SizedBox(height: 12),
-                      // 四宫格指标
-                      GridView.count(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: wide ? 4 : 2,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 2.4,
-                        children: [
-                          _MetricChip(label: '总资产', value: _moneyMap(totalAssets), color: AppColors.blue),
-                          _MetricChip(label: '总负债', value: _moneyMap(totalLiabs), color: AppColors.warn),
-                          _MetricChip(label: '收入', value: _moneyMap(totalIncome), color: AppColors.green),
-                          _MetricChip(label: '支出', value: _moneyMap(totalExpense), color: AppColors.warn),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // 近 12 月趋势迷你图
-                      _MiniTrendCard(ledger: ledger, wide: wide),
-                      const SizedBox(height: 16),
-                      ...groups,
-                      const SizedBox(height: 16),
-                      const SectionTitle('最近交易'),
-                      _RecentTxns(ledger: ledger),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  LocalAccountRow Function(dynamic) _toRow(LedgerController ledger) =>
-      (a) => LocalAccountRow(
-            name: a.display,
-            subtitle: a.restriction != null ? '限定 ${a.restriction}' : null,
-            balances: ledger.balances[a.uuid] ?? {},
-          );
-
-  String _moneyMap(Map<String, String> m) {
-    if (m.isEmpty) return '—';
-    return m.entries.map((e) => formatMoney(e.value, e.key)).join('  ');
-  }
+  Widget build(BuildContext context) => const _BillHome();
 }
+
 
 class _MetricChip extends StatelessWidget {
   final String label;
@@ -257,7 +159,9 @@ class _MiniTrendCard extends StatelessWidget {
 
 class _NetWorthCard extends StatelessWidget {
   final Map<String, String> netWorth;
-  const _NetWorthCard({required this.netWorth});
+  /// 隐私开关：true 时金额遮挡（与头部 / 列表一致）。
+  final bool hidden;
+  const _NetWorthCard({required this.netWorth, this.hidden = false});
 
   @override
   Widget build(BuildContext context) {
@@ -269,7 +173,10 @@ class _NetWorthCard extends StatelessWidget {
         children: [
           const Text('净资产（资产 − 负债）', style: AppTheme.muted),
           const SizedBox(height: 6),
-          if (entries.isEmpty)
+          if (hidden)
+            const Text('••••',
+                style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800, letterSpacing: -0.5))
+          else if (entries.isEmpty)
             const Text('¥ 0.00',
                 style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800, letterSpacing: -0.5))
           else
@@ -301,7 +208,7 @@ class _RecentTxns extends StatelessWidget {
   Widget build(BuildContext context) {
     final recent = ledger.txns.take(5).toList();
     if (recent.isEmpty) {
-      return const AppCard(child: EmptyState('还没有交易，点右下角 记一笔'));
+      return const AppCard(child: EmptyState('还没有交易，点「记一笔」开始记账'));
     }
     return AppCard(
       padding: EdgeInsets.zero,
@@ -344,7 +251,8 @@ class _TxnTile extends StatelessWidget {
   }
 }
 
-/// 移动端账单页（F-4 改版）：HeroHeader 渐变汇总 + 日历/列表两视图 + 支出排行 + 最近交易。
+/// 账单首页（F-4 改版）：HeroHeader 渐变汇总 + 日历/列表两视图 + 支出排行 + 最近交易。
+/// 批 4 / F-10：宽屏复用同一套卡片排成两/三栏，不再维护独立 PC 仪表盘。
 ///
 /// 能力迁移核对（重构前盘点，防丢功能）：
 /// - 隐私眼睛开关（Privacy 持久化 + AmountText 蒙层）→ 移至头部右上
@@ -355,14 +263,16 @@ class _TxnTile extends StatelessWidget {
 /// - 全量流水入口 → 头部右上 📋（落地后已移除 mobile_shell AppBar 的过渡期入口）
 /// - 月份切换（原型 ‹ 2026年11月 ›）→ 新增，联动汇总/日历/列表/排行
 /// - 支出排行（二级分类 TopN + 占比条）→ 新增
-class _MobileBillHome extends StatefulWidget {
-  const _MobileBillHome();
+/// - 净资产/四宫格指标/近 12 月趋势（原 PC 仪表盘）→ 宽屏右栏
+/// - 资产/负债/权益分组 → 收敛到「资产」页（PC 侧边栏直达，避免两处维护）
+class _BillHome extends StatefulWidget {
+  const _BillHome();
 
   @override
-  State<_MobileBillHome> createState() => _MobileBillHomeState();
+  State<_BillHome> createState() => _BillHomeState();
 }
 
-class _MobileBillHomeState extends State<_MobileBillHome> {
+class _BillHomeState extends State<_BillHome> {
   bool _hide = false;
   bool _listMode = false; // false = 日历视图，true = 列表视图
   DateTime _month = DateTime.now();
@@ -387,9 +297,12 @@ class _MobileBillHomeState extends State<_MobileBillHome> {
 
   @override
   Widget build(BuildContext context) {
-    final ledger = AppScope.of(context).ledger;
+    final scope = AppScope.of(context);
+    final ledger = scope.ledger;
+    final auth = scope.auth;
+    // 账本 pill 需要 auth 的当前账本名，切换后随之刷新。
     return ListenableBuilder(
-      listenable: ledger,
+      listenable: Listenable.merge([ledger, auth]),
       builder: (context, _) {
         if (ledger.loading) {
           return const Center(child: CircularProgressIndicator());
@@ -446,91 +359,273 @@ class _MobileBillHomeState extends State<_MobileBillHome> {
         final balanceStr =
             _hide ? '••••' : formatMoney(balance.toStringAsFixed(2), commodity, signed: false);
 
-        return RefreshIndicator(
-          onRefresh: () => ledger.syncNow().then((_) {}),
-          child: ListView(
-            padding: const EdgeInsets.only(bottom: 24),
+        final wide = isWide(context);
+        // F-10：≥1200 三栏（日历 / 汇总指标 / 快捷+最近），1024~1199 两栏，更窄纵向堆叠。
+        final threeCol = MediaQuery.sizeOf(context).width >= 1200;
+
+        final hero = HeroHeader(
+          leading: _MonthSwitcher(
+            month: _month,
+            onShift: _shiftMonth,
+            hidden: _hide,
+          ),
+          // 多账本全局化：四页头部统一账本 pill（F-4）。
+          pill: LedgerPill(
+            ledgerName: auth.currentLedger?.name ?? '账本',
+            onTap: () => showLedgerSwitcher(context),
+          ),
+          actions: [
+            HeroAction(
+              icon: _hide
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              tooltip: _hide ? '显示金额' : '隐藏金额',
+              onTap: _toggleHide,
+            ),
+            HeroAction(
+              icon: Icons.receipt_long_outlined,
+              tooltip: '全部流水',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TransactionsScreen()),
+              ),
+            ),
+          ],
+          summary: SummaryRow(
+            expense: expenseStr,
+            income: incomeStr,
+            balance: balanceStr,
+            balancePositive: balance >= Decimal.zero,
+            expenseLabel: '${_month.month}月支出',
+            incomeLabel: '${_month.month}月收入',
+          ),
+          bottomGap: wide ? 0 : 34,
+        );
+
+        final calendarCard = UpliftCard(
+          margin: wide ? EdgeInsets.zero : const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          child: Column(
             children: [
-              HeroHeader(
-                leading: _MonthSwitcher(
+              _ViewSeg(listMode: _listMode, onChanged: (v) => setState(() => _listMode = v)),
+              const SizedBox(height: 12),
+              if (!_listMode)
+                CalendarView(
+                  txns: ledger.txns,
                   month: _month,
-                  onShift: _shiftMonth,
+                  // 供日历区分「收支」与「账户间转账」，否则每日结余恒为 0。
+                  accountTypes: {for (final a in ledger.accounts) a.uuid: a.type},
                   hidden: _hide,
-                ),
-                actions: [
-                  HeroAction(
-                    icon: _hide
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    tooltip: _hide ? '显示金额' : '隐藏金额',
-                    onTap: _toggleHide,
-                  ),
-                  HeroAction(
-                    icon: Icons.receipt_long_outlined,
-                    tooltip: '全部流水',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const TransactionsScreen()),
+                  onMonthChanged: (m) => setState(() => _month = m),
+                  onSelectDate: (date) => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TransactionsScreen(filterDate: date),
                     ),
                   ),
-                ],
-                summary: SummaryRow(
-                  expense: expenseStr,
-                  income: incomeStr,
-                  balance: balanceStr,
-                  balancePositive: balance >= Decimal.zero,
-                  expenseLabel: '${_month.month}月支出',
-                  incomeLabel: '${_month.month}月收入',
+                )
+              else
+                _MonthList(
+                  ledger: ledger,
+                  txns: monthTxns,
+                  commodity: commodity,
+                  hidden: _hide,
                 ),
-                bottomGap: 34,
-              ),
-              const SizedBox(height: 12),
-              UpliftCard(
-                child: Column(
-                  children: [
-                    _ViewSeg(listMode: _listMode, onChanged: (v) => setState(() => _listMode = v)),
-                    const SizedBox(height: 12),
-                    if (!_listMode)
-                      CalendarView(
-                        txns: ledger.txns,
-                        month: _month,
-                        onMonthChanged: (m) => setState(() => _month = m),
-                        onSelectDate: (date) => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => TransactionsScreen(filterDate: date),
-                          ),
-                        ),
-                      )
-                    else
-                      _MonthList(
-                        ledger: ledger,
-                        txns: monthTxns,
-                        commodity: commodity,
-                        hidden: _hide,
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              _ExpenseRanking(
-                catTotals: catTotals,
-                accounts: ledger.accounts,
-                total: expense,
-                commodity: commodity,
-                hidden: _hide,
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SectionTitle('最近交易'),
-              ),
-              _RecentTxns(ledger: ledger, hidden: _hide),
             ],
           ),
         );
+
+        final rankingCard = _ExpenseRanking(
+          catTotals: catTotals,
+          accounts: ledger.accounts,
+          total: expense,
+          commodity: commodity,
+          hidden: _hide,
+          flush: wide,
+        );
+
+        final recentCard = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!wide)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: SectionTitle('最近交易'),
+              )
+            else
+              const SectionTitle('最近交易'),
+            _RecentTxns(ledger: ledger, hidden: _hide),
+          ],
+        );
+
+        // 四宫格指标 + 近 12 月趋势：原 PC 仪表盘的能力，收进宽屏右栏，功能不丢。
+        final metricsCard = AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionTitle('资产概览'),
+              const SizedBox(height: 10),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1.75,
+                children: [
+                  _MetricChip(
+                      label: '总资产', value: _moneyMap(ledger.byType['Assets'] ?? {}), color: AppColors.blue),
+                  _MetricChip(
+                      label: '总负债',
+                      value: _moneyMap(ledger.byType['Liabilities'] ?? {}),
+                      color: AppColors.warn),
+                  _MetricChip(
+                      label: '收入',
+                      value: _moneyMap(ledger.byType['Income'] ?? {}),
+                      color: AppColors.green),
+                  _MetricChip(
+                      label: '支出',
+                      value: _moneyMap(ledger.byType['Expenses'] ?? {}),
+                      color: AppColors.expense),
+                ],
+              ),
+            ],
+          ),
+        );
+
+        final quickCard = AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionTitle('快捷记账'),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.blue,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (_) => const RecordDialog(),
+                  ),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('记一笔'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text('支出 / 收入 / 转账 三 Tab 在弹层内切换',
+                  style: TextStyle(fontSize: 11, color: AppColors.sub)),
+            ],
+          ),
+        );
+
+        final trendCard = _MiniTrendCard(ledger: ledger, wide: true);
+
+        Widget body;
+        if (!wide) {
+          body = ListView(
+            padding: const EdgeInsets.only(bottom: 24),
+            children: [
+              hero,
+              const SizedBox(height: 12),
+              calendarCard,
+              const SizedBox(height: 16),
+              rankingCard,
+              const SizedBox(height: 16),
+              recentCard,
+            ],
+          );
+        } else {
+          final left = Column(
+            children: [
+              calendarCard,
+              const SizedBox(height: 16),
+              rankingCard,
+            ],
+          );
+          final mid = Column(
+            children: [
+              _NetWorthCard(netWorth: ledger.netWorth, hidden: _hide),
+              const SizedBox(height: 16),
+              metricsCard,
+              const SizedBox(height: 16),
+              trendCard,
+            ],
+          );
+          final right = Column(
+            children: [
+              quickCard,
+              const SizedBox(height: 16),
+              recentCard,
+            ],
+          );
+          body = SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              children: [
+                hero,
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1440),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+                      child: threeCol
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 5, child: left),
+                                const SizedBox(width: 16),
+                                Expanded(flex: 3, child: mid),
+                                const SizedBox(width: 16),
+                                Expanded(flex: 3, child: right),
+                              ],
+                            )
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 5, child: left),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  flex: 5,
+                                  child: Column(
+                                    children: [
+                                      _NetWorthCard(
+                                          netWorth: ledger.netWorth, hidden: _hide),
+                                      const SizedBox(height: 16),
+                                      metricsCard,
+                                      const SizedBox(height: 16),
+                                      quickCard,
+                                      const SizedBox(height: 16),
+                                      recentCard,
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () => ledger.syncNow().then((_) {}),
+          child: body,
+        );
       },
     );
+  }
+
+  /// 多币种余额拼接；隐私开启时统一遮挡。
+  String _moneyMap(Map<String, String> m) {
+    if (_hide) return '••••';
+    if (m.isEmpty) return '—';
+    return m.entries.map((e) => formatMoney(e.value, e.key)).join('  ');
   }
 }
 
@@ -655,14 +750,19 @@ class _MonthList extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Builder(builder: (ctx) {
+                // 当日结余 = 收入 − 支出。收入分录是贷方（负数）、支出是借方（正数），
+                // 直接相加会把符号弄反，必须按类型取正/取负。
                 var net = Decimal.zero;
                 for (final t in entry.value) {
                   for (final p in t.postings) {
                     if (p.commodity != commodity) continue;
                     final acc = accByUuid[p.accountUuid];
                     if (acc == null) continue;
-                    if (acc.type == 'Income' || acc.type == 'Expenses') {
-                      net += Decimal.tryParse(p.amount) ?? Decimal.zero;
+                    final v = Decimal.tryParse(p.amount) ?? Decimal.zero;
+                    if (acc.type == 'Income') {
+                      net += v.abs();
+                    } else if (acc.type == 'Expenses') {
+                      net -= v.abs();
                     }
                   }
                 }
@@ -698,12 +798,15 @@ class _ExpenseRanking extends StatelessWidget {
   final Decimal total;
   final String commodity;
   final bool hidden;
+  /// [flush]=true 时不加左右外边距（宽屏分栏里由栏间距负责留白）。
+  final bool flush;
   const _ExpenseRanking({
     required this.catTotals,
     required this.accounts,
     required this.total,
     required this.commodity,
     this.hidden = false,
+    this.flush = false,
   });
 
   @override
@@ -725,7 +828,7 @@ class _ExpenseRanking extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: flush ? 0 : 16),
       child: AppCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

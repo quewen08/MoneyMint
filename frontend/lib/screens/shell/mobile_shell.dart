@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../app/navigation.dart';
 import '../../app/scope.dart';
 import '../../app/theme.dart';
+import '../../widgets/ledger_switcher.dart';
+import '../../widgets/revamp.dart';
 import '../../widgets/sync_badge.dart';
 
 class MobileShell extends StatelessWidget {
@@ -23,13 +25,31 @@ class MobileShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ledger = AppScope.of(context).ledger;
+    final auth = AppScope.of(context).auth;
     final tab = mobileTabs.where((t) => t.route == route).toList();
+    // 账单 / 资产页自带渐变头（HeroHeader 内已放白字 pill），此处不重复展示；
+    // 报表 / 更多没有渐变头，pill 落在 AppBar 右侧。
+    final showPill = route == AppRoute.reports || route == AppRoute.settings;
     return Scaffold(
       appBar: AppBar(
         title: Text(tab.isNotEmpty
             ? tab.first.label
             : (routeTitles[route] ?? '家庭记账')),
         actions: [
+          if (showPill)
+            ListenableBuilder(
+              listenable: auth,
+              builder: (ctx, _) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Center(
+                  child: LedgerPill(
+                    light: true,
+                    ledgerName: auth.currentLedger?.name ?? '账本',
+                    onTap: () => showLedgerSwitcher(context),
+                  ),
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: ListenableBuilder(

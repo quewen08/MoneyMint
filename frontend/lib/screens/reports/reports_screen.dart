@@ -11,7 +11,9 @@ import '../../viewmodels/ledger_controller.dart';
 import '../../utils/money.dart';
 import '../../widgets/charts.dart';
 import '../../widgets/common.dart';
+import '../../widgets/ledger_switcher.dart';
 import '../../widgets/pc.dart';
+import '../../widgets/revamp.dart';
 
 /// 时间筛选口径。
 enum TrendRange { week, month, year }
@@ -54,7 +56,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  PcSectionTitle('核心指标', actions: _rangeActions()),
+                  PcSectionTitle('核心指标', actions: [
+                    // 多账本全局化：报表头部也能看到并切换当前账本（F-7）。
+                    ListenableBuilder(
+                      listenable: AppScope.of(context).auth,
+                      builder: (ctx, _) {
+                        final auth = AppScope.of(context).auth;
+                        return LedgerPill(
+                          light: true,
+                          ledgerName: auth.currentLedger?.name ?? '账本',
+                          onTap: () => showLedgerSwitcher(context),
+                        );
+                      },
+                    ),
+                    ..._rangeActions(),
+                  ]),
                   const SizedBox(height: 12),
                   GridView.count(
                     shrinkWrap: true,

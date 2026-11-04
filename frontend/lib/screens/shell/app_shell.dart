@@ -78,7 +78,7 @@ class _AppShellState extends State<AppShell> {
       case AppRoute.dashboard:
         return const DashboardScreen();
       case AppRoute.transactions:
-        return const TransactionsScreen();
+        return const TransactionsScreen(embedded: true);
       case AppRoute.accounts:
         return const AccountsScreen();
       case AppRoute.members:

@@ -1,5 +1,10 @@
 /// 月历视图（0.4-D）：按天显示当日净值，点击某天跳转当日流水。
-/// 选择交易总额最大的币种作为展示口径；当日净值 = 当日所有分录金额（有符号）之和。
+/// 选择交易总额最大的币种作为展示口径。
+///
+/// 当日净值口径：**收入 − 支出**（只统计 Income / Expenses 科目的分录）。
+/// 早先实现是把该日所有 postings 金额直接相加，而复式记账下借贷必然平衡，
+/// 相加恒为 0——表现为日历上每天都是 0.00（已修复）。
+/// 传入 [accountTypes] 才能按科目类型区分；不传时退回旧的「全量相加」行为。
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../app/theme.dart';
@@ -17,12 +22,19 @@ class CalendarView extends StatefulWidget {
   final DateTime? month;
   /// 受控模式下月份切换回调。
   final void Function(DateTime month)? onMonthChanged;
+  /// 账户 uuid → 科目类型（Assets/Liabilities/Equity/Income/Expenses）。
+  /// 用于把「当日收支结余」与「资产间转账」区分开。
+  final Map<String, String>? accountTypes;
+  /// 隐私遮挡：true 时格内金额显示为 ••（与头部/列表的隐私开关一致）。
+  final bool hidden;
   const CalendarView({
     super.key,
     required this.txns,
     required this.onSelectDate,
     this.month,
     this.onMonthChanged,
+    this.accountTypes,
+    this.hidden = false,
   });
 
   @override
@@ -66,14 +78,29 @@ class _CalendarViewState extends State<CalendarView> {
     return totals.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
   }
 
-  /// 本月内每日净值（有符号）。
+  /// 本月内每日净值（有符号）：收入为正、支出为负。
   Map<String, Decimal> get _dayNet {
     final m = <String, Decimal>{};
+    final types = widget.accountTypes;
     for (final t in widget.txns) {
       if (!t.date.startsWith(_prefix)) continue;
       for (final p in t.postings) {
         if (p.commodity != _dominant) continue;
-        m[t.date] = (m[t.date] ?? Decimal.zero) + (Decimal.tryParse(p.amount) ?? Decimal.zero);
+        final v = Decimal.tryParse(p.amount) ?? Decimal.zero;
+        Decimal delta;
+        if (types == null) {
+          delta = v; // 无类型信息时保持旧行为（调用方需自行承担口径）
+        } else {
+          final ty = types[p.accountUuid];
+          if (ty == 'Expenses') {
+            delta = -v.abs();
+          } else if (ty == 'Income') {
+            delta = v.abs();
+          } else {
+            continue; // 资产/负债/权益之间的转移不计入当日收支
+          }
+        }
+        m[t.date] = (m[t.date] ?? Decimal.zero) + delta;
       }
     }
     return m;
@@ -164,6 +191,7 @@ class _CalendarViewState extends State<CalendarView> {
                     commodity: _dominant,
                     isToday: todayStr ==
                         '$_prefix-${(i - leading + 1).toString().padLeft(2, '0')}',
+                    hidden: widget.hidden,
                     onSelect: widget.onSelectDate,
                   ),
             ],
@@ -181,6 +209,7 @@ class _DayCell extends StatelessWidget {
   final bool hasTxn; // 当日是否有交易（独立于净值，净值为 0 也可点击）
   final String commodity;
   final bool isToday;
+  final bool hidden; // 隐私遮挡：金额位显示 ••
   final void Function(String date) onSelect;
   const _DayCell({
     required this.day,
@@ -189,6 +218,7 @@ class _DayCell extends StatelessWidget {
     required this.hasTxn,
     required this.commodity,
     required this.isToday,
+    required this.hidden,
     required this.onSelect,
   });
 
@@ -218,11 +248,14 @@ class _DayCell extends StatelessWidget {
           if (hasTxn)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Text(
-                _fmt(net ?? Decimal.zero, commodity),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 9.5, color: color, fontWeight: FontWeight.w600),
+              // 窄屏格宽只有 ~40px：等比缩小而不是省略号，避免「33…」看不出金额。
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  hidden ? '••' : _fmt(net ?? Decimal.zero, commodity),
+                  maxLines: 1,
+                  style: TextStyle(fontSize: 9.5, color: color, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
         ],

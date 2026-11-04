@@ -31,7 +31,6 @@ linter:
     dangling_library_doc_comments: false
     avoid_web_libraries_in_flutter: false
     use_build_context_synchronously: false
-    deprecated_member_use: false
 
 # dart:html 弃用提示需同时压到 ignore 级别才稳定生效（lint 规则与 analyzer 双重控制）。
 analyzer:

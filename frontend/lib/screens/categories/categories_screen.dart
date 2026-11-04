@@ -20,7 +20,7 @@ class CategoriesScreen extends StatelessWidget {
       listenable: ledger,
       builder: (context, _) {
         if (ledger.accounts.isEmpty) {
-          return const EmptyState('还没有分类，点右下角 + 添加');
+          return const EmptyState('还没有分类，点「+」添加一个');
         }
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),

@@ -50,7 +50,7 @@ class NavGroup {
 
 const pcSidebar = [
   NavGroup('概览', [
-    NavItem(AppRoute.dashboard, '仪表盘', Icons.home_outlined),
+    NavItem(AppRoute.dashboard, '账单', Icons.home_outlined),
     NavItem(AppRoute.transactions, '交易流水', Icons.receipt_long_outlined),
   ]),
   NavGroup('管理', [
@@ -70,7 +70,7 @@ const pcSidebar = [
 
 /// 各目的地标题（PC 顶栏 / AppBar 展示）。
 const routeTitles = {
-  AppRoute.dashboard: '仪表盘',
+  AppRoute.dashboard: '账单',
   AppRoute.transactions: '交易流水',
   AppRoute.accounts: '账户管理',
   AppRoute.members: '成员管理',

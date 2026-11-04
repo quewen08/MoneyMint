@@ -7,6 +7,7 @@ import '../../core/models/account.dart';
 import '../../viewmodels/ledger_controller.dart';
 import '../../utils/money.dart';
 import '../../widgets/common.dart';
+import '../../widgets/ledger_switcher.dart';
 import '../../widgets/revamp.dart';
 import '../transactions/transactions_screen.dart';
 import '../categories/categories_screen.dart';
@@ -78,7 +79,7 @@ class _AccountsList extends StatelessWidget {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(24),
-              child: Text('还没有账户，点右下角 + 创建',
+              child: Text('还没有账户，点「+」新建一个',
                   style: TextStyle(color: AppColors.sub)),
             ),
           );
@@ -185,10 +186,19 @@ class _HeroAssets extends StatelessWidget {
     final assets = ledger.byType['Assets'] ?? {};
     final liabs = ledger.byType['Liabilities'] ?? {};
     final net = ledger.netWorth;
+    final auth = AppScope.of(context).auth;
     return HeroHeader(
       leading: const Text('资产',
           style: TextStyle(
               fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+      // 多账本全局化：四页头部统一账本 pill（F-5）。
+      pill: ListenableBuilder(
+        listenable: auth,
+        builder: (ctx, _) => LedgerPill(
+          ledgerName: auth.currentLedger?.name ?? '账本',
+          onTap: () => showLedgerSwitcher(context),
+        ),
+      ),
       summary: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

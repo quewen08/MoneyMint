@@ -80,15 +80,35 @@ class HeroAction extends StatelessWidget {
 }
 
 /// 头部里的账本切换 pill：`📚 家庭账本 ▾`，点击进入账本切换。
+///
+/// 两种配色：
+/// - 默认（[light]=false）：白色半透明底 + 白字，用于渐变头（HeroHeader）。
+/// - [light]=true：浅灰底 + 深字，用于白色背景（PC 内容区 / 默认 AppBar）。
 class LedgerPill extends StatelessWidget {
   final String ledgerName;
   final VoidCallback? onTap;
-  const LedgerPill({super.key, required this.ledgerName, this.onTap});
+  final bool light;
+
+  /// 名称过长时省略，避免撑破窄屏 AppBar 的标题行。
+  final int maxChars;
+
+  const LedgerPill({
+    super.key,
+    required this.ledgerName,
+    this.onTap,
+    this.light = false,
+    this.maxChars = 12,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final fg = light ? AppColors.ink : Colors.white;
+    final arrowFg = light ? AppColors.sub : Colors.white70;
+    final name = ledgerName.length > maxChars
+        ? '${ledgerName.substring(0, maxChars)}…'
+        : ledgerName;
     return Material(
-      color: Colors.white.withValues(alpha: .16),
+      color: light ? const Color(0xFFF1F3F8) : Colors.white.withValues(alpha: .16),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,
@@ -100,10 +120,9 @@ class LedgerPill extends StatelessWidget {
             children: [
               const Text('📚', style: TextStyle(fontSize: 11)),
               const SizedBox(width: 5),
-              Text(ledgerName,
-                  style: const TextStyle(color: Colors.white, fontSize: 11)),
+              Text(name, style: TextStyle(color: fg, fontSize: 11)),
               const SizedBox(width: 4),
-              const Text('▾', style: TextStyle(color: Colors.white70, fontSize: 10)),
+              Text('▾', style: TextStyle(color: arrowFg, fontSize: 10)),
             ],
           ),
         ),
@@ -220,10 +239,17 @@ class SummaryRow extends StatelessWidget {
       children: [
         Text(lb, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: .72))),
         const SizedBox(height: 3),
-        Text(num,
-            style: TextStyle(
-                fontSize: fs, fontWeight: FontWeight.w700, color: c,
-                fontFeatures: const [FontFeature.tabularFigures()])),
+        // 窄屏（320~360）下三栏金额会换行成两行、把头部撑高；
+        // 用 scaleDown 等比缩小，保证永远单行完整显示。
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(num,
+              maxLines: 1,
+              style: TextStyle(
+                  fontSize: fs, fontWeight: FontWeight.w700, color: c,
+                  fontFeatures: const [FontFeature.tabularFigures()])),
+        ),
       ],
     );
   }
