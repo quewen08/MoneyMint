@@ -31,13 +31,14 @@ class NavItem {
   const NavItem(this.route, this.label, this.icon);
 }
 
-/// 移动端底部 4 个 Tab（0.4-D：首页 / 资产 / 流水 / 我的）。
+/// 移动端底部 4 个 Tab（v2 改版：账单 / 资产 / 报表 / 更多）+ 中央「记一笔」FAB。
+/// 「流水」不再占 Tab：入口 = 账单页右上 📋、账单列表视图、资产页账户详情。
 /// 「资产」复用 AccountsScreen（含顶部总资产/总负债汇总卡）；PC 侧边栏不变。
 const mobileTabs = [
-  NavItem(AppRoute.dashboard, '首页', Icons.home_outlined),
+  NavItem(AppRoute.dashboard, '账单', Icons.receipt_long_outlined),
   NavItem(AppRoute.accounts, '资产', Icons.account_balance_wallet_outlined),
-  NavItem(AppRoute.transactions, '流水', Icons.receipt_long_outlined),
-  NavItem(AppRoute.settings, '我的', Icons.person_outline),
+  NavItem(AppRoute.reports, '报表', Icons.insert_chart_outlined),
+  NavItem(AppRoute.settings, '更多', Icons.person_outline),
 ];
 
 /// PC 端侧边栏分组（9 模块：概览 / 管理 / 工具 / 系统）。

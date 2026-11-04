@@ -12,6 +12,56 @@ class AppColors {
   static const sub = Color(0xFF6B7280);
   static const line = Color(0xFFE5E7EB);
 
+  // ---- 改版 v2 新增（见 docs/prototype/mobile-redesign-v2.html）----
+
+  /// 汇总头部渐变（深蓝 → 主蓝）。
+  static const heroDark = Color(0xFF1D2B5F);
+  static const heroMid = Color(0xFF2E4BB8);
+
+  /// 支出橙 / 危险红（负余额、删除确认）。
+  static const expense = Color(0xFFF28C28);
+  static const danger = Color(0xFFE24B4A);
+
+  /// 渐变汇总头背景。
+  static const LinearGradient heroGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [heroDark, heroMid, blue],
+  );
+
+  /// FAB 径向感渐变（浅→深，模拟受光）。
+  static const LinearGradient fabGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF4D7CFF), Color(0xFF2E55D4)],
+  );
+
+  /// 分类图标彩色淡底系（支出排行 / 九宫格 / 账户分组共用）。
+  /// 顺序即默认分配顺序；accounts.color 有值时优先用账户自己的色。
+  static const List<Color> categoryPalette = [
+    Color(0xFFFDEEE4), // 橙淡
+    Color(0xFFE8F1FD), // 蓝淡
+    Color(0xFFF0EAFB), // 紫淡
+    Color(0xFFEAF7EF), // 绿淡
+    Color(0xFFFBEFD8), // 黄淡
+    Color(0xFFFBEAF0), // 粉淡
+    Color(0xFFE1F5EE), // 青淡
+    Color(0xFFF1EFE8), // 灰淡
+  ];
+
+  /// 给分类/账户挑淡底色：有显式 color 则做淡化，否则按 key 稳定散列取色板。
+  static Color softOf(String key, {String? hexColor}) {
+    if (hexColor != null && hexColor.isNotEmpty) {
+      final c = Color(int.tryParse('FF$hexColor'.replaceAll('#', ''), radix: 16) ?? 0xFFE8F1FD);
+      return Color.fromARGB(36, c.red, c.green, c.blue);
+    }
+    var h = 0;
+    for (final ch in key.codeUnits) {
+      h = (h * 31 + ch) & 0x7FFFFFFF;
+    }
+    return categoryPalette[h % categoryPalette.length];
+  }
+
   static const Map<int, Color> typeColors = {
     // 仅作语义补充，主调仍由蓝/绿/橙构成
   };

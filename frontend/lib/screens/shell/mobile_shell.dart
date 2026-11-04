@@ -1,8 +1,10 @@
-/// 移动端主框架：底部 3 个 Tab（首页 / 流水 / 我的）+ 记一笔 FAB。
-/// 顶部 AppBar 显示当前页标题与同步徽标。
+/// 移动端主框架（v2 改版）：底部 4 Tab + 中央「记一笔」凸起 FAB。
+/// Tab：账单 / 资产 / （＋）/ 报表 / 更多。流水从账单页右上 📋 或资产账户详情进入。
+/// 顶部 AppBar 保留：页标题、同步徽标、过渡期流水入口（F-6 落地账单页内入口后移除）。
 import 'package:flutter/material.dart';
 import '../../app/navigation.dart';
 import '../../app/scope.dart';
+import '../../app/theme.dart';
 import '../../widgets/sync_badge.dart';
 
 class MobileShell extends StatelessWidget {
@@ -18,11 +20,6 @@ class MobileShell extends StatelessWidget {
     required this.content,
   });
 
-  int _tabIndex() {
-    final i = mobileTabs.indexWhere((t) => t.route == route);
-    return i < 0 ? 0 : i;
-  }
-
   @override
   Widget build(BuildContext context) {
     final ledger = AppScope.of(context).ledger;
@@ -33,6 +30,12 @@ class MobileShell extends StatelessWidget {
             ? tab.first.label
             : (routeTitles[route] ?? '家庭记账')),
         actions: [
+          // 过渡期流水入口：F-6 在账单页内建 📋 后移除。
+          IconButton(
+            tooltip: '交易流水',
+            icon: const Icon(Icons.receipt_long_outlined),
+            onPressed: () => onSelect(AppRoute.transactions),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: ListenableBuilder(
@@ -43,21 +46,97 @@ class MobileShell extends StatelessWidget {
         ],
       ),
       body: content,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tabIndex(),
-        onDestinationSelected: (i) => onSelect(mobileTabs[i].route),
-        destinations: [
-          for (final t in mobileTabs)
-            NavigationDestination(
-              icon: Icon(t.icon),
-              label: t.label,
-            ),
-        ],
+      bottomNavigationBar: _RevampTabBar(
+        route: route,
+        onSelect: onSelect,
+        onRecord: onRecord,
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: onRecord,
-        icon: const Icon(Icons.add),
-        label: const Text('记一笔'),
+    );
+  }
+}
+
+/// v2 底栏：账单 / 资产 / （＋凸起）/ 报表 / 更多。
+class _RevampTabBar extends StatelessWidget {
+  final AppRoute route;
+  final ValueChanged<AppRoute> onSelect;
+  final VoidCallback onRecord;
+  const _RevampTabBar({
+    required this.route,
+    required this.onSelect,
+    required this.onRecord,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tb(int i) {
+      final t = mobileTabs[i];
+      final on = mobileTabs[i].route == route;
+      return Expanded(
+        child: InkWell(
+          onTap: () => onSelect(t.route),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              const SizedBox(height: 9),
+              Icon(t.icon, size: 22,
+                  color: on ? AppColors.blue : AppColors.sub),
+              const SizedBox(height: 2),
+              Text(t.label,
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      color: on ? AppColors.blue : AppColors.sub,
+                      fontWeight: on ? FontWeight.w700 : FontWeight.w400)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.card,
+        border: Border(top: BorderSide(color: Color(0xFFECEDF2), width: .5)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 64,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              tb(0),
+              tb(1),
+              Expanded(
+                child: Transform.translate(
+                  offset: const Offset(0, -18),
+                  child: GestureDetector(
+                    onTap: onRecord,
+                    child: Center(
+                      child: Container(
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          gradient: AppColors.fabGradient,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.bg, width: 4),
+                          boxShadow: const [
+                            BoxShadow(
+                                color: Color(0x6B3B6EF6),
+                                blurRadius: 18,
+                                offset: Offset(0, 6)),
+                          ],
+                        ),
+                        child: const Icon(Icons.add, color: Colors.white, size: 28),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              tb(2),
+              tb(3),
+            ],
+          ),
+        ),
       ),
     );
   }
