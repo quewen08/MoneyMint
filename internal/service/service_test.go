@@ -296,6 +296,70 @@ func TestDeleteSemantics(t *testing.T) {
 	}
 }
 
+func TestForcedPasswordChange(t *testing.T) {
+	svc := newTestService(t)
+	owner := registerOwner(t, svc)
+
+	// 自己注册的账号不置位（密码是自己选的）
+	if me, _ := svc.Me(owner.User.ID); me.MustChangePassword {
+		t.Fatalf("自己注册的账号不应要求强制改密")
+	}
+
+	// 造一个待重置的成员
+	bob, err := svc.Register("bobby", "bob123456", "Bob")
+	if err != nil {
+		t.Fatalf("register bob: %v", err)
+	}
+	if _, _, err := svc.AddMember(lid, owner.User.ID, "bobby", domain.RoleEditor); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+
+	// owner 重置成员密码 → 该成员被要求下次登录先改密
+	if err := svc.ResetMemberPassword(lid, owner.User.ID, bob.User.ID, "temp123456"); err != nil {
+		t.Fatalf("reset member password: %v", err)
+	}
+	if me, _ := svc.Me(bob.User.ID); !me.MustChangePassword {
+		t.Fatalf("管理员重置密码后应要求强制改密")
+	}
+
+	// 登录 → 会话主体也带该标记（中间件据此 428）
+	login, err := svc.Login("bobby", "temp123456")
+	if err != nil {
+		t.Fatalf("login bob: %v", err)
+	}
+	sess, err := svc.Authenticate(login.Token)
+	if err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	if !sess.MustChangePassword {
+		t.Fatalf("会话主体应带 must_change_password 标记")
+	}
+
+	// 自己改密 → 标记解除，新会话不再被拦
+	if _, err := svc.ChangePassword(bob.User.ID, "temp123456", "ownpass123"); err != nil {
+		t.Fatalf("change password: %v", err)
+	}
+	if me, _ := svc.Me(bob.User.ID); me.MustChangePassword {
+		t.Fatalf("自己改密后应清除强制改密标记")
+	}
+	login2, _ := svc.Login("bobby", "ownpass123")
+	sess2, _ := svc.Authenticate(login2.Token)
+	if sess2.MustChangePassword {
+		t.Fatalf("改密后的新会话不应再要求改密")
+	}
+
+	// 预设 owner / CLI 重置走的是同一条标记入口
+	if err := svc.MarkPasswordChangeRequired("bobby"); err != nil {
+		t.Fatalf("mark required: %v", err)
+	}
+	if me, _ := svc.Me(bob.User.ID); !me.MustChangePassword {
+		t.Fatalf("MarkPasswordChangeRequired 应置位")
+	}
+	if err := svc.MarkPasswordChangeRequired("nobody"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("标记不存在的用户应返回 ErrNotFound，实际 %v", err)
+	}
+}
+
 func TestTrashRestore(t *testing.T) {
 	svc := newTestService(t)
 	registerOwner(t, svc)

@@ -5,6 +5,7 @@ import 'app/scope.dart';
 import 'app/theme.dart';
 import 'screens/auth/await_invite_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/settings/change_password_screen.dart';
 import 'screens/shell/app_shell.dart';
 import 'viewmodels/auth_controller.dart';
 
@@ -67,6 +68,9 @@ class _AuthGateState extends State<AuthGate> {
           );
         }
         if (auth.loggedIn) {
+          // 强制改密（M3）：密码由别人代设时必须先改密，在此之前
+          // 服务端对业务接口一律 428，所以这里不放进主框架。
+          if (auth.mustChangePassword) return const ChangePasswordScreen(forced: true);
           // 已登录：是账本成员进主框架；尚未被邀请则显示等待邀请页（P1-B3）。
           if (auth.isMember) return const AppShell();
           return const AwaitInviteScreen();

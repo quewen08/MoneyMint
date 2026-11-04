@@ -159,9 +159,19 @@ class AuthController extends ChangeNotifier {
         await _loadLedgers();
       });
 
+  /// 是否处于「必须先改密」状态（M3）：密码由别人代设时为 true，
+  /// 此时服务端只放行 me/logout/refresh/change-password，AuthGate 会强制停在改密页。
+  bool get mustChangePassword => LedgerApi.mustChangePassword;
+
   /// 凭旧密码修改密码（服务端签发新 token，本端同步更新登录态）。
-  Future<void> changePassword(String oldPass, String newPass) =>
-      _run(() => api.changePassword(oldPass, newPass));
+  /// 成功后本地立即清除强制改密标记，AuthGate 随之切回主框架。
+  Future<void> changePassword(String oldPass, String newPass) => _run(() async {
+        await api.changePassword(oldPass, newPass);
+        LedgerApi.clearMustChangePassword();
+        // 强制改密期间 /api/ledgers 被 428 挡掉过（isMember 因此为 false），
+        // 改密后必须补拉一次，否则会误判成「未加入任何账本」而跳到等待邀请页。
+        await _loadLedgers();
+      });
 
   Future<void> logout() async {
     await api.logout();

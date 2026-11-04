@@ -30,6 +30,7 @@ func cors(next http.Handler) http.Handler {
 //   - 非 /api/ 前缀（前端静态资源与 SPA 入口）完全放行，交由 static.go 处理
 //   - 放行 /api/health 与公开认证端点（register/login）
 //   - 其余 /api/ 路由必须携带有效 Bearer token，否则 401
+//   - 处于「必须先改密」状态时，除自服务端点外一律 428
 //   - 认证自服务端点（me/logout/change-password/refresh）仅需登录态
 //   - 账本管理端点（/api/ledgers）仅需登录态（具体权限在 service 层校验）
 //   - 业务端点按 X-Ledger-Id（缺失回退默认账本）解析账本，校验成员身份，
@@ -64,15 +65,27 @@ func authMiddleware(svc *service.Service, next http.Handler) http.Handler {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 			return
 		}
-		uid, err := svc.Authenticate(tok)
+		sess, err := svc.Authenticate(tok)
 		if err != nil {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "登录已失效，请重新登录"})
 			return
 		}
+		uid := sess.UserID
 
 		switch reqPath {
 		case "/api/auth/me", "/api/auth/logout", "/api/auth/change-password", "/api/auth/refresh":
 			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))
+			return
+		}
+
+		// 强制改密闸门（M3）：密码是别人代设的（预设 owner / 管理员重置 / CLI 重置）
+		// 时，除上面四个自服务端点外一律 428，前端据此跳转改密页。
+		// 放在自服务放行之后、业务端点之前——改密本身必须能用，业务必须被挡。
+		if sess.MustChangePassword {
+			writeJSON(w, http.StatusPreconditionRequired, map[string]any{
+				"error": "首次登录需要先修改密码",
+				"code":  "password_change_required",
+			})
 			return
 		}
 

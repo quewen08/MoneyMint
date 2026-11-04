@@ -22,6 +22,32 @@ var migrations = []struct {
 	{"007_account_sort_order", migrate007},
 	{"008_user_admin", migrate008},
 	{"009_app_settings", migrate009},
+	{"010_force_password_change", migrate010},
+}
+
+// migrate010：users 增加 must_change_password（M3 强制改密）。
+//
+// 语义：密码是「别人替我设的」时必须改——预设 owner（LEDGER_OWNER_PASSWORD）、
+// owner/管理员重置成员密码、CLI 重置，这三条路径都置 1；用户自己改密后清 0。
+// 置位期间除改密/登出/me/refresh 之外的 /api/ 请求一律 428，避免「默认密码
+// 明文写在 compose 里、却永远没人改」这个隐患。
+//
+// 默认 0：老库升级时不能把所有人锁在改密页（他们可能早就改过密码），
+// 只有明确由系统代设密码的入口才置位。
+func migrate010(conn *sql.DB) error {
+	ok, err := columnExists(conn, "users", "must_change_password")
+	if err != nil {
+		return err
+	}
+	if ok {
+		return nil
+	}
+	if _, err := conn.Exec(
+		`ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`,
+	); err != nil {
+		return fmt.Errorf("add users.must_change_password: %w", err)
+	}
+	return nil
 }
 
 // migrate009：全局键值设置表（注册开关等系统级配置）。

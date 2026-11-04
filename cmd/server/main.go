@@ -147,10 +147,15 @@ func runPasswordReset(user, newPass string) {
 		fmt.Fprintf(os.Stderr, "❌ 更新密码失败: %v\n", err)
 		os.Exit(1)
 	}
+	// CLI 重置 = 密码由运维代设，要求用户下次登录先改密（M3）。
+	if _, err := repo.SetMustChangePassword(u.ID, true); err != nil {
+		fmt.Fprintf(os.Stderr, "⚠️ 密码已重置，但置「强制改密」标记失败: %v\n", err)
+		os.Exit(1)
+	}
 	if err := repo.DeleteSessionsByUser(u.ID); err != nil {
 		fmt.Fprintf(os.Stderr, "⚠️ 密码已重置，但注销会话失败（请重启服务兜底）: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("✅ 已重置用户 %q 的密码，并注销其全部会话。现在可以用新密码登录。\n", user)
+	fmt.Printf("✅ 已重置用户 %q 的密码，并注销其全部会话。对方下次登录须先设置新密码。\n", user)
 }

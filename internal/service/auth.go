@@ -14,6 +14,8 @@ type UserInfo struct {
 	Role        string `json:"role"`
 	// IsAdmin 是系统管理员标记（全局角色）。前端据此决定是否展示备份入口。
 	IsAdmin bool `json:"is_admin"`
+	// MustChangePassword 为 true 时前端必须先引导改密，否则业务接口一律 428。
+	MustChangePassword bool `json:"must_change_password"`
 }
 
 // AuthResult 是注册/登录成功的返回。
@@ -92,7 +94,10 @@ func (s *Service) Login(username, password string) (AuthResult, error) {
 	}
 	return AuthResult{
 		Token: token,
-		User:  UserInfo{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, Role: "", IsAdmin: u.IsAdmin},
+		User: UserInfo{
+			ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, Role: "",
+			IsAdmin: u.IsAdmin, MustChangePassword: u.MustChangePassword,
+		},
 	}, nil
 }
 
@@ -113,7 +118,7 @@ func (s *Service) Me(userID int64) (UserInfo, error) {
 	}
 	return UserInfo{
 		ID: u.ID, Username: u.Username, DisplayName: u.DisplayName,
-		Role: "", IsAdmin: u.IsAdmin,
+		Role: "", IsAdmin: u.IsAdmin, MustChangePassword: u.MustChangePassword,
 	}, nil
 }
 
@@ -186,15 +191,50 @@ func (s *Service) ChangePassword(userID int64, oldPassword, newPassword string) 
 	if _, err := s.repo.UpdateUserPassword(userID, hash); err != nil {
 		return "", err
 	}
+	// 用户自己改过密码，强制改密标记随之解除（M3）。
+	if _, err := s.repo.SetMustChangePassword(userID, false); err != nil {
+		return "", err
+	}
 	if err := s.repo.DeleteSessionsByUser(userID); err != nil {
 		return "", err
 	}
 	return s.repo.CreateSession(userID)
 }
 
-// Authenticate 解析 token 对应的用户 id（供鉴权中间件）。
-func (s *Service) Authenticate(token string) (int64, error) {
-	return s.repo.UserIDByToken(token)
+// SessionUser 是 token 解析出的会话主体（供鉴权中间件）。
+type SessionUser struct {
+	UserID int64
+	// MustChangePassword 为 true 时，中间件只放行改密/登出/me/refresh。
+	MustChangePassword bool
+}
+
+// Authenticate 解析 token 对应的用户与会话状态（供鉴权中间件）。
+//
+// 比只返回 uid 多一次 users 查询：强制改密是「每个请求都要判断」的策略，
+// 只能从库里取；会话表本身不缓存该标记（管理员重置密码后要立刻生效）。
+func (s *Service) Authenticate(token string) (SessionUser, error) {
+	uid, err := s.repo.UserIDByToken(token)
+	if err != nil {
+		return SessionUser{}, err
+	}
+	u, err := s.repo.UserByID(uid)
+	if err != nil {
+		return SessionUser{}, err
+	}
+	return SessionUser{UserID: uid, MustChangePassword: u.MustChangePassword}, nil
+}
+
+// MarkPasswordChangeRequired 标记某用户必须先改密（预设 owner / CLI 重置等
+// 「密码由系统代设」的入口调用）。用户不存在返回 ErrNotFound。
+func (s *Service) MarkPasswordChangeRequired(username string) error {
+	u, err := s.repo.UserByUsername(username)
+	if err != nil {
+		return err
+	}
+	if _, err := s.repo.SetMustChangePassword(u.ID, true); err != nil {
+		return err
+	}
+	return nil
 }
 
 // AuthorizeLedger 校验用户是否为账本成员（供鉴权中间件）。

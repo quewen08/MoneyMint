@@ -59,36 +59,56 @@ func boolToInt(b bool) int {
 // UserByUsername 按用户名查询用户。
 func (s *Store) UserByUsername(username string) (domain.User, error) {
 	var u domain.User
-	var admin int
+	var admin, mustChange int
 	err := s.db.QueryRow(
-		`SELECT id, username, display_name, password_hash, is_admin FROM users WHERE username=?`,
+		`SELECT id, username, display_name, password_hash, is_admin, must_change_password
+		 FROM users WHERE username=?`,
 		username,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &admin)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &admin, &mustChange)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.User{}, domain.ErrNotFound
 	}
 	u.IsAdmin = admin == 1
+	u.MustChangePassword = mustChange == 1
 	return u, err
 }
 
 // UserByID 按 id 查询用户。
 func (s *Store) UserByID(id int64) (domain.User, error) {
 	var u domain.User
-	var admin int
+	var admin, mustChange int
 	err := s.db.QueryRow(
-		`SELECT id, username, display_name, password_hash, is_admin FROM users WHERE id=?`,
+		`SELECT id, username, display_name, password_hash, is_admin, must_change_password
+		 FROM users WHERE id=?`,
 		id,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &admin)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &admin, &mustChange)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.User{}, domain.ErrNotFound
 	}
 	u.IsAdmin = admin == 1
+	u.MustChangePassword = mustChange == 1
 	return u, err
 }
 
 // UpdateUserPassword 更新用户密码哈希；返回是否命中记录。
+//
+// 不动 must_change_password：管理员重置密码后会显式置位，改密流程会显式清零，
+// 这里保持「只改哈希」的单一职责，避免调用方意外清掉强制改密标记。
 func (s *Store) UpdateUserPassword(userID int64, hash string) (bool, error) {
 	res, err := s.db.Exec(`UPDATE users SET password_hash=? WHERE id=?`, hash, userID)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// SetMustChangePassword 设置/清除「必须先改密」标记；返回是否命中记录。
+func (s *Store) SetMustChangePassword(userID int64, required bool) (bool, error) {
+	res, err := s.db.Exec(
+		`UPDATE users SET must_change_password=? WHERE id=?`,
+		boolToInt(required), userID,
+	)
 	if err != nil {
 		return false, err
 	}

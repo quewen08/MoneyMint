@@ -33,6 +33,17 @@
   - 回收站数据只来自服务端（删除时本地库已移除该条），因此离线时明确提示「需要联网」，而不是显示成空回收站。
   - `domain.Posting` 新增 `AccountDisplay`（展示名），与 `AccountName`（Beancount 全名）分开：导出/校验依赖全名，界面展示用展示名。
 
+### Added（M3 强制改密）
+
+- **强制改默认密码（M3）**：密码是「别人替我设的」时必须先改，否则业务接口一律 428。
+  - 迁移 `010_force_password_change`：`users` 加 `must_change_password INTEGER NOT NULL DEFAULT 0`（默认 0——老库升级不会把早改过密码的人锁在改密页）。
+  - 三条「系统代设密码」的路径置位：预设 owner（`LEDGER_OWNER_PASSWORD`）、owner/管理员重置成员密码、CLI `-reset-password`。用户自己改密后清除。
+  - `authMiddleware` 新增闸门：置位期间只放行 `/api/auth/{me,logout,change-password,refresh}`，其余 `/api/` 返回 **428 Precondition Required**，body 带 `code: "password_change_required"` 供前端判别（不是笼统 403，避免与权限错误混淆）。
+  - `Service.Authenticate` 由「返回 uid」改为返回 `SessionUser`（含强制改密标记）——该标记必须每个请求从库里读，管理员重置密码要立刻生效。
+  - 登录 / `me` / 注册响应新增 `must_change_password`。
+  - 前端：`AuthGate` 在强制状态下只渲染改密页（无返回键、右上「退出登录」），改密成功后自动进入主框架；设置页的改密入口行为不变（`forced=false`）。
+  - 修一个由此暴露的问题：强制期间 `GET /api/ledgers` 被 428 挡掉，`isMember` 为 false，改密后若不补拉账本列表会被误判成「未加入任何账本」而跳到等待邀请页——改密成功后显式 `_loadLedgers()`。
+
 ### Fixed
 
 - **日历每日金额恒为 0.00**：原实现把当日所有 postings 金额直接相加，而复式记账下借贷必然平衡、相加恒为零。改为按科目类型计算「收入 − 支出」，资产/负债/权益之间的转移不计入。`CalendarView` 新增 `accountTypes` 参数；不传时保持旧行为。

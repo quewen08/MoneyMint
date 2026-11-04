@@ -116,6 +116,9 @@ type User struct {
 	// IsAdmin 表示系统管理员（全局角色，非账本级）。
 	// 首个注册用户自动成为管理员；全库级操作（备份/下载/恢复）仅管理员可执行。
 	IsAdmin bool
+	// MustChangePassword 表示当前密码是「别人替我设的」（预设 owner / 管理员重置 /
+	// CLI 重置），必须先改密才能使用业务功能。用户改密后清零。
+	MustChangePassword bool
 }
 
 // Ledger 是账本及其当前用户在其中的角色（多账本 P1-C）。

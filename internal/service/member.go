@@ -141,5 +141,9 @@ func (s *Service) ResetMemberPassword(ledgerID, userID, memberID int64, newPassw
 	if !ok {
 		return domain.ErrNotFound
 	}
+	// 密码是管理员代设的：要求该成员下次登录先改密（M3）。
+	if _, err := s.repo.SetMustChangePassword(memberID, true); err != nil {
+		return err
+	}
 	return s.repo.DeleteSessionsByUser(memberID)
 }

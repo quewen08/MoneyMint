@@ -31,6 +31,7 @@ class LedgerApi {
   static void clearToken() {
     _token = null;
     _isAdmin = false;
+    _mustChange = false;
     html.window.localStorage.remove(_tokenKey);
   }
 
@@ -47,6 +48,26 @@ class LedgerApi {
       _isAdmin = u['is_admin'] as bool;
     } else if (j['is_admin'] is bool) {
       _isAdmin = j['is_admin'] as bool;
+    }
+    _captureMustChange(j);
+  }
+
+  // ---- 强制改密标记（M3）----
+  // 密码由别人代设（预设 owner / 管理员重置 / CLI 重置）时服务端置位，
+  // 此时除 me/logout/change-password/refresh 外的接口一律返回 428。
+  // 不持久化：每次 me()/登录都从服务端刷新，避免本地旧值让已改密的用户被反复拦截。
+  static bool _mustChange = false;
+  static bool get mustChangePassword => _mustChange;
+
+  /// 改密成功后清除（前端立即解锁，不必等下一次 me()）。
+  static void clearMustChangePassword() => _mustChange = false;
+
+  static void _captureMustChange(Map<String, dynamic> j) {
+    final u = j['user'];
+    if (u is Map && u['must_change_password'] is bool) {
+      _mustChange = u['must_change_password'] as bool;
+    } else if (j['must_change_password'] is bool) {
+      _mustChange = j['must_change_password'] as bool;
     }
   }
 

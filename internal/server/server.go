@@ -103,5 +103,11 @@ func initDeploymentSettings(repo *repository.Store, svc *service.Service, cfg co
 		log.Printf("⚠️ 预设 owner 失败（用户名冲突或密码不合规）: %v", err)
 		return
 	}
-	log.Printf("✅ 已按环境变量预设 owner 账号 %q（系统管理员 + 默认账本）；密码来自 LEDGER_OWNER_PASSWORD，未写入日志", cfg.OwnerUser)
+	// 密码来自环境变量（等于写在 compose / .env 里），必须要求首次登录改密，
+	// 否则这个凭据会一直有效且长期无人改（M3）。
+	if err := svc.MarkPasswordChangeRequired(cfg.OwnerUser); err != nil {
+		log.Printf("⚠️ 已创建 owner，但置「强制改密」标记失败（请手动改密）: %v", err)
+		return
+	}
+	log.Printf("✅ 已按环境变量预设 owner 账号 %q（系统管理员 + 默认账本）；密码来自 LEDGER_OWNER_PASSWORD，未写入日志（首次登录须改密）", cfg.OwnerUser)
 }
