@@ -41,8 +41,12 @@ class LedgerController extends ChangeNotifier {
 
   /// 启动时：初始化本地库、加载本地数据、执行一次同步。
   Future<void> init() async {
+    if (kDebugMode) debugPrint('[ledger] init 开始 #$hashCode');
     await store.init();
     await reload();
+    if (kDebugMode) {
+      debugPrint('[ledger] 本地数据就绪 ${accounts.length} 账户 / ${txns.length} 交易，开始同步…');
+    }
     try {
       final ok = await sync.sync();
       await reload();
@@ -65,6 +69,7 @@ class LedgerController extends ChangeNotifier {
       if (kDebugMode) debugPrint('[ledger] 首次同步未预期异常: $e');
     }
     loading = false;
+    if (kDebugMode) debugPrint('[ledger] init 完成，loading=false');
     notifyListeners();
   }
 

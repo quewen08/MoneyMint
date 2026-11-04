@@ -1,4 +1,5 @@
 /// 应用入口：配置主题、提供 AppScope，并按登录态在登录页 / 主框架间切换。
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'app/scope.dart';
 import 'app/theme.dart';
@@ -47,6 +48,14 @@ class _AuthGateState extends State<AuthGate> {
     return ListenableBuilder(
       listenable: auth,
       builder: (context, _) {
+        // 诊断打点（debug）：观察控制器实例号与登录态。
+        // 若刷新后出现「auth=#不同实例 ready=false」且不再有 init 日志，
+        // 即热重载重建了 AppScope 但 AuthGate 的 _initialized 门闩挡住了 init。
+        if (kDebugMode) {
+          debugPrint(
+              '[gate] auth=#${identityHashCode(auth)} ready=${auth.ready} '
+              'loggedIn=${auth.loggedIn} member=${auth.isMember}');
+        }
         if (!auth.ready) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),

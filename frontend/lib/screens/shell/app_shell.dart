@@ -1,6 +1,7 @@
 /// 应用主框架（响应式路由）：>1024 走 PC 侧边栏布局，否则走移动底栏布局。
 /// 监听浏览器网络事件，联网自动同步；启动即初始化账本数据。
 import 'dart:html' as html;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../app/scope.dart';
 import '../../app/navigation.dart';
@@ -40,6 +41,9 @@ class _AppShellState extends State<AppShell> {
     if (!_initialized) {
       _initialized = true;
       _ledger = AppScope.of(context).ledger;
+      if (kDebugMode) {
+        debugPrint('[shell] 挂载，init ledger=#${identityHashCode(_ledger)}');
+      }
       _ledger!.init();
       html.window.onOnline.listen((_) {
         if (!mounted) return;
