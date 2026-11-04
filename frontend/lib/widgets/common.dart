@@ -253,6 +253,21 @@ class EmptyState extends StatelessWidget {
 }
 
 /// 统一的 Snack 提示。
+/// 服务端时间串（`2026-11-04 08:20:33`，UTC）→ 本地时区 `2026-11-04 16:20`。
+///
+/// SQLite 的 datetime('now') 存的是 UTC；直接展示会让用户看到差 8 小时的
+/// 「最近活跃」，排查「这是我刚登录的吗」时会误判。
+String formatServerTime(String ts) {
+  if (ts.isEmpty) return '—';
+  final dt = DateTime.tryParse('${ts.replaceFirst(' ', 'T')}Z');
+  String two(int v) => v.toString().padLeft(2, '0');
+  if (dt == null) {
+    return ts.length >= 16 ? ts.substring(0, 16) : ts;
+  }
+  final l = dt.toLocal();
+  return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
+}
+
 void showAppSnack(BuildContext context, String message, {bool warn = false}) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(

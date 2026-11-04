@@ -72,8 +72,16 @@ func authMiddleware(svc *service.Service, next http.Handler) http.Handler {
 		}
 		uid := sess.UserID
 
+		// 「登录设备」也是自服务：不涉及账本数据，强制改密期间也允许查看与吊销
+		// （用户可能正是发现异常登录才来处理的）。
+		if strings.HasPrefix(reqPath, "/api/auth/sessions") {
+			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))
+			return
+		}
+
 		switch reqPath {
 		case "/api/auth/me", "/api/auth/logout", "/api/auth/change-password", "/api/auth/refresh":
+			svc.TouchSession(tok) // 刷新最近活跃（内部 10 分钟节流）
 			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))
 			return
 		}

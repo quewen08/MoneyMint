@@ -277,7 +277,7 @@ class _TrashRow extends StatelessWidget {
 
   /// 「删除于 2026-11-04 15:20（boss 记）」。
   String _deletedLabel(String deletedAt, String by) {
-    final t = deletedAt.isEmpty ? '' : '删除于 $deletedAt';
+    final t = deletedAt.isEmpty ? '' : '删除于 ${formatServerTime(deletedAt)}';
     if (by.isEmpty) return t;
     return t.isEmpty ? '记账人 $by' : '$t · $by 记';
   }

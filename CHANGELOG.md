@@ -44,6 +44,22 @@
   - 前端：`AuthGate` 在强制状态下只渲染改密页（无返回键、右上「退出登录」），改密成功后自动进入主框架；设置页的改密入口行为不变（`forced=false`）。
   - 修一个由此暴露的问题：强制期间 `GET /api/ledgers` 被 428 挡掉，`isMember` 为 false，改密后若不补拉账本列表会被误判成「未加入任何账本」而跳到等待邀请页——改密成功后显式 `_loadLedgers()`。
 
+### Added（M3 会话管理 + 登录限流）
+
+- **登录设备与吊销（M3）**：新增 `GET /api/auth/sessions`、`DELETE /api/auth/sessions/{sid}`、`POST /api/auth/sessions/revoke-others`。
+  - 迁移 `011_session_meta`：`sessions` 加 `user_agent` / `ip` / `last_seen_at`（都带常量默认值，SQLite 的 ADD COLUMN 不接受非常量默认）。
+  - **对外只下发 SID（token 的 sha256 前 16 位）**，绝不下发 token 本身——这个页面即使泄露也拿不到可冒充登录的凭据。
+  - 设备名由 UA 压成「Chrome · Windows」这类标签（不引第三方库）；回环 IP 显示为「本机」。
+  - 「最近活跃」在中间件里打点，同 token 10 分钟内只写一次库（SQLite 单写者，每请求 UPDATE 会让请求互相排队）。
+  - 前端设置页新增「登录设备」入口：列表 + 逐台吊销 + 「退出其他设备」，吊销当前设备等于退出登录。
+  - 修正时区口径：`created_at` / `expires_at` 原本用服务器本地时间格式化，而 `last_seen_at` 用 SQLite 的 `datetime('now')`（UTC），同一行两列时区不一致，界面会显示「登录时间晚于最近活跃」。现在统一 UTC 存储，前端用 `formatServerTime` 转本地。
+- **登录失败限流（M3）**：新增 `internal/ratelimit` 固定窗口计数器，`LoginFrom` 在凭证校验前先过限流。
+  - 双维度计数：**账号维度** 5 次/15 分钟，**IP 维度阈值放宽 4 倍**——家里多台设备通常共用一个出口 IP，同阈值会让一个人的手误把全家锁在门外；脚本撞库仍会被 IP 维度拦住。
+  - 超限返回 **429 + `Retry-After` 头 + `code: too_many_attempts` + `retry_after_seconds`**，文案直接写「请约 N 分钟后再试」。
+  - 成功登录清零；只统计凭证失败，数据库错误不占用户额度。
+  - 进程内实现（重启清零）：家庭内网场景够用，也避免为登录前置路径加表 + 每次失败写盘。
+  - 参数化：`LEDGER_LOGIN_MAX_ATTEMPTS` / `LEDGER_LOGIN_WINDOW_MINUTES` / `LEDGER_LOGIN_LOCKOUT_MINUTES`，启动时校验。
+
 ### Fixed
 
 - **日历每日金额恒为 0.00**：原实现把当日所有 postings 金额直接相加，而复式记账下借贷必然平衡、相加恒为零。改为按科目类型计算「收入 − 支出」，资产/负债/权益之间的转移不计入。`CalendarView` 新增 `accountTypes` 参数；不传时保持旧行为。

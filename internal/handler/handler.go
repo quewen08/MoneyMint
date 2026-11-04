@@ -7,7 +7,9 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"familyledger/internal/backup"
 	"familyledger/internal/domain"
@@ -43,6 +45,21 @@ func readJSON(r *http.Request, v any) error {
 
 // writeError 把领域/业务错误映射为 HTTP 状态码并输出 {"error": ...}。
 func writeError(w http.ResponseWriter, err error) {
+	// 限流是独立语义：429 + Retry-After，且要给出「等多久」让前端能显示倒计时。
+	var rl *domain.RateLimitError
+	if errors.As(err, &rl) {
+		secs := int(rl.RetryAfter.Seconds() + 0.999)
+		if secs < 1 {
+			secs = 1
+		}
+		w.Header().Set("Retry-After", strconv.Itoa(secs))
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{
+			"error":               fmt.Sprintf("尝试次数过多，请约 %d 分钟后再试", (secs+59)/60),
+			"code":                "too_many_attempts",
+			"retry_after_seconds": secs,
+		})
+		return
+	}
 	writeJSON(w, statusOf(err), map[string]string{"error": err.Error()})
 }
 

@@ -229,6 +229,38 @@ class LedgerApi {
     return t ?? '';
   }
 
+  // ---- 登录设备（M3 会话列表与吊销）----
+
+  /// 列出当前账号的登录设备（不含 token）。
+  Future<List<SessionItem>> listSessions() async {
+    final r = await http.get(Uri.parse('$base/api/auth/sessions'), headers: _headers);
+    _check(r);
+    final j = jsonDecode(r.body) as Map<String, dynamic>;
+    return (j['sessions'] as List? ?? const [])
+        .map((e) => SessionItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 吊销指定设备（按 SID）。吊销当前设备等于退出登录。
+  Future<void> revokeSession(String id) async {
+    final r = await http.delete(
+      Uri.parse('$base/api/auth/sessions/$id'),
+      headers: _headers,
+    );
+    _check(r);
+  }
+
+  /// 退出其他设备（保留当前会话），返回吊销条数。
+  Future<int> revokeOtherSessions() async {
+    final r = await http.post(
+      Uri.parse('$base/api/auth/sessions/revoke-others'),
+      headers: _headers,
+    );
+    _check(r);
+    final j = jsonDecode(r.body) as Map<String, dynamic>;
+    return (j['revoked'] as num?)?.toInt() ?? 0;
+  }
+
   // ---- 同步协议 ----
 
   Future<PullResp> pull(int since, String clientId) async {

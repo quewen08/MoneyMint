@@ -4,6 +4,8 @@
 // 均依赖本包中的类型，避免各层各自定义重复结构体。
 package domain
 
+import "time"
+
 // DefaultLedgerID 是首个注册用户创建的首个账本 id（AUTOINCREMENT 自 1 起），
 // 也作为请求未携带 X-Ledger-Id 时的回退账本，保证旧脚本/旧客户端向前兼容。
 // 多账本隔离（P1-C）落地后，业务账本一律从请求上下文（X-Ledger-Id）解析。
@@ -119,6 +121,27 @@ type User struct {
 	// MustChangePassword 表示当前密码是「别人替我设的」（预设 owner / 管理员重置 /
 	// CLI 重置），必须先改密才能使用业务功能。用户改密后清零。
 	MustChangePassword bool
+}
+
+// Session 是一条登录会话（M3 会话列表与吊销）。
+// Token 只在服务端内部流转，绝不下发给前端——对外用 SID（token 的哈希前缀）。
+type Session struct {
+	Token      string
+	UserID     int64
+	CreatedAt  string
+	ExpiresAt  string
+	LastSeenAt string
+	UserAgent  string
+	IP         string
+}
+
+// RateLimitError 表示因失败次数过多被限流，RetryAfter 为建议等待时长。
+type RateLimitError struct {
+	RetryAfter time.Duration
+}
+
+func (e *RateLimitError) Error() string {
+	return "尝试次数过多，请稍后再试"
 }
 
 // Ledger 是账本及其当前用户在其中的角色（多账本 P1-C）。

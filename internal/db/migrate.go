@@ -23,6 +23,32 @@ var migrations = []struct {
 	{"008_user_admin", migrate008},
 	{"009_app_settings", migrate009},
 	{"010_force_password_change", migrate010},
+	{"011_session_meta", migrate011},
+}
+
+// migrate011：sessions 增加设备信息（M3 会话列表与吊销）。
+//
+// 列都带常量默认值：SQLite 的 ALTER TABLE ADD COLUMN 不接受非常量默认值，
+// 因此 last_seen_at 也先给 ''，由 CreateSession 显式写入。
+func migrate011(conn *sql.DB) error {
+	cols := []struct{ name, ddl string }{
+		{"user_agent", "TEXT NOT NULL DEFAULT ''"},
+		{"ip", "TEXT NOT NULL DEFAULT ''"},
+		{"last_seen_at", "TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, c := range cols {
+		ok, err := columnExists(conn, "sessions", c.name)
+		if err != nil {
+			return err
+		}
+		if ok {
+			continue
+		}
+		if _, err := conn.Exec(`ALTER TABLE sessions ADD COLUMN ` + c.name + ` ` + c.ddl); err != nil {
+			return fmt.Errorf("add sessions.%s: %w", c.name, err)
+		}
+	}
+	return nil
 }
 
 // migrate010：users 增加 must_change_password（M3 强制改密）。

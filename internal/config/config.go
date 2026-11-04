@@ -47,6 +47,14 @@ type Config struct {
 	// RegistrationEnabled 是注册开关的初始值（LEDGER_REGISTRATION_ENABLED，默认 true）。
 	// 仅在 app_settings 尚无该键时生效；owner 在界面上修改后会持久化并覆盖 env。
 	RegistrationEnabled bool
+
+	// ---- 登录失败限流（M3）----
+	// LoginMaxAttempts：窗口内允许的失败次数（0 表示关闭限流）。
+	LoginMaxAttempts int
+	// LoginWindowMinutes：固定窗口长度（分钟）。
+	LoginWindowMinutes int
+	// LoginLockoutMinutes：超限后的锁定长度（分钟）。
+	LoginLockoutMinutes int
 }
 
 // Load 从环境变量构造 Config，未设置时使用默认值。
@@ -60,6 +68,9 @@ type Config struct {
 //	LEDGER_BACKUP_HOUR        每日备份小时（默认 3）
 //	LEDGER_BACKUP_KEEP_DAILY  每日备份保留份数（默认 14）
 //	LEDGER_BACKUP_KEEP_MONTHLY 月度备份保留份数（默认 12）
+//	LEDGER_LOGIN_MAX_ATTEMPTS 登录失败次数上限（默认 5；0 关闭限流）
+//	LEDGER_LOGIN_WINDOW_MINUTES 失败计数窗口（默认 15 分钟）
+//	LEDGER_LOGIN_LOCKOUT_MINUTES 超限后的锁定时间（默认 10 分钟）
 func Load() Config {
 	return Config{
 		DBPath:            envOr("LEDGER_DB", "data/ledger.db"),
@@ -74,6 +85,9 @@ func Load() Config {
 		OwnerUser:         envOr("LEDGER_OWNER_USER", ""),
 		OwnerPassword:     os.Getenv("LEDGER_OWNER_PASSWORD"),
 		RegistrationEnabled: envBool("LEDGER_REGISTRATION_ENABLED", true),
+		LoginMaxAttempts:    envInt("LEDGER_LOGIN_MAX_ATTEMPTS", 5),
+		LoginWindowMinutes:  envInt("LEDGER_LOGIN_WINDOW_MINUTES", 15),
+		LoginLockoutMinutes: envInt("LEDGER_LOGIN_LOCKOUT_MINUTES", 10),
 	}
 }
 
@@ -101,6 +115,16 @@ func (c Config) Validate() error {
 	}
 	if c.OwnerPassword != "" && len(c.OwnerPassword) < 6 {
 		return fmt.Errorf("LEDGER_OWNER_PASSWORD 至少 6 位")
+	}
+	// 登录限流参数：0 表示关闭限流，负数无意义直接拒绝。
+	if c.LoginMaxAttempts < 0 {
+		return fmt.Errorf("LEDGER_LOGIN_MAX_ATTEMPTS 不能为负（0 表示关闭限流），当前为 %d", c.LoginMaxAttempts)
+	}
+	if c.LoginWindowMinutes <= 0 {
+		return fmt.Errorf("LEDGER_LOGIN_WINDOW_MINUTES 必须 > 0，当前为 %d", c.LoginWindowMinutes)
+	}
+	if c.LoginLockoutMinutes <= 0 {
+		return fmt.Errorf("LEDGER_LOGIN_LOCKOUT_MINUTES 必须 > 0，当前为 %d", c.LoginLockoutMinutes)
 	}
 	return nil
 }

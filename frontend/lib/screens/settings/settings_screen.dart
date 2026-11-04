@@ -12,6 +12,7 @@ import '../members/members_screen.dart';
 import 'backup_card.dart';
 import 'sync_screen.dart';
 import 'change_password_screen.dart';
+import 'sessions_screen.dart';
 import 'ledgers_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -106,6 +107,15 @@ class SettingsScreen extends StatelessWidget {
                                         builder: (_) => const MembersScreen()),
                                   )
                               : null,
+                        ),
+                        _SetRow(
+                          label: '登录设备',
+                          trailing: const Text('查看 / 吊销 ›',
+                              style: TextStyle(color: AppColors.blue)),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const SessionsScreen()),
+                          ),
                         ),
                         _SetRow(
                           label: '修改密码',

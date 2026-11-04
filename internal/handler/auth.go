@@ -8,6 +8,25 @@ import (
 	"familyledger/internal/domain"
 )
 
+// ClientIP 提取客户端 IP：优先 X-Forwarded-For 首段（反代场景），
+// 否则回退 RemoteAddr 的主机部分。
+func ClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i > 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if rip := r.Header.Get("X-Real-IP"); rip != "" {
+		return strings.TrimSpace(rip)
+	}
+	host := r.RemoteAddr
+	if i := strings.LastIndexByte(host, ':'); i > 0 {
+		host = host[:i]
+	}
+	return strings.Trim(host, "[]")
+}
+
 // BearerToken 从 Authorization 头提取 Bearer token。
 func BearerToken(r *http.Request) string {
 	h := r.Header.Get("Authorization")
@@ -38,6 +57,7 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	h.svc.AttachSessionMeta(res.Token, ClientIP(r), r.UserAgent())
 	writeJSON(w, http.StatusCreated, res)
 }
 
@@ -51,11 +71,12 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	res, err := h.svc.Login(req.Username, req.Password)
+	res, err := h.svc.LoginFrom(req.Username, req.Password, ClientIP(r))
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	h.svc.AttachSessionMeta(res.Token, ClientIP(r), r.UserAgent())
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -90,6 +111,7 @@ func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	h.svc.AttachSessionMeta(newTok, ClientIP(r), r.UserAgent())
 	writeJSON(w, http.StatusOK, map[string]any{"token": newTok})
 }
 
@@ -113,5 +135,54 @@ func (h *Handler) HandleChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	h.svc.AttachSessionMeta(newTok, ClientIP(r), r.UserAgent())
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": newTok})
+}
+
+// HandleListSessions 列出当前用户的登录设备（不含 token 本身）。
+func (h *Handler) HandleListSessions(w http.ResponseWriter, r *http.Request) {
+	uid, ok := auth.UserID(r.Context())
+	if !ok {
+		writeError(w, domain.ErrUnauthorized)
+		return
+	}
+	sessions, err := h.svc.ListSessions(uid, BearerToken(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
+}
+
+// HandleRevokeSession 吊销指定设备（按 SID）；吊销当前设备等价于退出登录。
+func (h *Handler) HandleRevokeSession(w http.ResponseWriter, r *http.Request) {
+	uid, ok := auth.UserID(r.Context())
+	if !ok {
+		writeError(w, domain.ErrUnauthorized)
+		return
+	}
+	if err := h.svc.RevokeSession(uid, r.PathValue("sid"), BearerToken(r)); err != nil {
+		if err == domain.ErrNotFound {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "会话不存在或已失效"})
+			return
+		}
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// HandleRevokeOtherSessions 退出其他设备（保留当前会话）。
+func (h *Handler) HandleRevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+	uid, ok := auth.UserID(r.Context())
+	if !ok {
+		writeError(w, domain.ErrUnauthorized)
+		return
+	}
+	n, err := h.svc.RevokeOtherSessions(uid, BearerToken(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "revoked": n})
 }

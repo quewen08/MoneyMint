@@ -37,6 +37,17 @@ func newRouter(h *handler.Handler, svc *service.Service, webRoot string) http.Ha
 		http.MethodPost: h.HandleChangePassword,
 	}))
 
+	// 登录设备（M3）：列出 / 吊销单个 / 退出其他设备
+	mux.HandleFunc("/api/auth/sessions", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodGet: h.HandleListSessions,
+	}))
+	mux.HandleFunc("/api/auth/sessions/revoke-others", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodPost: h.HandleRevokeOtherSessions,
+	}))
+	mux.HandleFunc("/api/auth/sessions/{sid}", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodDelete: h.HandleRevokeSession,
+	}))
+
 	// 业务端点
 	mux.HandleFunc("/api/accounts", methodSwitch(map[string]http.HandlerFunc{
 		http.MethodGet:  h.HandleListAccounts,

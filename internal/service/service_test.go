@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"familyledger/internal/db"
 	"familyledger/internal/domain"
@@ -619,4 +620,117 @@ func jsonRaw(t *testing.T, v any) json.RawMessage {
 		t.Fatalf("marshal: %v", err)
 	}
 	return b
+}
+
+func TestSessionListAndRevoke(t *testing.T) {
+	svc := newTestService(t)
+	owner := registerOwner(t, svc)
+
+	// 第二个会话（模拟另一台设备），并补上设备信息
+	secondRes, err := svc.Login("alice", "secret123")
+	if err != nil {
+		t.Fatalf("second login: %v", err)
+	}
+	secondTok := secondRes.Token
+	svc.AttachSessionMeta(owner.Token, "10.0.0.5",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36")
+
+	list, err := svc.ListSessions(owner.User.ID, owner.Token)
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("应有 2 个会话，实际 %d", len(list))
+	}
+
+	var current, other SessionView
+	for _, s := range list {
+		if s.Current {
+			current = s
+		} else {
+			other = s
+		}
+	}
+	if current.ID == "" || other.ID == "" {
+		t.Fatalf("应恰好有一个当前会话，list=%+v", list)
+	}
+	if current.Device != "Chrome · Windows" {
+		t.Fatalf("UA 应解析为 Chrome · Windows，实际 %q", current.Device)
+	}
+	// 时间格式必须与 datetime('now') 同构：带时区后缀（time.Time 默认 String）
+	// 会同时破坏字符串比较排序与前端解析，这条断言专门钉住它。
+	for _, ts := range []string{current.CreatedAt, current.LastSeenAt, current.ExpiresAt} {
+		if len(ts) != 19 || strings.ContainsAny(ts, "+UTC") {
+			t.Fatalf("会话时间应为 YYYY-MM-DD HH:MM:SS（UTC），实际 %q", ts)
+		}
+	}
+	if current.IP != "10.0.0.5" {
+		t.Fatalf("应回显登录 IP，实际 %q", current.IP)
+	}
+	// SID 不能等于 token 本身（否则等于把凭据发给前端）
+	if current.ID == owner.Token || other.ID == secondTok {
+		t.Fatalf("SID 不能是 token 原文")
+	}
+
+	// 吊销其他设备
+	if err := svc.RevokeSession(owner.User.ID, other.ID, owner.Token); err != nil {
+		t.Fatalf("revoke other: %v", err)
+	}
+	if _, err := svc.Authenticate(secondTok); !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("被吊销的会话应失效")
+	}
+	if err := svc.RevokeSession(owner.User.ID, other.ID, owner.Token); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("重复吊销应返回 ErrNotFound，实际 %v", err)
+	}
+
+	// 退出其他设备（此时只剩当前，吊销 0 条）
+	n, err := svc.RevokeOtherSessions(owner.User.ID, owner.Token)
+	if err != nil || n != 0 {
+		t.Fatalf("只剩当前会话时应吊销 0 条，实际 n=%d err=%v", n, err)
+	}
+
+	// 吊销当前会话 = 退出登录
+	if err := svc.RevokeSession(owner.User.ID, current.ID, owner.Token); err != nil {
+		t.Fatalf("revoke current: %v", err)
+	}
+	if _, err := svc.Authenticate(owner.Token); !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("吊销当前会话后 token 应失效")
+	}
+}
+
+func TestLoginRateLimit(t *testing.T) {
+	svc := newTestService(t)
+	registerOwner(t, svc)
+	svc.ConfigureLoginLimit(3, 15*time.Minute, 10*time.Minute)
+
+	for i := 0; i < 3; i++ {
+		if _, err := svc.LoginFrom("alice", "wrongpass", "1.2.3.4"); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("第 %d 次错误密码应返回 ErrUnauthorized，实际 %v", i+1, err)
+		}
+	}
+
+	// 超限后即使密码正确也被挡（锁定优先于凭证校验）
+	var rl *domain.RateLimitError
+	_, err := svc.LoginFrom("alice", "secret123", "1.2.3.4")
+	if !errors.As(err, &rl) {
+		t.Fatalf("超限后应返回 RateLimitError，实际 %v", err)
+	}
+	if rl.RetryAfter <= 0 {
+		t.Fatalf("应给出剩余等待时长，实际 %v", rl.RetryAfter)
+	}
+
+	// 换 IP 也不能绕过（用户名维度同样计数）
+	if _, err := svc.LoginFrom("alice", "secret123", "9.9.9.9"); !errors.As(err, &rl) {
+		t.Fatalf("换 IP 仍应被用户名维度的锁定挡住，实际 %v", err)
+	}
+
+	// 同 IP 的其他用户不受牵连：IP 维度阈值放宽到 4 倍（3 次只用掉配额的一部分），
+	// 第 4 次失败仍应返回凭证错误而不是限流。
+	_, errBob := svc.LoginFrom("bob", "whatever", "1.2.3.4")
+	if errors.As(errBob, &rl) {
+		t.Fatalf("同 IP 的其他用户不应被牵连，实际 %v", errBob)
+	}
+	if !errors.Is(errBob, domain.ErrUnauthorized) {
+		t.Fatalf("bob 应拿到凭证错误，实际 %v", errBob)
+	}
 }

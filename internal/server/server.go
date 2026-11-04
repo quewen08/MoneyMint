@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"familyledger/internal/backup"
 	"familyledger/internal/config"
@@ -39,6 +40,12 @@ func New(cfg config.Config) (*App, error) {
 	}
 	repo := repository.New(conn)
 	svc := service.New(repo)
+	// 登录失败限流（M3）：进程内固定窗口，参数来自环境变量。
+	svc.ConfigureLoginLimit(
+		cfg.LoginMaxAttempts,
+		time.Duration(cfg.LoginWindowMinutes)*time.Minute,
+		time.Duration(cfg.LoginLockoutMinutes)*time.Minute,
+	)
 
 	// ---- 部署与账号初始化（B-3 / B-4）----
 	initDeploymentSettings(repo, svc, cfg, conn)

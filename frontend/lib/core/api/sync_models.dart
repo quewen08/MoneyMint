@@ -264,3 +264,34 @@ class BackupItem {
     );
   }
 }
+
+/// 一条登录设备（M3）。服务端只下发 SID（token 的哈希前缀），不下发 token 本身。
+class SessionItem {
+  final String id;
+  final String device;
+  final String ip;
+  final String createdAt;
+  final String lastSeenAt;
+  final String expiresAt;
+  final bool current;
+
+  SessionItem({
+    required this.id,
+    required this.device,
+    required this.ip,
+    required this.createdAt,
+    required this.lastSeenAt,
+    required this.expiresAt,
+    required this.current,
+  });
+
+  factory SessionItem.fromJson(Map<String, dynamic> j) => SessionItem(
+        id: j['id'] as String? ?? '',
+        device: j['device'] as String? ?? '未知设备',
+        ip: j['ip'] as String? ?? '',
+        createdAt: j['created_at'] as String? ?? '',
+        lastSeenAt: j['last_seen_at'] as String? ?? '',
+        expiresAt: j['expires_at'] as String? ?? '',
+        current: j['current'] as bool? ?? false,
+      );
+}
