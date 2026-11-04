@@ -331,10 +331,14 @@ class _RegistrationRow extends StatefulWidget {
 class _RegistrationRowState extends State<_RegistrationRow> {
   bool? _enabled; // null = 加载中
   bool _busy = false;
+  bool _checked = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // AppScope.of 依赖 InheritedWidget，不能在 initState 里取，放这里且仅一次。
+    if (_checked) return;
+    _checked = true;
     _load();
   }
 

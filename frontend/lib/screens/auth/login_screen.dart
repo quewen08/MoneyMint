@@ -45,10 +45,15 @@ class _FormState extends State<_Form> {
   final _passCtl = TextEditingController();
   bool _isRegister = false;
   bool? _regAllowed; // null = 未查询；false = 注册已关闭
+  bool _checked = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 注意：AppScope.of 依赖 InheritedWidget， initState 阶段调用会抛异常，
+    // 必须放到 didChangeDependencies（仅执行一次）。
+    if (_checked) return;
+    _checked = true;
     _checkRegistration();
   }
 
