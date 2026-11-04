@@ -3,9 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'app/scope.dart';
 import 'app/theme.dart';
-import 'screens/auth/login_screen.dart';
 import 'screens/auth/await_invite_screen.dart';
+import 'screens/auth/login_screen.dart';
 import 'screens/shell/app_shell.dart';
+import 'viewmodels/auth_controller.dart';
 
 void main() => runApp(const MyApp());
 
@@ -32,14 +33,21 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
-  bool _initialized = false;
+  /// 已执行过 init 的控制器实例。
+  ///
+  /// 不能用一次性 bool 门闩：flutter run 的热重载会重跑 MyApp.build，
+  /// AppScope 随之重建出全新的 AuthController——旧门闩挡住 init 后，
+  /// 新控制器 ready 永远 false，页面表现为「先正常、刷新/热重载后永远转圈」。
+  /// 按实例判断：同一个控制器只 init 一次，换了实例（热重载/热重启）自动重跑。
+  AuthController? _initedAuth;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_initialized) return;
-    _initialized = true;
-    AppScope.of(context).auth.init();
+    final auth = AppScope.of(context).auth;
+    if (_initedAuth == auth) return;
+    _initedAuth = auth;
+    auth.init();
   }
 
   @override

@@ -32,28 +32,28 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   AppRoute _route = AppRoute.dashboard;
-  bool _initialized = false;
-  LedgerController? _ledger;
+  /// 已执行过 init 的控制器实例（原因同 AuthGate：热重载会重建 AppScope，
+  /// 一次性 bool 门闩会让新控制器永远不被 init）。
+  LedgerController? _initedLedger;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_initialized) {
-      _initialized = true;
-      _ledger = AppScope.of(context).ledger;
-      if (kDebugMode) {
-        debugPrint('[shell] 挂载，init ledger=#${identityHashCode(_ledger)}');
-      }
-      _ledger!.init();
-      html.window.onOnline.listen((_) {
-        if (!mounted) return;
-        _ledger?.syncNow();
-      });
-      html.window.onOffline.listen((_) {
-        if (!mounted) return;
-        _ledger?.markOffline();
-      });
+    final ledger = AppScope.of(context).ledger;
+    if (_initedLedger == ledger) return;
+    _initedLedger = ledger;
+    if (kDebugMode) {
+      debugPrint('[shell] 挂载，init ledger=#${identityHashCode(ledger)}');
     }
+    ledger.init();
+    html.window.onOnline.listen((_) {
+      if (!mounted) return;
+      ledger.syncNow();
+    });
+    html.window.onOffline.listen((_) {
+      if (!mounted) return;
+      ledger.markOffline();
+    });
   }
 
   void _select(AppRoute r) => setState(() => _route = r);
