@@ -52,6 +52,13 @@ func authMiddleware(svc *service.Service, next http.Handler) http.Handler {
 			return
 		}
 
+		// 注册开关查询（B-4）：注册页在登录前就要用，必须无 token 可访问。
+		// 注意必须放在 token 校验之前——放在后面永远走不到（此处曾实测踩坑）。
+		if reqPath == "/api/settings/registration" && r.Method == http.MethodGet {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		tok := handler.BearerToken(r)
 		if tok == "" {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
@@ -78,6 +85,12 @@ func authMiddleware(svc *service.Service, next http.Handler) http.Handler {
 		// 备份端点：全库级操作，与具体账本无关（备份包含所有账本），
 		// 因此不解析 X-Ledger-Id、不校验账本成员身份；管理员校验在 handler 内完成。
 		if strings.HasPrefix(reqPath, "/api/backup/") {
+			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))
+			return
+		}
+
+		// 其余设置写入（B-4）：要求登录态，管理员校验在 handler 内完成。
+		if strings.HasPrefix(reqPath, "/api/settings/") {
 			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))
 			return
 		}

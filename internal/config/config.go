@@ -34,6 +34,19 @@ type Config struct {
 	BackupKeepDaily int
 	// BackupKeepMonthly 是月度首日备份保留份数。
 	BackupKeepMonthly int
+
+	// ---- 部署与账号（B-3/B-4）----
+
+	// OwnerUser / OwnerPassword：预设 owner 账号（LEDGER_OWNER_USER / LEDGER_OWNER_PASSWORD）。
+	// 均设置且库中无用户时，启动自动创建该账号（成为系统管理员并建默认账本）。
+	// 用于 Docker/NAS 部署时跳过"注册首账号"步骤；密码不写入日志。
+	OwnerUser string
+	// OwnerPassword 与 OwnerUser 配对。
+	OwnerPassword string
+
+	// RegistrationEnabled 是注册开关的初始值（LEDGER_REGISTRATION_ENABLED，默认 true）。
+	// 仅在 app_settings 尚无该键时生效；owner 在界面上修改后会持久化并覆盖 env。
+	RegistrationEnabled bool
 }
 
 // Load 从环境变量构造 Config，未设置时使用默认值。
@@ -58,6 +71,9 @@ func Load() Config {
 		BackupHour:        envInt("LEDGER_BACKUP_HOUR", 3),
 		BackupKeepDaily:   envInt("LEDGER_BACKUP_KEEP_DAILY", 14),
 		BackupKeepMonthly: envInt("LEDGER_BACKUP_KEEP_MONTHLY", 12),
+		OwnerUser:         envOr("LEDGER_OWNER_USER", ""),
+		OwnerPassword:     os.Getenv("LEDGER_OWNER_PASSWORD"),
+		RegistrationEnabled: envBool("LEDGER_REGISTRATION_ENABLED", true),
 	}
 }
 
@@ -78,6 +94,13 @@ func (c Config) Validate() error {
 	}
 	if c.BackupKeepMonthly < 1 {
 		return fmt.Errorf("LEDGER_BACKUP_KEEP_MONTHLY 必须 >= 1，当前为 %d", c.BackupKeepMonthly)
+	}
+	// 预设 owner：必须成对，且密码满足注册同款强度
+	if (c.OwnerUser == "") != (c.OwnerPassword == "") {
+		return fmt.Errorf("LEDGER_OWNER_USER 与 LEDGER_OWNER_PASSWORD 必须同时设置")
+	}
+	if c.OwnerPassword != "" && len(c.OwnerPassword) < 6 {
+		return fmt.Errorf("LEDGER_OWNER_PASSWORD 至少 6 位")
 	}
 	return nil
 }

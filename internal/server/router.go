@@ -92,6 +92,12 @@ func newRouter(h *handler.Handler, svc *service.Service, webRoot string) http.Ha
 		http.MethodPost: h.HandleBackupRun,
 	}))
 
+	// 注册开关（B-4）：GET 公开 / POST 仅系统管理员
+	mux.HandleFunc("/api/settings/registration", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodGet:  h.HandleGetRegistration,
+		http.MethodPost: h.HandleSetRegistration,
+	}))
+
 	// 前端静态资源与 SPA 回退（兜底路由，必须最后注册）。
 	// ServeMux 按最长前缀匹配，所有 /api/ 精确路由优先于此。
 	mux.HandleFunc("/", spaHandler(webRoot))

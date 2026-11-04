@@ -5,11 +5,21 @@
 //	LEDGER_DB=data/ledger.db go run ./cmd/server
 //
 // 默认监听 :8080（可用 LISTEN 环境变量覆盖）。
+//
+// 内置 CLI（B-1）：owner 忘记密码时的兜底保险丝——
+//
+//	./server -reset-password -user alice -new-password newpass123
+//
+// 直接重置指定用户密码并注销其全部会话（不经 HTTP，无需登录）。
+// Docker：docker exec famben /app/server -reset-password -user alice -new-password xxx
+// 信任模型：能登录 NAS 服务器 = 有权重置（与能拔硬盘同级，不引入新攻击面）。
 package main
 
 import (
 	"context"
 	"errors"
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -17,8 +27,11 @@ import (
 	"syscall"
 	"time"
 
+	"familyledger/internal/auth"
 	"familyledger/internal/backup"
 	"familyledger/internal/config"
+	"familyledger/internal/db"
+	"familyledger/internal/repository"
 	"familyledger/internal/server"
 )
 
@@ -35,6 +48,16 @@ var (
 const shutdownGrace = 15 * time.Second
 
 func main() {
+	// ---- CLI：密码重置（B-1），先于常规启动解析 ----
+	resetUser := flag.String("reset-password", "", "要重置密码的用户名；设置后进入重置模式，不启动 HTTP 服务。用法: server -reset-password alice -new-password xxx")
+	resetPass := flag.String("new-password", "", "新密码（至少 6 位）")
+	flag.Parse()
+
+	if *resetUser != "" {
+		runPasswordReset(*resetUser, *resetPass)
+		return
+	}
+
 	cfg := config.Load()
 
 	app, err := server.New(cfg)
@@ -84,4 +107,50 @@ func main() {
 		log.Fatalf("服务异常: %v", err)
 	}
 	log.Printf("已停止")
+}
+
+// runPasswordReset 执行 CLI 密码重置（B-1）。
+// 直连数据库，不经 HTTP；重置成功后注销该用户全部会话。
+func runPasswordReset(user, newPass string) {
+	if newPass == "" {
+		fmt.Fprintln(os.Stderr, "用法: server -reset-password -user <用户名> -new-password <新密码>")
+		fmt.Fprintln(os.Stderr, "新密码不能为空（至少 6 位）")
+		os.Exit(1)
+	}
+	if len(newPass) < 6 {
+		fmt.Fprintln(os.Stderr, "❌ 新密码至少 6 位")
+		os.Exit(1)
+	}
+
+	cfg := config.Load()
+	conn, err := db.Open(cfg.DBPath, cfg.SchemaPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ 打开数据库失败: %v\n", err)
+		os.Exit(1)
+	}
+	defer conn.Close()
+
+	repo := repository.New(conn)
+	u, err := repo.UserByUsername(user)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ 用户 %q 不存在\n", user)
+		os.Exit(1)
+	}
+
+	hash, err := auth.HashPassword(newPass)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ 生成密码哈希失败: %v\n", err)
+		os.Exit(1)
+	}
+	ok, err := repo.UpdateUserPassword(u.ID, hash)
+	if err != nil || !ok {
+		fmt.Fprintf(os.Stderr, "❌ 更新密码失败: %v\n", err)
+		os.Exit(1)
+	}
+	if err := repo.DeleteSessionsByUser(u.ID); err != nil {
+		fmt.Fprintf(os.Stderr, "⚠️ 密码已重置，但注销会话失败（请重启服务兜底）: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✅ 已重置用户 %q 的密码，并注销其全部会话。现在可以用新密码登录。\n", user)
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"familyledger/internal/auth"
 	"familyledger/internal/domain"
+	"familyledger/internal/repository"
 )
 
 // UserInfo 是返回给客户端的用户信息（含在默认账本中的角色）。
@@ -23,7 +24,15 @@ type AuthResult struct {
 
 // Register 注册新用户。
 // 首个注册用户创建默认账本并成为 owner；后续用户仅建账号（等待 owner 邀请）。
+// 注册开关（B-4）关闭时拒绝；全新库 + 预设 owner 场景下开关不影响（owner 走启动预设）。
 func (s *Service) Register(username, password, displayName string) (AuthResult, error) {
+	allowed, err := s.RegistrationAllowed()
+	if err != nil {
+		return AuthResult{}, err
+	}
+	if !allowed {
+		return AuthResult{}, domain.ErrForbidden
+	}
 	if username == "" || len(password) < 6 {
 		return AuthResult{}, domain.Invalidf("用户名必填，密码至少 6 位")
 	}
@@ -115,6 +124,35 @@ func (s *Service) IsAdmin(userID int64) (bool, error) {
 		return false, err
 	}
 	return u.IsAdmin, nil
+}
+
+// RegistrationAllowed 读注册开关（B-4）。
+// app_settings 有关键时以持久化值为准；缺失（全新库未初始化）默认允许。
+func (s *Service) RegistrationAllowed() (bool, error) {
+	v, ok, err := s.repo.GetSetting(repository.SettingRegistration)
+	if err != nil {
+		return false, err
+	}
+	if ok {
+		return v == "1", nil
+	}
+	return true, nil
+}
+
+// SetRegistrationAllowed 设置注册开关，仅系统管理员可操作（B-4）。
+func (s *Service) SetRegistrationAllowed(userID int64, enabled bool) error {
+	admin, err := s.IsAdmin(userID)
+	if err != nil {
+		return err
+	}
+	if !admin {
+		return domain.ErrForbidden
+	}
+	v := "0"
+	if enabled {
+		v = "1"
+	}
+	return s.repo.SetSetting(repository.SettingRegistration, v)
 }
 
 // Refresh 用当前有效 token 换取新 token（再续 30 天），旧 token 立即失效。

@@ -21,6 +21,21 @@ var migrations = []struct {
 	{"006_account_close_semantics", migrate006},
 	{"007_account_sort_order", migrate007},
 	{"008_user_admin", migrate008},
+	{"009_app_settings", migrate009},
+}
+
+// migrate009：全局键值设置表（注册开关等系统级配置）。
+// 与账本数据分离：settings 是全库级属性，不挂在任何账本上。
+func migrate009(conn *sql.DB) error {
+	if _, err := conn.Exec(
+		`CREATE TABLE IF NOT EXISTS app_settings (
+			key        TEXT PRIMARY KEY,
+			value      TEXT NOT NULL,
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)`); err != nil {
+		return fmt.Errorf("create app_settings: %w", err)
+	}
+	return nil
 }
 
 // ApplyMigrations 执行所有尚未应用的迁移。

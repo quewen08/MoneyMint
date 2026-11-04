@@ -116,10 +116,16 @@ func (s *Service) RemoveMember(ledgerID, userID, memberID int64) error {
 	return nil
 }
 
-// ResetMemberPassword owner 重置成员密码，并使其所有会话失效。
+// ResetMemberPassword 重置成员密码，并使其所有会话失效。
+// 权限（B-2）：账本 owner；或系统管理员（可越账本重置任意成员——包括 owner，
+// 弥补"owner 无人可重置"的死锁缺口，多人家庭可互救）。
 func (s *Service) ResetMemberPassword(ledgerID, userID, memberID int64, newPassword string) error {
 	if err := s.requireOwner(ledgerID, userID); err != nil {
-		return err
+		admin, aerr := s.IsAdmin(userID)
+		if aerr != nil || !admin {
+			return err
+		}
+		// 系统管理员路径：不校验账本成员关系，仅按用户 id 重置。
 	}
 	if len(newPassword) < 6 {
 		return domain.Invalidf("新密码至少 6 位")
