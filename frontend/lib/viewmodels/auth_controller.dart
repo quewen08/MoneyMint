@@ -56,11 +56,17 @@ class AuthController extends ChangeNotifier {
         _applyUser(me);
         await _loadLedgers();
       } catch (e) {
+        // 调试期失败必须可见：这里静默吞错曾导致"刷新后页面一直转圈、
+        // 控制台零输出"，无法定位（me() 请求打到了没有后端的源上）。
+        if (kDebugMode) {
+          debugPrint('[auth] 启动恢复登录态失败（保留 token 离线等待）: $e');
+        }
         if (e is ApiException && e.statusCode == 401) {
           _resetLocalAuth();
         }
       }
     }
+    if (kDebugMode) debugPrint('[auth] init 完成: ready=true loggedIn=$loggedIn 账本数=${_ledgers.length}');
     _ready = true;
     notifyListeners();
   }

@@ -3,6 +3,7 @@
 /// 导出走 /api/export。所有请求自动附带登录后拿到的 Bearer token（持久化于 localStorage）。
 import 'dart:convert';
 import 'dart:html' as html;
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
 import 'sync_models.dart';
 
@@ -433,4 +434,17 @@ class ApiException implements Exception {
 /// 通过反向代理访问时，页面 JS 发的 API 请求指向的是「访问者自己电脑的 8080」，
 /// 表现为：NAS 本机一切正常，换设备或走域名后 API 全挂（HTTPS 下还会被
 /// 浏览器按混合内容直接拦截）。
-const kDefaultApiBase = String.fromEnvironment('API_BASE', defaultValue: '');
+/// 后端 API 基地址。三档取值：
+///
+/// 1. 构建时显式注入：`--dart-define=API_BASE=https://api.example.com`
+///    （前后端分离部署、或本地后端不在 8080 时用）
+/// 2. **debug 默认 `http://localhost:8080`**：`flutter run` 的页面运行在
+///    dev server 源上，与后端不同源——若用相对路径，所有请求会打到
+///    dev server 自身（那里没有后端），且失败被同步层静默吞掉，
+///    表现为页面永远转圈、控制台毫无输出（实测踩坑）。
+/// 3. **release 默认空串 = 同域相对路径**：Go 服务同端口托管前端，
+///    反代 / 直连 / HTTPS 零配置。
+const String kDefaultApiBase = String.fromEnvironment(
+  'API_BASE',
+  defaultValue: kDebugMode ? 'http://localhost:8080' : '',
+);

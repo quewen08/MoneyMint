@@ -47,9 +47,22 @@ class LedgerController extends ChangeNotifier {
       final ok = await sync.sync();
       await reload();
       online = ok;
+      // 调试期失败必须可见：sync 内部吞掉非 API 异常返回 false，
+      // 此处不打日志的话，"页面永远转圈"将无从排查（实测踩坑）。
+      if (kDebugMode && !ok) {
+        debugPrint('[ledger] 首次同步失败（离线模式）: ${lastError ?? '未知原因'}');
+      }
     } on ApiException catch (e) {
       online = false;
       lastError = e.message;
+      if (kDebugMode) {
+        debugPrint('[ledger] 首次同步异常: ${e.statusCode} ${e.message}');
+      }
+    } catch (e) {
+      // 兜底：任何未预期异常都不允许让 loading 卡死（见下 finally 语义）。
+      online = false;
+      lastError = '$e';
+      if (kDebugMode) debugPrint('[ledger] 首次同步未预期异常: $e');
     }
     loading = false;
     notifyListeners();
