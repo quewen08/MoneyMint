@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,6 +21,7 @@ import (
 	"familyledger/internal/handler"
 	"familyledger/internal/repository"
 	"familyledger/internal/service"
+	"familyledger/internal/testutil"
 )
 
 type openingHTTPEnv struct {
@@ -573,43 +573,10 @@ func unzip(zipPath, dest string) error {
 	return nil
 }
 
-// runBeanCheck 用项目内 venv 的 beancount 校验导出（工作目录设为导出根以解析 include）。
+// runBeanCheck 校验导出文件：子进程工作目录设为导出根（解析 include），
+// 只传文件名。候选探测、错误分类与严格模式统一在 internal/testutil，
+// 避免与 internal/export 的实现漂移（Linux CI 上曾因复制版误判而失败）。
 func runBeanCheck(t *testing.T, dir, file string) {
 	t.Helper()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("获取工作目录: %v", err)
-	}
-	venvPy := filepath.Join(wd, "..", "..", ".venv", "Scripts", "python.exe")
-	venvPyPosix := filepath.Join(wd, "..", "..", ".venv", "bin", "python")
-	cands := [][]string{
-		{venvPy, "-m", "beancount.scripts.check"},
-		{venvPyPosix, "-m", "beancount.scripts.check"},
-		{"python3", "-m", "beancount.scripts.check"},
-		{"python", "-m", "beancount.scripts.check"},
-	}
-	var lastErr error
-	for _, c := range cands {
-		cmd := exec.Command(c[0], append(c[1:], filepath.Base(file))...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err == nil {
-			return
-		}
-		lastErr = err
-		low := strings.ToLower(string(out))
-		if strings.Contains(low, "no module named") || strings.Contains(low, "not found") || strings.Contains(low, "not recognized") {
-			continue
-		}
-		t.Fatalf("bean-check 未通过（%v）: %v\n输出:\n%s", c, err, out)
-	}
-	if strictBeanCheck() {
-		t.Fatalf("严格模式：未找到可用的 bean-check: %v", lastErr)
-	}
-	t.Logf("bean-check 不可用，跳过：%v", lastErr)
-}
-
-func strictBeanCheck() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("BEAN_CHECK_STRICT")))
-	return v == "1" || v == "true" || v == "yes"
+	testutil.RunBeanCheck(t, filepath.Base(file), dir)
 }

@@ -9,7 +9,7 @@
 #   build     编译后端二进制到 dist/
 #   web       构建前端产物
 #   test      后端 vet + 全部测试（严格 bean-check）
-#   test-web  前端静态分析
+#   test-web  前端静态分析 + 单元测试
 #   check     test + 版本校验 + bean-check 自检（CI 同款）
 #   version   版本号三处一致性校验
 #   smoke     端到端冒烟
@@ -29,6 +29,14 @@ fi
 if ! command -v flutter >/dev/null 2>&1 && [[ -x /d/Environment/flutter/bin/flutter ]]; then
   export PATH="$PATH:/d/Environment/flutter/bin"
 fi
+
+# Flutter 的 flutter_tester 通过 127.0.0.1 上的 WebSocket 与测试驱动通信。
+# 若环境设了全局 HTTP 代理却没放行回环地址，代理会劫持这个本地连接，
+# 表现为所有测试文件在「加载阶段」报：
+#   Unable to connect to flutter_tester process: WebSocketException: Invalid WebSocket upgrade request
+# 这里始终放行本地回环（保留已有 NO_PROXY 值），不影响外网依赖下载。
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1,::1"
+export no_proxy="${no_proxy:+$no_proxy,}localhost,127.0.0.1,::1"
 
 cmd="${1:-help}"
 
@@ -55,7 +63,7 @@ case "$cmd" in
     ;;
 
   test-web)
-    ( cd frontend && flutter analyze lib )
+    ( cd frontend && flutter analyze lib && flutter test )
     ;;
 
   version)

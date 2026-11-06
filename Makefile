@@ -14,7 +14,7 @@ help:
 	@echo "make build     编译后端二进制到 dist/"
 	@echo "make web       构建前端产物到 frontend/build/web"
 	@echo "make test      后端 vet + 全部测试（严格 bean-check）"
-	@echo "make test-web  前端静态分析"
+	@echo "make test-web  前端静态分析 + 单元测试"
 	@echo "make check     test + bean-check 自检（CI 同款）"
 	@echo "make version   版本号三处一致性校验"
 	@echo "make smoke     端到端冒烟（起服务→记账→导出→校验→备份）"
@@ -35,8 +35,9 @@ test:
 	$(GO) vet ./...
 	BEAN_CHECK_STRICT=1 $(GO) test ./...
 
+# flutter_tester 走本地回环 WebSocket；全局 HTTP 代理未放行 127.0.0.1 时测试会在加载阶段全挂。
 test-web:
-	cd frontend && $(FLUTTER) analyze lib
+	cd frontend && $(FLUTTER) analyze lib && NO_PROXY="localhost,127.0.0.1,::1" no_proxy="localhost,127.0.0.1,::1" $(FLUTTER) test
 
 check: test version
 	bash scripts/check-bean.sh
