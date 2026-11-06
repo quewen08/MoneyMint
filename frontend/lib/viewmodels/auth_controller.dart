@@ -4,10 +4,14 @@
 import 'package:flutter/foundation.dart';
 import '../core/api/ledger_api.dart';
 import '../core/api/sync_models.dart';
+import '../core/store/local_store.dart';
 
 class AuthController extends ChangeNotifier {
   final LedgerApi api;
-  AuthController(this.api);
+  final LocalStore store;
+
+  /// [store] 用于缓存各账本的期初日期（离线只读展示，禁止离线修改）。
+  AuthController(this.api, this.store);
 
   bool _ready = false;
   bool get ready => _ready;
@@ -117,6 +121,12 @@ class AuthController extends ChangeNotifier {
   /// 拉取账本列表，并选定当前账本（优先恢复上次选择，否则第一个）。
   Future<void> _loadLedgers() async {
     _ledgers = await api.listLedgers();
+    // 缓存期初日期：离线时账本列表不可用，仍能读取上次已知值（只读）。
+    for (final l in _ledgers) {
+      if (l.openingDate.isNotEmpty) {
+        await store.cacheLedgerOpeningDate(l.id, l.openingDate);
+      }
+    }
     if (_ledgers.isEmpty) {
       _currentLedger = null;
       LedgerApi.setLedgerId(null);

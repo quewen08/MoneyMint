@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/scope.dart';
 import '../../app/navigation.dart';
 import '../../app/theme.dart';
+import '../../utils/opening.dart';
 import '../../viewmodels/auth_controller.dart';
 import '../../viewmodels/ledger_controller.dart';
 import '../../widgets/common.dart';
@@ -157,14 +158,20 @@ class SettingsScreen extends StatelessWidget {
 
   Future<void> _export(BuildContext context, LedgerController ledger) async {
     try {
-      final text = await ledger.exportText();
-      final blob = html.Blob([utf8.encode(text)]);
+      final r = await ledger.exportChecked();
+      final blob = html.Blob([utf8.encode(r.text)]);
       final url = html.Url.createObjectUrlFromBlob(blob);
       html.AnchorElement(href: url)
         ..download = 'family.beancount'
         ..click();
       html.Url.revokeObjectUrl(url);
-      showAppSnack(context, '已导出 family.beancount');
+      showAppSnack(
+        context,
+        r.balanced
+            ? '已导出 family.beancount'
+            : '已导出，但账本不平：${formatIdentityDiffs(r.diffs)}',
+        warn: !r.balanced,
+      );
     } catch (e) {
       showAppSnack(context, '导出失败（需联网）: $e', warn: true);
     }

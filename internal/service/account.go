@@ -73,6 +73,8 @@ func (s *Service) ListAccounts(ledgerID int64, includeClosed bool) ([]AccountVie
 
 // CreateAccount 创建账户（含币种限制时自动补建币种）。
 // icon/color/parentUUID/subType 为展示/层级字段，可选。
+// FR-03：未显式传日期时 open_date = min(账本期初日期, 今日)；
+// 显式日期不得晚于账本期初日期。
 func (s *Service) CreateAccount(ledgerID int64, name, displayName, atype, openDate, commodity, icon, color, parentUUID, subType string) (AccountCreated, error) {
 	if name == "" || atype == "" {
 		return AccountCreated{}, domain.Invalidf("name 与 type 必填")
@@ -80,8 +82,24 @@ func (s *Service) CreateAccount(ledgerID int64, name, displayName, atype, openDa
 	if err := validateAccountType(atype); err != nil {
 		return AccountCreated{}, err
 	}
+	openingDate, err := s.repo.LedgerOpeningDate(ledgerID)
+	if err != nil {
+		return AccountCreated{}, err
+	}
+	today := time.Now().Format("2006-01-02")
+	if openingDate == "" || openingDate > today {
+		openingDate = today
+	}
 	if openDate == "" {
-		openDate = time.Now().Format("2006-01-02")
+		openDate = openingDate
+	} else {
+		if !isISODate(openDate) {
+			return AccountCreated{}, domain.Invalidf("open_date 需为 YYYY-MM-DD")
+		}
+		if openDate > openingDate {
+			return AccountCreated{}, domain.Codedf(domain.ErrInvalid, domain.CodeAccountOpenDateAfter,
+				"账户开立日期不得晚于账本期初日期 %s", openingDate)
+		}
 	}
 
 	a := domain.Account{
@@ -107,12 +125,15 @@ func (s *Service) CreateAccount(ledgerID int64, name, displayName, atype, openDa
 }
 
 // DeleteAccount 关闭账户（Beancount close 语义，0.4-A 起）。
-// 置 close_date，保留全部交易引用；sync_log 写 op=close。
-// HTTP 层仍以 DELETE /api/accounts/{uuid} 暴露，语义从软删改为关闭。
+// 关闭前必须余额为 0（设计决策 §7.3）：非 0 返回 BalanceNotZeroError（409 + 按币种差额）。
+// 校验通过则置 close_date，保留全部交易引用；sync_log 写 op=close。
 func (s *Service) DeleteAccount(ledgerID int64, uuid string) error {
-	closed, err := s.repo.CloseAccount(ledgerID, uuid)
+	closed, diffs, err := s.repo.CloseAccountChecked(ledgerID, uuid)
 	if err != nil {
 		return err
+	}
+	if len(diffs) > 0 {
+		return &domain.BalanceNotZeroError{AccountUUID: uuid, Balances: diffs}
 	}
 	if !closed {
 		return domain.ErrNotFound

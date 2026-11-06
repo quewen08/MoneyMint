@@ -12,6 +12,7 @@ import '../../utils/money.dart';
 import '../../widgets/calendar_view.dart';
 import '../../widgets/charts.dart';
 import '../../widgets/common.dart';
+import '../../widgets/identity_banner.dart';
 import '../../widgets/ledger_switcher.dart';
 import '../../widgets/privacy.dart';
 import '../../widgets/revamp.dart';
@@ -94,6 +95,7 @@ class _MiniTrendCard extends StatelessWidget {
       for (final p in t.postings) {
         final acc = accByUuid[p.accountUuid];
         if (acc == null) continue;
+        // 金额大小展示，与账本符号无关（选展示币种用）。
         final amt = (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
         totals[p.commodity] = (totals[p.commodity] ?? Decimal.zero) + amt;
       }
@@ -113,6 +115,7 @@ class _MiniTrendCard extends StatelessWidget {
           final acc = accByUuid[p.accountUuid];
           if (acc == null) continue;
           if (p.commodity != commodity) continue;
+          // 金额大小展示，与账本符号无关（收入/支出按月取大小）。
           final amt = (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
           if (acc.type == 'Income') {
             inc += amt;
@@ -171,7 +174,7 @@ class _NetWorthCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('净资产（资产 − 负债）', style: AppTheme.muted),
+          const Text('净资产（资产 + 负债，负债为负）', style: AppTheme.muted),
           const SizedBox(height: 6),
           if (hidden)
             const Text('••••',
@@ -312,6 +315,7 @@ class _BillHomeState extends State<_BillHome> {
         };
         // 选交易总额最大的币种作为展示口径（避免跨币种直接相加）。
         final totals = <String, Decimal>{};
+        // 金额大小展示，与账本符号无关（选展示币种用）。
         for (final t in ledger.txns) {
           for (final p in t.postings) {
             totals[p.commodity] = (totals[p.commodity] ?? Decimal.zero) +
@@ -334,6 +338,7 @@ class _BillHomeState extends State<_BillHome> {
             if (p.commodity != commodity) continue;
             final acc = accByUuid[p.accountUuid];
             if (acc == null) continue;
+            // 金额大小展示，与账本符号无关（当月收入/支出取大小）。
             final amt = (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
             if (acc.type == 'Income') {
               income += amt;
@@ -476,7 +481,9 @@ class _BillHomeState extends State<_BillHome> {
                       label: '总资产', value: _moneyMap(ledger.byType['Assets'] ?? {}), color: AppColors.blue),
                   _MetricChip(
                       label: '总负债',
-                      value: _moneyMap(ledger.byType['Liabilities'] ?? {}),
+                      // 总负债按展示惯例取正数幅度；负债余额本身为负，显式 abs。
+                      value: _moneyMap(ledger.byType['Liabilities'] ?? {},
+                          magnitude: true),
                       color: AppColors.warn),
                   _MetricChip(
                       label: '收入',
@@ -524,12 +531,23 @@ class _BillHomeState extends State<_BillHome> {
 
         final trendCard = _MiniTrendCard(ledger: ledger, wide: true);
 
+        // 恒等式告警横幅：服务端/本地检查不平衡或净值双算不一致时展示；
+        // 仅本次刷新内可关闭，下次 syncNow/init 重现。
+        final identityBanner = ledger.hasIdentityAlert
+            ? IdentityBanner(
+                result: ledger.identityResult,
+                warning: ledger.identityWarning,
+                onDismiss: ledger.dismissIdentityBanner,
+              )
+            : null;
+
         Widget body;
         if (!wide) {
           body = ListView(
             padding: const EdgeInsets.only(bottom: 24),
             children: [
               hero,
+              if (identityBanner != null) identityBanner,
               const SizedBox(height: 12),
               calendarCard,
               const SizedBox(height: 16),
@@ -567,6 +585,13 @@ class _BillHomeState extends State<_BillHome> {
             child: Column(
               children: [
                 hero,
+                if (identityBanner != null)
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1440),
+                      child: identityBanner,
+                    ),
+                  ),
                 Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1440),
@@ -622,10 +647,17 @@ class _BillHomeState extends State<_BillHome> {
   }
 
   /// 多币种余额拼接；隐私开启时统一遮挡。
-  String _moneyMap(Map<String, String> m) {
+  /// [magnitude] 为 true 时按金额大小展示（显式 abs），用于「总负债」这类正数幅度口径。
+  String _moneyMap(Map<String, String> m, {bool magnitude = false}) {
     if (_hide) return '••••';
     if (m.isEmpty) return '—';
-    return m.entries.map((e) => formatMoney(e.value, e.key)).join('  ');
+    if (!magnitude) {
+      return m.entries.map((e) => formatMoney(e.value, e.key)).join('  ');
+    }
+    return m.entries
+        .map((e) => formatMoney(
+            (Decimal.tryParse(e.value) ?? Decimal.zero).abs().toString(), e.key))
+        .join('  ');
   }
 }
 
@@ -760,8 +792,10 @@ class _MonthList extends StatelessWidget {
                     if (acc == null) continue;
                     final v = Decimal.tryParse(p.amount) ?? Decimal.zero;
                     if (acc.type == 'Income') {
+                      // 金额大小展示，与账本符号无关（收入按大小记为正）。
                       net += v.abs();
                     } else if (acc.type == 'Expenses') {
+                      // 金额大小展示，与账本符号无关（支出按大小记为负）。
                       net -= v.abs();
                     }
                   }

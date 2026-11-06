@@ -43,7 +43,8 @@ func (h *Handler) HandleCreateLedger(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, ledger)
 }
 
-// HandleUpdateLedger 更新账本名称与默认币种（仅 owner）。
+// HandleUpdateLedger 更新账本名称、默认币种与可选期初日期（仅 owner）。
+// opening_date 使用指针区分「未传（不改）」与「显式传值」。
 func (h *Handler) HandleUpdateLedger(w http.ResponseWriter, r *http.Request) {
 	uid, ok := requireUserID(w, r)
 	if !ok {
@@ -55,14 +56,15 @@ func (h *Handler) HandleUpdateLedger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name             string `json:"name"`
-		DefaultCommodity string `json:"default_commodity"`
+		Name             string  `json:"name"`
+		DefaultCommodity string  `json:"default_commodity"`
+		OpeningDate      *string `json:"opening_date"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	ledger, err := h.svc.UpdateLedger(uid, ledgerID, req.Name, req.DefaultCommodity)
+	ledger, err := h.svc.UpdateLedger(uid, ledgerID, req.Name, req.DefaultCommodity, req.OpeningDate)
 	if err != nil {
 		writeError(w, err)
 		return

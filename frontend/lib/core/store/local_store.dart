@@ -12,6 +12,15 @@ class LocalStore {
   factory LocalStore() => _instance;
   LocalStore._();
 
+  /// 仅供单元测试：注入内存 sembast 数据库（Web 目标的 IndexedDB 在 VM 测试不可用）。
+  /// 注入后 [init] 直接短路，不会覆盖测试库。
+  factory LocalStore.forTesting(Database db) {
+    final store = LocalStore._();
+    store._db = db;
+    store._ready = true;
+    return store;
+  }
+
   late Database _db;
   bool _ready = false;
 
@@ -73,7 +82,9 @@ class LocalStore {
         flag: t.flag,
         description: t.description,
         postings: postings,
+        tags: t.tags,
         reversedOf: t.reversedOf,
+        createdByName: t.createdByName,
       ));
     }
   }
@@ -178,6 +189,21 @@ class LocalStore {
     await _meta.record('default_accounts_${ledgerId ?? 0}').delete(_db);
   }
 
+  /// 缓存账本期初日期（离线时仍能展示，禁止离线修改）。
+  Future<void> cacheLedgerOpeningDate(int ledgerId, String openingDate) async {
+    await _meta
+        .record('ledger_opening_$ledgerId')
+        .put(_db, {'opening_date': openingDate});
+  }
+
+  /// 读取缓存的账本期初日期；未缓存返回 null。
+  Future<String?> getCachedLedgerOpeningDate(int ledgerId) async {
+    final v = await _meta.record('ledger_opening_$ledgerId').get(_db);
+    if (v == null) return null;
+    final d = v['opening_date'];
+    return d is String && d.isNotEmpty ? d : null;
+  }
+
   /// 应用一条服务器拉回的变更：
   ///   op=create → 按 uuid 幂等 upsert；
   ///   op=delete → 按 uuid 删除本地记录（仅交易；账户 0.4 起改为 close）；
@@ -235,7 +261,8 @@ class LocalStore {
         uuid, m.map((c, v) => MapEntry(c, v.toStringAsFixed(2)))));
   }
 
-  /// 净资产（设计稿语义：资产 − 负债），按币种汇总。
+  /// 净资产 = ΣAssets + ΣLiabilities，按币种汇总（FR-13）。
+  /// 负债余额本身即为负数（账本符号），因此直接相加，不得再乘 -1。
   /// map[commodity] -> 金额字符串。用于首页大字号净值。
   Future<Map<String, String>> computeNetWorth(List<LocalAccount> accounts) async {
     final sums = await _balancesDecimal();
@@ -244,12 +271,61 @@ class LocalStore {
       if (a.type != 'Assets' && a.type != 'Liabilities') continue;
       final m = sums[a.uuid];
       if (m == null) continue;
-      final sign = Decimal.fromInt(a.type == 'Assets' ? 1 : -1);
       m.forEach((c, v) {
-        net[c] = (net[c] ?? Decimal.zero) + v * sign;
+        net[c] = (net[c] ?? Decimal.zero) + v;
       });
     }
     return net.map((c, v) => MapEntry(c, v.toStringAsFixed(2)));
+  }
+
+  /// 净值双算校验（FR-14）：按币种返回 `netA - netB` 的差值。
+  ///
+  /// netA = Σ(Assets) + Σ(Liabilities)
+  /// netB = -(Σ(Income) + Σ(Equity)) - Σ(Expenses)
+  ///
+  /// 依据复式记账恒等式 `Assets + Liabilities + Equity + Income + Expenses = 0`
+  /// （负债/权益/收入按负数存储）。差值应恒为 0，非 0 仅用于诊断告警，不阻断业务。
+  /// 返回 map[commodity] -> 差值字符串，仅包含实际出现过的币种。
+  Future<Map<String, String>> computeNetWorthAudit(
+      List<LocalAccount> accounts) async {
+    final sums = await _balancesDecimal();
+    final netA = <String, Decimal>{};
+    final netB = <String, Decimal>{};
+    for (final a in accounts) {
+      final m = sums[a.uuid];
+      if (m == null) continue;
+      m.forEach((c, v) {
+        if (a.type == 'Assets' || a.type == 'Liabilities') {
+          netA[c] = (netA[c] ?? Decimal.zero) + v;
+        } else if (a.type == 'Income' ||
+            a.type == 'Equity' ||
+            a.type == 'Expenses') {
+          // netB = -(ΣIncome + ΣEquity) - ΣExpenses：
+          // 收入/权益余额为负取反为正，支出余额为正取反为负。
+          netB[c] = (netB[c] ?? Decimal.zero) - v;
+        }
+      });
+    }
+    final diff = <String, Decimal>{};
+    final commodities = <String>{...netA.keys, ...netB.keys};
+    for (final c in commodities) {
+      diff[c] = (netA[c] ?? Decimal.zero) - (netB[c] ?? Decimal.zero);
+    }
+    return diff.map((c, v) => MapEntry(c, v.toStringAsFixed(2)));
+  }
+
+  /// 全账本按币种合计（离线恒等式检查用）：所有 posting 求和应恒为 0。
+  ///
+  /// 返回 map[commodity] -> 合计金额字符串，仅包含实际出现过的币种。
+  Future<Map<String, String>> computeCommoditySums() async {
+    final sums = await _balancesDecimal();
+    final total = <String, Decimal>{};
+    for (final m in sums.values) {
+      m.forEach((c, v) {
+        total[c] = (total[c] ?? Decimal.zero) + v;
+      });
+    }
+    return total.map((c, v) => MapEntry(c, v.toStringAsFixed(2)));
   }
 
   /// 按账户类型汇总余额：map[type] -> map[commodity] -> 金额字符串。

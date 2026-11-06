@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"familyledger/internal/export"
+	"familyledger/internal/identity"
 
 	_ "modernc.org/sqlite"
 )
@@ -59,6 +60,12 @@ var ErrBusy = errors.New("已有备份任务正在执行，请稍后再试")
 // 同秒重复触发时会带 -001 之类的毫秒/序号后缀。
 var snapshotNameRe = regexp.MustCompile(`^ledger-\d{8}-\d{6}(-\d{3})?(\.l\d+)?\.(db|beancount)$`)
 
+// IdentityWarning 是备份快照的恒等式失衡告警（只记日志/清单，不阻断备份）。
+type IdentityWarning struct {
+	LedgerID int64           `json:"ledger_id"`
+	Diffs    []identity.Diff `json:"diffs"`
+}
+
 // Item 是一份备份的元信息（写入 manifest.json，也是 API 返回结构）。
 type Item struct {
 	Name       string           `json:"name"`
@@ -69,6 +76,8 @@ type Item struct {
 	CreatedAt  time.Time        `json:"created_at"`
 	DurationMS int64            `json:"duration_ms"`
 	Stats      map[string]int64 `json:"stats,omitempty"`
+	// IdentityWarnings 记录快照后检查发现的恒等式失衡账本（不阻断备份）。
+	IdentityWarnings []IdentityWarning `json:"identity_warnings,omitempty"`
 	// Error 非空表示该次备份失败（失败记录保留在清单里，便于排查，但不参与保留计数）
 	Error string `json:"error,omitempty"`
 }
@@ -173,6 +182,9 @@ func (e *Engine) Snapshot(trigger string) (*Item, error) {
 		return e.fail(trigger, name, started, err)
 	}
 
+	// 2.1) 恒等式检查：仅告警、不阻断（设计 §3.4.4）。
+	warnings := e.checkIdentityWarnings(target)
+
 	// 3) 哈希与体积
 	size, sum, err := fileDigest(target)
 	if err != nil {
@@ -186,14 +198,15 @@ func (e *Engine) Snapshot(trigger string) (*Item, error) {
 
 	finished := time.Now()
 	item := Item{
-		Name:       name,
-		BeanFiles:  beans,
-		Size:       size,
-		SHA256:     sum,
-		Trigger:    trigger,
-		CreatedAt:  started.UTC(),
-		DurationMS: finished.Sub(started).Milliseconds(),
-		Stats:      stats,
+		Name:             name,
+		BeanFiles:        beans,
+		Size:             size,
+		SHA256:           sum,
+		Trigger:          trigger,
+		CreatedAt:        started.UTC(),
+		DurationMS:       finished.Sub(started).Milliseconds(),
+		Stats:            stats,
+		IdentityWarnings: warnings,
 	}
 
 	if err := e.appendManifest(item); err != nil {
@@ -291,6 +304,31 @@ func (e *Engine) validate(snapshotPath string) (map[string]int64, error) {
 		stats[t] = snapCount
 	}
 	return stats, nil
+}
+
+// checkIdentityWarnings 对快照库执行全账本恒等式检查，返回失衡账本（仅告警）。
+func (e *Engine) checkIdentityWarnings(snapshotPath string) []IdentityWarning {
+	snap, err := sql.Open("sqlite", snapshotPath)
+	if err != nil {
+		e.logf("backup: 打开快照做恒等式检查失败: %v", err)
+		return nil
+	}
+	defer snap.Close()
+	results, err := identity.CheckAll(snap)
+	if err != nil {
+		e.logf("backup: 恒等式检查失败: %v", err)
+		return nil
+	}
+	var warnings []IdentityWarning
+	for _, r := range results {
+		if r.Balanced {
+			continue
+		}
+		w := IdentityWarning{LedgerID: r.LedgerID, Diffs: r.Diffs}
+		warnings = append(warnings, w)
+		e.logf("backup: 账本 %d 恒等式失衡（备份已保留）: %v", r.LedgerID, r.Diffs)
+	}
+	return warnings
 }
 
 // exportBeans 从快照库为每个账本导出一份 beancount 文本。

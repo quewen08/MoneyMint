@@ -53,8 +53,16 @@ func newRouter(h *handler.Handler, svc *service.Service, webRoot string) http.Ha
 		http.MethodGet:  h.HandleListAccounts,
 		http.MethodPost: h.HandleCreateAccount,
 	}))
+	mux.HandleFunc("/api/accounts/{uuid}/opening", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodGet:  h.HandleGetOpening,
+		http.MethodPost: h.HandleSetOpening,
+	}))
 	mux.HandleFunc("/api/accounts/{uuid}", methodSwitch(map[string]http.HandlerFunc{
 		http.MethodDelete: h.HandleDeleteAccount,
+	}))
+	// 恒等式检查（只读）：首页余额校验提示。
+	mux.HandleFunc("/api/identity/check", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodGet: h.HandleIdentityCheck,
 	}))
 	mux.HandleFunc("/api/transactions", methodSwitch(map[string]http.HandlerFunc{
 		http.MethodGet:  h.HandleListTransactions,

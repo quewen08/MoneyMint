@@ -20,7 +20,7 @@ class AppScope extends InheritedWidget {
   AppScope({super.key, required super.child})
       : api = LedgerApi(),
         store = LocalStore(),
-        auth = AuthController(LedgerApi()),
+        auth = AuthController(LedgerApi(), LocalStore()),
         ledger = LedgerController(LedgerApi(), LocalStore());
 
   static AppScope of(BuildContext context) {

@@ -82,6 +82,13 @@ type Transaction struct {
 	Tags        []string   // 标签（展示/检索/导出 #tag 用）
 	Postings    []Posting
 	DeletedAt   string // 软删时间（回收站用）；空串表示未删除
+
+	// 期初/冲正元数据（迁移 012）。身份由这些列承载，不使用 tags 判定。
+	ReversalOf         string // 被冲正的原交易 uuid（冲正交易上非空）
+	OpeningAccountUUID string // 期初交易/其冲正所服务的账户 uuid
+	OpeningVersion     int64  // 账户维度期初版本，从 1 递增
+	OpeningKey         string // 仅期初交易：opening:{account_uuid}:{version}
+	ReversedBy         string // 原期初交易：冲正交易 uuid；非空即失效
 }
 
 // Commodity 是账本内的币种/商品（Beancount commodity 指令）。
@@ -150,7 +157,18 @@ type Ledger struct {
 	Name             string
 	DefaultCommodity string
 	Role             string // 当前用户在该账本中的角色：owner | editor | viewer
+	OpeningDate      string // 'YYYY-MM-DD'；迁移 012 落库
+	CreatedAt        string // 建账时间（UTC，datetime('now')）
 }
+
+// 期初方向（FR-05）：持有 / 欠款。
+const (
+	OpeningDirectionHold = "hold"
+	OpeningDirectionOwe  = "owe"
+)
+
+// OpeningEquityName 是期初余额对应的权益账户名（固定，不带账本前缀）。
+const OpeningEquityName = "Equity:Opening-Balances"
 
 // SyncLogEntry 是 sync_log 中的一条变更事件。
 type SyncLogEntry struct {

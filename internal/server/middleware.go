@@ -18,6 +18,8 @@ func cors(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,PATCH,OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Ledger-Id")
+		// 导出接口通过响应头附带恒等式提示，跨域部署时浏览器必须被显式允许读取。
+		w.Header().Set("Access-Control-Expose-Headers", "X-Ledger-Balanced, X-Ledger-Diffs, Content-Disposition")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

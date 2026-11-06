@@ -81,7 +81,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     childAspectRatio: 2.2,
                     children: [
                       PcMetricCard(
-                        label: '净资产',
+                        label: '净资产（资产 + 负债，负债为负）',
                         value: _moneyMap(ledger.netWorth),
                       ),
                       PcMetricCard(
@@ -90,7 +90,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                       PcMetricCard(
                         label: '总负债',
-                        value: _moneyMap(ledger.byType['Liabilities'] ?? {}),
+                        // 总负债按展示惯例取正数幅度；负债余额本身为负，显式 abs。
+                        value: _moneyMap(ledger.byType['Liabilities'] ?? {},
+                            magnitude: true),
                       ),
                       PcMetricCard(
                         label: '交易笔数',
@@ -251,10 +253,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  String _moneyMap(Map<String, String> m) {
+  /// 多币种余额拼接；[magnitude] 为 true 时显式取绝对值（用于「总负债」正数幅度口径）。
+  String _moneyMap(Map<String, String> m, {bool magnitude = false}) {
     if (m.isEmpty) return '—';
-    final lines = m.entries.map((e) => formatMoney(e.value, e.key)).toList();
-    return lines.join('  ');
+    if (!magnitude) {
+      return m.entries.map((e) => formatMoney(e.value, e.key)).join('  ');
+    }
+    return m.entries
+        .map((e) => formatMoney(
+            (Decimal.tryParse(e.value) ?? Decimal.zero).abs().toString(), e.key))
+        .join('  ');
   }
 }
 
@@ -366,6 +374,7 @@ class _ExpensePieCard extends StatelessWidget {
         final acc = accByUuid[p.accountUuid];
         if (acc?.type != 'Expenses') continue;
         if (p.commodity != commodity) continue;
+        // 金额大小展示，与账本符号无关（支出分类占比用）。
         final amt = (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
         sum[acc!.display] = (sum[acc.display] ?? Decimal.zero) + amt;
       }
@@ -414,6 +423,7 @@ class _RankCard extends StatelessWidget {
         final acc = accByUuid[p.accountUuid];
         if (acc?.type != 'Expenses') continue;
         if (p.commodity != commodity) continue;
+        // 金额大小展示，与账本符号无关（支出排行用）。
         final amt = (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
         sum[acc!.display] = (sum[acc.display] ?? Decimal.zero) + amt;
       }
@@ -451,6 +461,7 @@ String _pickCommodity(List<LocalTxn> txns, Map<String, LocalAccount> accByUuid) 
     for (final p in t.postings) {
       final acc = accByUuid[p.accountUuid];
       if (acc?.type != 'Expenses') continue;
+      // 金额大小展示，与账本符号无关（选支出展示币种用）。
       final amt = (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
       totals[p.commodity] = (totals[p.commodity] ?? Decimal.zero) + amt;
     }
@@ -473,6 +484,7 @@ Decimal _sumByType(
       final acc = accByUuid[p.accountUuid];
       if (acc?.type != type) continue;
       if (p.commodity != commodity) continue;
+      // 金额大小展示，与账本符号无关（收入/支出汇总取大小）。
       sum += (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
     }
   }
@@ -489,6 +501,7 @@ class _MemberContributionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 主币种口径：与趋势/排行一致，避免跨币种直加。
+    // 金额大小展示，与账本符号无关（选成员贡献展示币种用）。
     final totals = <String, Decimal>{};
     for (final t in txns) {
       for (final p in t.postings) {
@@ -512,6 +525,7 @@ class _MemberContributionCard extends StatelessWidget {
         if (p.commodity != commodity) continue;
         final acc = accByUuid[p.accountUuid];
         if (acc == null || acc.type != 'Expenses') continue;
+        // 金额大小展示，与账本符号无关（成员支出取大小）。
         expense[name] = (expense[name] ?? Decimal.zero) +
             (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
       }

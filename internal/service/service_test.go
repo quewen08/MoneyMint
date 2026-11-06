@@ -257,16 +257,21 @@ func TestDeleteSemantics(t *testing.T) {
 		t.Fatalf("删除后交易应为 0，实际 %d", len(txns))
 	}
 
-	// 再记一笔，然后关闭账户：其引用交易应保留（Beancount close 语义，0.4-A 起）
+	// 再记两笔（买菜支出 + 报销回收），使现金账户余额归零后再关闭：
+	// 新语义要求 close 前余额必须为 0，否则返回 409 account_balance_not_zero。
 	_, _ = svc.CreateTransaction(lid, "2026-08-03", "*", "买菜", []PostingInput{
 		{AccountID: cash.ID, Commodity: "CNY", Amount: "-5.00"},
 		{AccountID: food.ID, Commodity: "CNY", Amount: "5.00"},
+	}, 1)
+	_, _ = svc.CreateTransaction(lid, "2026-08-04", "*", "报销", []PostingInput{
+		{AccountID: cash.ID, Commodity: "CNY", Amount: "5.00"},
+		{AccountID: food.ID, Commodity: "CNY", Amount: "-5.00"},
 	}, 1)
 	if err := svc.DeleteAccount(lid, cash.UUID); err != nil {
 		t.Fatalf("close account: %v", err)
 	}
 	// close 后引用交易应保留（不再连带软删）
-	if txns, _ := svc.ListTransactions(lid); len(txns) != 1 {
+	if txns, _ := svc.ListTransactions(lid); len(txns) != 2 {
 		t.Fatalf("关账户后其引用交易应保留（close 语义），实际 %d 笔", len(txns))
 	}
 	// 已关闭账户默认列表不出现，include_closed 才出现且带 close_date

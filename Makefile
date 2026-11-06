@@ -7,7 +7,7 @@ GO      ?= go
 FLUTTER ?= flutter
 SHELL   := bash
 
-.PHONY: help dev build web test test-web check version smoke image clean
+.PHONY: help dev build web test test-web check version smoke rehearse image clean
 
 help:
 	@echo "make dev       启动后端（托管 frontend/build/web）"
@@ -18,6 +18,7 @@ help:
 	@echo "make check     test + bean-check 自检（CI 同款）"
 	@echo "make version   版本号三处一致性校验"
 	@echo "make smoke     端到端冒烟（起服务→记账→导出→校验→备份）"
+	@echo "make rehearse  迁移 012 副本库预演（VACUUM INTO + 两次迁移 + bean-check）"
 	@echo "make image     本地构建 Docker 镜像"
 
 dev:
@@ -45,6 +46,9 @@ version:
 
 smoke:
 	bash scripts/smoke.sh
+
+rehearse:
+	bash scripts/rehearsal.sh
 
 image:
 	docker build -t famben:dev .

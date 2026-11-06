@@ -204,9 +204,16 @@ func (s *Store) InsertAccount(ledgerID int64, a domain.Account) (int64, error) {
 
 // SeedDefaultAccounts 建账时批量写入默认账户（支出/收入/资产/负债/权益）。
 // 复用 InsertAccount（含 uuid 生成与 sync_log 写入），同名已存在则跳过，
-// 因此可对每个账本重复调用而不会产生重复账户。open_date 取建账当日。
+// 因此可对每个账本重复调用而不会产生重复账户。
+// open_date 取 min(账本 opening_date, 今日)（FR-03 同口径）。
 func (s *Store) SeedDefaultAccounts(ledgerID int64) error {
-	openDate := time.Now().Format("2006-01-02")
+	today := time.Now().Format("2006-01-02")
+	openDate := today
+	if d, err := s.LedgerOpeningDate(ledgerID); err != nil {
+		return err
+	} else if d != "" && d < openDate {
+		openDate = d
+	}
 	for _, d := range seed.DefaultAccounts {
 		_, err := s.InsertAccount(ledgerID, domain.Account{
 			Name:        d.Name,

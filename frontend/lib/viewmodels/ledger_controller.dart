@@ -1,8 +1,11 @@
 /// 账本视图模型（MVVM 的 ViewModel 层）：持有账户/交易/余额与同步状态，
 /// 暴露加载、同步、建账户、记账、冲正、导出等命令。视图层通过 ListenableBuilder 订阅。
+import 'dart:async';
+
 import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
 import '../core/api/ledger_api.dart';
+import '../core/api/opening_models.dart';
 import '../core/api/sync_models.dart';
 import '../core/models/account.dart';
 import '../core/models/posting.dart';
@@ -24,7 +27,7 @@ class LedgerController extends ChangeNotifier {
   List<LocalAccount> accounts = [];
   List<LocalTxn> txns = [];
   Map<String, Map<String, String>> balances = {}; // uuid -> commodity -> 金额串
-  Map<String, String> netWorth = {}; // commodity -> 金额串（资产 − 负债）
+  Map<String, String> netWorth = {}; // commodity -> 金额串（资产 + 负债，负债为负）
   Map<String, Map<String, String>> byType = {}; // type -> commodity -> 金额串
   int lastSeq = 0;
   int pending = 0;
@@ -33,6 +36,73 @@ class LedgerController extends ChangeNotifier {
   bool showClosedAccounts = false; // 账户页「显示已关闭」开关（0.4-A）
   String? lastError; // 最近一次同步的 API 级错误（如 403 未加入账本）
   Set<String> reversedUuids = {};
+
+  /// 净值双算不一致时的告警文案（仅告警，不阻断）；一致时为 null。
+  String? identityWarning;
+
+  /// 服务端恒等式检查结果（GET /api/identity/check）；离线时为本地 Decimal 汇总。
+  IdentityResult? identityResult;
+
+  /// 本次会话是否已手动关闭恒等式横幅（刷新后重置，下次刷新重现）。
+  bool identityDismissed = false;
+
+  Timer? _identityTimer;
+
+  /// 是否需要展示恒等式告警横幅。
+  bool get hasIdentityAlert =>
+      !identityDismissed &&
+      ((identityResult != null && !identityResult!.balanced) ||
+          (identityWarning != null && identityWarning!.isNotEmpty));
+
+  /// 关闭横幅（仅本次刷新内隐藏）。
+  void dismissIdentityBanner() {
+    identityDismissed = true;
+    notifyListeners();
+  }
+
+  /// 延迟 300ms 执行恒等式检查，避免同步后频繁请求。
+  void scheduleIdentityCheck() {
+    _identityTimer?.cancel();
+    _identityTimer = Timer(const Duration(milliseconds: 300), () {
+      checkIdentityNow();
+    });
+  }
+
+  /// 执行恒等式检查：在线走服务端，离线用本地 Decimal 汇总兜底。
+  /// 仅更新告警状态，不阻断任何业务。
+  Future<void> checkIdentityNow() async {
+    if (!online) {
+      identityResult = await _localIdentityResult();
+      notifyListeners();
+      return;
+    }
+    try {
+      identityResult = await api.identityCheck();
+    } catch (_) {
+      // 网络抖动：回退到本地汇总，保持告警可用。
+      identityResult = await _localIdentityResult();
+    }
+    notifyListeners();
+  }
+
+  /// 本地恒等式：全部 posting 按币种求和应恒为 0。
+  Future<IdentityResult> _localIdentityResult() async {
+    final sums = await store.computeCommoditySums();
+    final diffs = <IdentityDiff>[];
+    sums.forEach((commodity, sum) {
+      final d = Decimal.tryParse(sum) ?? Decimal.zero;
+      if (d != Decimal.zero) {
+        diffs.add(IdentityDiff(commodity: commodity, sum: sum));
+      }
+    });
+    return IdentityResult(balanced: diffs.isEmpty, diffs: diffs);
+  }
+
+  @override
+  void dispose() {
+    _identityTimer?.cancel();
+    super.dispose();
+  }
 
   SyncState get syncState {
     if (!online) return SyncState.offline;
@@ -69,6 +139,8 @@ class LedgerController extends ChangeNotifier {
       if (kDebugMode) debugPrint('[ledger] 首次同步未预期异常: $e');
     }
     loading = false;
+    identityDismissed = false;
+    if (online) scheduleIdentityCheck();
     if (kDebugMode) debugPrint('[ledger] init 完成，loading=false');
     notifyListeners();
   }
@@ -93,6 +165,9 @@ class LedgerController extends ChangeNotifier {
     online = false;
     lastError = null;
     reversedUuids = {};
+    identityResult = null;
+    identityWarning = null;
+    identityDismissed = false;
     loading = true;
     notifyListeners();
     await init();
@@ -119,6 +194,22 @@ class LedgerController extends ChangeNotifier {
     });
     final bal = await store.computeBalances();
     final net = await store.computeNetWorth(acc);
+    final audit = await store.computeNetWorthAudit(acc);
+    // 双算校验（FR-14）：netA 与 netB 应逐币种相等；不一致只告警并记诊断日志。
+    final diffs = audit.entries
+        .where((e) => (Decimal.tryParse(e.value) ?? Decimal.zero) != Decimal.zero)
+        .toList();
+    if (diffs.isNotEmpty) {
+      final detail = diffs.map((e) => '${e.key} ${e.value}').join(', ');
+      identityWarning = '净值双算不一致：$detail';
+      debugPrint('[networth] diff $detail');
+    } else {
+      identityWarning = null;
+    }
+    // 离线时用本地 Decimal 汇总做恒等式检查（§8.2 离线兜底）。
+    if (!online) {
+      identityResult = await _localIdentityResult();
+    }
     final byType = await store.computeBalancesByType(acc);
     final seq = await store.getLastSeq();
     final pend = await store.countPending();
@@ -144,6 +235,9 @@ class LedgerController extends ChangeNotifier {
       await reload();
       online = ok;
       lastError = null;
+      // 刷新后横幅重现（用户关闭只作用于本次展示）。
+      identityDismissed = false;
+      if (ok) scheduleIdentityCheck();
       notifyListeners();
       return ok;
     } on ApiException catch (e) {
@@ -165,6 +259,7 @@ class LedgerController extends ChangeNotifier {
     required String name,
     required String type,
     required String openDate,
+    String? displayName,
     String? commodity,
     String? icon,
     String? color,
@@ -175,6 +270,7 @@ class LedgerController extends ChangeNotifier {
       name: name,
       type: type,
       openDate: openDate,
+      displayName: displayName,
       commodity: commodity,
       icon: icon,
       color: color,
@@ -182,7 +278,72 @@ class LedgerController extends ChangeNotifier {
       subType: subType,
     );
     await reload();
+    // 在线推送可能触发自然键合并（server_uuid 重映射），返回最新的同记录，
+    // 否则调用方拿到 loc- 旧 uuid，无法继续设置期初。
+    for (final x in accounts) {
+      if (x.uuid == a.uuid) return x;
+    }
+    for (final x in accounts) {
+      if (x.name == name) return x;
+    }
     return a;
+  }
+
+  // ---- 期初余额（0.4 期初重构，仅在线）----
+
+  /// 读取账户当前期初（仅在线调用）。
+  Future<OpeningView> loadOpening(String accountUuid) =>
+      api.getOpening(accountUuid);
+
+  /// 设置 / 修正 / 清空期初：走 opening 端点（后端自动冲正重建），随后增量同步。
+  Future<OpeningResult> saveOpening(
+    String accountUuid, {
+    required String amount,
+    required String direction,
+    String commodity = '',
+    String date = '',
+  }) async {
+    final r = await sync.setOpeningOnline(
+      accountUuid,
+      amount: amount,
+      direction: direction,
+      commodity: commodity,
+      date: date,
+    );
+    await reload();
+    scheduleIdentityCheck();
+    return r;
+  }
+
+  /// 在线关闭账户；余额非 0 时抛 ApiException（code=account_balance_not_zero）。
+  Future<void> closeAccountOnline(LocalAccount a) async {
+    await sync.closeAccountOnline(a);
+    await reload();
+    scheduleIdentityCheck();
+  }
+
+  /// 修改账本期初日期（owner）：服务端会重建全部期初交易，随后增量拉取。
+  Future<Ledger> changeLedgerOpeningDate(Ledger l, String openingDate) async {
+    final updated = await api.updateLedger(
+      l.id,
+      l.name,
+      l.defaultCommodity,
+      openingDate: openingDate,
+    );
+    if (updated.openingDate.isNotEmpty) {
+      await store.cacheLedgerOpeningDate(l.id, updated.openingDate);
+    }
+    await sync.sync();
+    await reload();
+    scheduleIdentityCheck();
+    return updated;
+  }
+
+  /// 账本期初日期（优先离线缓存）；未缓存返回空串。
+  Future<String> get ledgerOpeningDate async {
+    final id = LedgerApi.ledgerId;
+    if (id == null) return '';
+    return (await store.getCachedLedgerOpeningDate(id)) ?? '';
   }
 
   Future<LocalTxn> createTransaction({
@@ -224,8 +385,14 @@ class LedgerController extends ChangeNotifier {
 
   Future<String> exportText() => api.export();
 
+  /// 导出并携带恒等式告警头（前端展示「账本不平」提示）。
+  Future<ExportFileResult> exportChecked() => api.exportChecked();
+
   /// 导出多文件目录（main.bean + accounts/ + date/）打包的 zip 字节流。
   Future<List<int>> exportArchive() => api.exportArchive();
+
+  /// 导出目录并携带恒等式告警头。
+  Future<ExportArchiveResult> exportArchiveChecked() => api.exportArchiveChecked();
 
   // ---- 删除（P1-B1：软删 + 同步到其他端）----
 

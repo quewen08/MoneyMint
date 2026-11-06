@@ -53,6 +53,42 @@ func newTestEngine(t *testing.T, txns int) (*Engine, *sql.DB, string) {
 	return engine, conn, dbPath
 }
 
+// TestSnapshotRecordsIdentityWarnings 快照后恒等式检查失衡只告警、不阻断备份。
+func TestSnapshotRecordsIdentityWarnings(t *testing.T) {
+	engine, conn, _ := newTestEngine(t, 1)
+
+	// 额外插入一条单边分录，制造 CNY 恒等式失衡（-1.00）。
+	if _, err := conn.Exec(`INSERT INTO transactions(id, ledger_id, uuid, date, flag, description)
+		VALUES(99, 1, 'txn-99', '2026-11-02', '*', '失衡交易')`); err != nil {
+		t.Fatalf("insert unbalanced txn: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO postings(transaction_id, account_id, commodity, amount, position)
+		VALUES(99, 1, 'CNY', '-1.00', 0)`); err != nil {
+		t.Fatalf("insert unbalanced posting: %v", err)
+	}
+
+	item, err := engine.Snapshot("manual")
+	if err != nil {
+		t.Fatalf("失衡账本不应阻断备份: %v", err)
+	}
+	if item == nil {
+		t.Fatal("snapshot 返回空结果")
+	}
+	defer os.Remove(filepath.Join(engine.Dir(), item.Name))
+
+	if len(item.IdentityWarnings) != 1 {
+		t.Fatalf("应记录 1 个失衡账本告警，实际 %d", len(item.IdentityWarnings))
+	}
+	got := item.IdentityWarnings[0]
+	if got.LedgerID != 1 {
+		t.Fatalf("告警账本应为 1，实际 %d", got.LedgerID)
+	}
+	if len(got.Diffs) != 1 || got.Diffs[0].Commodity != "CNY" || got.Diffs[0].Sum != "-1.00" {
+		t.Fatalf("差额明细不符: %+v", got.Diffs)
+	}
+}
+
+
 // TestSnapshotIncludesUncheckpointedWAL 是本模块最重要的测试。
 //
 // 数据库运行在 WAL 模式，刚写入的数据可能全部驻留在 -wal 文件里。

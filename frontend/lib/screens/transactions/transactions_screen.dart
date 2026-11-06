@@ -60,6 +60,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     out.sort((a, b) {
       int c;
       if (_sortCol == 1) {
+        // 金额大小展示，与账本符号无关（按绝对值排序）。
         final da =
             (Decimal.tryParse(ledger.txnHeadline(a) ?? '0') ?? Decimal.zero).abs();
         final db =

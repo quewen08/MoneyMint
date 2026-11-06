@@ -31,9 +31,10 @@ func (h *Handler) HandleCreateTransaction(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var req struct {
-		Date        string `json:"date"`
-		Flag        string `json:"flag"`
-		Description string `json:"description"`
+		Date        string   `json:"date"`
+		Flag        string   `json:"flag"`
+		Description string   `json:"description"`
+		Tags        []string `json:"tags"`
 		Postings    []struct {
 			AccountID int64  `json:"account_id"`
 			Commodity string `json:"commodity"`
@@ -56,7 +57,7 @@ func (h *Handler) HandleCreateTransaction(w http.ResponseWriter, r *http.Request
 	if uid, ok := auth.UserID(r.Context()); ok {
 		createdBy = uid
 	}
-	created, err := h.svc.CreateTransaction(ledgerID, req.Date, req.Flag, req.Description, postings, createdBy)
+	created, err := h.svc.CreateTransaction(ledgerID, req.Date, req.Flag, req.Description, postings, createdBy, req.Tags...)
 	if err != nil {
 		writeError(w, err)
 		return

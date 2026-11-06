@@ -33,7 +33,10 @@ func (s *Store) listTransactions(ledgerID int64, deleted bool) ([]domain.Transac
 	}
 	rows, err := s.db.Query(
 		`SELECT t.id, t.uuid, t.date, t.flag, t.description, t.tags, t.created_by,
-		        u.display_name AS created_by_name, t.deleted_at
+		        u.display_name AS created_by_name, t.deleted_at,
+		        COALESCE(t.reversal_of, ''), COALESCE(t.opening_account_uuid, ''),
+		        COALESCE(t.opening_version, 0), COALESCE(t.opening_key, ''),
+		        COALESCE(t.reversed_by, '')
 		 FROM transactions t
 		 LEFT JOIN users u ON t.created_by = u.id
 		 WHERE t.ledger_id=? AND `+where+` ORDER BY `+order,
@@ -48,7 +51,8 @@ func (s *Store) listTransactions(ledgerID int64, deleted bool) ([]domain.Transac
 		var t domain.Transaction
 		var tags sql.NullString
 		var deletedAt sql.NullString
-		if err := rows.Scan(&t.ID, &t.UUID, &t.Date, &t.Flag, &t.Description, &tags, &t.CreatedBy, &t.CreatedByName, &deletedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.UUID, &t.Date, &t.Flag, &t.Description, &tags, &t.CreatedBy, &t.CreatedByName, &deletedAt,
+			&t.ReversalOf, &t.OpeningAccountUUID, &t.OpeningVersion, &t.OpeningKey, &t.ReversedBy); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -109,12 +113,16 @@ func (s *Store) TransactionByUUID(ledgerID int64, uuid string) (domain.Transacti
 	var tags sql.NullString
 	err := s.db.QueryRow(
 		`SELECT t.id, t.uuid, t.date, t.flag, t.description, t.tags, t.created_by,
-		        u.display_name AS created_by_name
+		        u.display_name AS created_by_name,
+		        COALESCE(t.reversal_of, ''), COALESCE(t.opening_account_uuid, ''),
+		        COALESCE(t.opening_version, 0), COALESCE(t.opening_key, ''),
+		        COALESCE(t.reversed_by, '')
 		 FROM transactions t
 		 LEFT JOIN users u ON t.created_by = u.id
 		 WHERE t.ledger_id=? AND t.uuid=? AND t.deleted_at IS NULL`,
 		ledgerID, uuid,
-	).Scan(&t.ID, &t.UUID, &t.Date, &t.Flag, &t.Description, &tags, &t.CreatedBy, &t.CreatedByName)
+	).Scan(&t.ID, &t.UUID, &t.Date, &t.Flag, &t.Description, &tags, &t.CreatedBy, &t.CreatedByName,
+		&t.ReversalOf, &t.OpeningAccountUUID, &t.OpeningVersion, &t.OpeningKey, &t.ReversedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Transaction{}, domain.ErrNotFound
 	}
@@ -212,9 +220,9 @@ func (s *Store) saveTransaction(ledgerID int64, txn domain.Transaction, idempote
 		createdBy = txn.CreatedBy
 	}
 	res, err := tx.Exec(
-		`INSERT INTO transactions(ledger_id, uuid, date, flag, description, tags, created_by)
-		 VALUES(?, ?, ?, ?, ?, ?, ?)`,
-		ledgerID, txn.UUID, txn.Date, txn.Flag, txn.Description, marshalTags(txn.Tags), createdBy,
+		`INSERT INTO transactions(ledger_id, uuid, date, flag, description, tags, created_by, reversal_of)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))`,
+		ledgerID, txn.UUID, txn.Date, txn.Flag, txn.Description, marshalTags(txn.Tags), createdBy, txn.ReversalOf,
 	)
 	if err != nil {
 		return 0, false, fmt.Errorf("写入交易失败: %w", err)
@@ -313,28 +321,75 @@ func (s *Store) SoftDeleteTransaction(ledgerID int64, uuid string) (bool, error)
 	return true, nil
 }
 
-// CloseAccount 关闭账户（Beancount close 语义）：置 close_date，保留全部交易引用。
-// 不再软删账户、不连带删除引用交易（0.4-A 起，原 SoftDeleteAccount 语义废弃）。
-// 写 sync_log op=close。幂等：不存在/已关闭返回 false。
-func (s *Store) CloseAccount(ledgerID int64, uuid string) (bool, error) {
-	// 仅匹配未关闭账户（close_date IS NULL）；deleted_at 兼容旧库（0.4 起不再写入）。
-	// close_date 取 date('now')：Beancount close 指令要求 YYYY-MM-DD 格式。
-	res, err := s.db.Exec(
+// CloseAccountChecked 在事务内校验余额并关闭账户（Beancount close 语义）。
+// 余额非 0 时不关闭，返回按币种的差额明细（调用方映射为 409）；
+// 余额为 0 时置 close_date、写 sync_log op=close。
+// 返回：closed=true 表示本次成功关闭；closed=false 且 diffs 为空表示不存在/已关闭（幂等）。
+func (s *Store) CloseAccountChecked(ledgerID int64, uuid string) (bool, []domain.BalanceDiff, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var closeDate sql.NullString
+	err = tx.QueryRow(
+		`SELECT close_date FROM accounts
+		 WHERE ledger_id=? AND uuid=? AND deleted_at IS NULL`,
+		ledgerID, uuid,
+	).Scan(&closeDate)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil, nil
+	}
+	if err != nil {
+		return false, nil, err
+	}
+	if closeDate.Valid {
+		return false, nil, nil // 已关闭：幂等
+	}
+
+	sums, err := accountBalanceRatsOn(tx, ledgerID, uuid)
+	if err != nil {
+		return false, nil, err
+	}
+	prec, err := commodityPrecisionMapOn(tx, ledgerID)
+	if err != nil {
+		return false, nil, err
+	}
+	var diffs []domain.BalanceDiff
+	for commodity, sum := range sums {
+		if sum.Sign() == 0 {
+			continue
+		}
+		p := prec[commodity]
+		if p <= 0 {
+			p = 2
+		}
+		diffs = append(diffs, domain.BalanceDiff{Commodity: commodity, Amount: sum.FloatString(p)})
+	}
+	if len(diffs) > 0 {
+		sortDiffByCommodity(diffs)
+		return false, diffs, nil // 未提交，事务回滚；账户保持打开
+	}
+
+	res, err := tx.Exec(
 		`UPDATE accounts SET close_date=date('now'), updated_at=datetime('now')
 		 WHERE ledger_id=? AND uuid=? AND close_date IS NULL AND deleted_at IS NULL`,
 		ledgerID, uuid,
 	)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return false, nil
+	if n, _ := res.RowsAffected(); n == 0 {
+		return false, nil, nil // 并发已关闭
 	}
-	if _, err := appendSyncLogOn(s.db, ledgerID, domain.EntityAccount, uuid, domain.OpClose); err != nil {
-		return false, err
+	if _, err := appendSyncLogOn(tx, ledgerID, domain.EntityAccount, uuid, domain.OpClose); err != nil {
+		return false, nil, err
 	}
-	return true, nil
+	if err := tx.Commit(); err != nil {
+		return false, nil, err
+	}
+	return true, nil, nil
 }
 
 // sqlArgsIn 为 IN 子句生成占位符与参数。

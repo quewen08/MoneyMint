@@ -84,11 +84,15 @@ class Ledger {
   final String defaultCommodity;
   final String role; // owner | editor | viewer
 
+  /// 账本期初日期（`YYYY-MM-DD`）。空串表示后端未返回（旧版本兼容）。
+  final String openingDate;
+
   Ledger({
     required this.id,
     required this.name,
     this.defaultCommodity = '',
     required this.role,
+    this.openingDate = '',
   });
 
   factory Ledger.fromJson(Map<String, dynamic> j) => Ledger(
@@ -96,6 +100,7 @@ class Ledger {
         name: j['name'] as String,
         defaultCommodity: j['default_commodity'] as String? ?? '',
         role: j['role'] as String? ?? '',
+        openingDate: j['opening_date'] as String? ?? '',
       );
 }
 

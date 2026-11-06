@@ -66,7 +66,12 @@ func (s *Service) ListTransactions(ledgerID int64) ([]TransactionView, error) {
 
 // CreateTransaction 创建一笔不可变交易（在线，postings 用 account_id 引用）。
 // 先做借贷平衡校验，再在事务内落库并补建币种。
-func (s *Service) CreateTransaction(ledgerID int64, date, flag, description string, postings []PostingInput, createdBy int64) (TransactionCreated, error) {
+// tags 中禁止出现 opening：期初只能走专用端点，防止绕过方向/币种/唯一性校验。
+func (s *Service) CreateTransaction(ledgerID int64, date, flag, description string, postings []PostingInput, createdBy int64, tags ...string) (TransactionCreated, error) {
+	if containsTag(tags, "opening") {
+		return TransactionCreated{}, domain.Codedf(domain.ErrInvalid, domain.CodeOpeningViaAPIOnly,
+			"期初余额请通过账户期初专用端点设置")
+	}
 	if len(postings) < 2 {
 		return TransactionCreated{}, domain.Invalidf("一笔交易至少需要 2 条分录")
 	}
@@ -85,6 +90,7 @@ func (s *Service) CreateTransaction(ledgerID int64, date, flag, description stri
 		Date:        date,
 		Flag:        flag,
 		Description: description,
+		Tags:        append([]string(nil), tags...),
 		CreatedBy:   createdBy,
 		Postings:    make([]domain.Posting, 0, len(postings)),
 	}

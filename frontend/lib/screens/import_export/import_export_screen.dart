@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../app/scope.dart';
 import '../../app/theme.dart';
+import '../../utils/opening.dart';
 import '../../widgets/common.dart';
 import '../../widgets/pc.dart';
 
@@ -14,10 +15,16 @@ class ImportExportScreen extends StatelessWidget {
   Future<void> _exportBeancount(BuildContext context) async {
     final ledger = AppScope.of(context).ledger;
     try {
-      final text = await ledger.exportText();
-      _download('family-ledger.beancount', text, 'text/plain');
+      final r = await ledger.exportChecked();
+      _download('family-ledger.beancount', r.text, 'text/plain');
       if (context.mounted) {
-        showAppSnack(context, '已导出 .beancount（${text.length} 字符）');
+        showAppSnack(
+          context,
+          r.balanced
+              ? '已导出 .beancount（${r.text.length} 字符）'
+              : '已导出 .beancount，但账本不平：${formatIdentityDiffs(r.diffs)}',
+          warn: !r.balanced,
+        );
       }
     } catch (e) {
       if (context.mounted) showAppSnack(context, '导出失败：$e', warn: true);
@@ -27,10 +34,16 @@ class ImportExportScreen extends StatelessWidget {
   Future<void> _exportArchive(BuildContext context) async {
     final ledger = AppScope.of(context).ledger;
     try {
-      final bytes = await ledger.exportArchive();
-      _download('ledger-beancount.zip', bytes, 'application/zip');
+      final r = await ledger.exportArchiveChecked();
+      _download('ledger-beancount.zip', r.bytes, 'application/zip');
       if (context.mounted) {
-        showAppSnack(context, '已导出账本目录（zip，含 main.bean + accounts/ + date/）');
+        showAppSnack(
+          context,
+          r.balanced
+              ? '已导出账本目录（zip，含 main.bean + accounts/ + date/）'
+              : '已导出账本目录，但账本不平：${formatIdentityDiffs(r.diffs)}',
+          warn: !r.balanced,
+        );
       }
     } catch (e) {
       if (context.mounted) showAppSnack(context, '导出失败：$e', warn: true);

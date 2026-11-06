@@ -13,6 +13,7 @@
 #   check     test + 版本校验 + bean-check 自检（CI 同款）
 #   version   版本号三处一致性校验
 #   smoke     端到端冒烟
+#   rehearse  迁移 012 副本库预演（VACUUM INTO 快照 + 两次迁移 + bean-check）
 #
 # 存在原因：本机 Windows 无 make，Makefile 无法直接使用。
 
@@ -74,7 +75,11 @@ case "$cmd" in
     bash scripts/smoke.sh
     ;;
 
+  rehearse)
+    bash scripts/rehearsal.sh
+    ;;
+
   help|*)
-    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
 esac

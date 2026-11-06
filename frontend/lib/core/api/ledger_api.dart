@@ -5,7 +5,12 @@ import 'dart:convert';
 import 'dart:html' as html;
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
+import 'api_error.dart';
+import 'opening_models.dart';
 import 'sync_models.dart';
+
+// 让既有 `import ledger_api.dart` 的调用方继续拿到 ApiException。
+export 'api_error.dart';
 
 class LedgerApi {
   final String base;
@@ -294,12 +299,60 @@ class LedgerApi {
 
   /// 关闭账户（Beancount close）：DELETE /api/accounts/{uuid}，服务器置 close_date。
   /// 0.4-A 起语义从软删改为关闭，保留全部交易引用；HTTP 动词仍为 DELETE。
+  /// 余额非 0 时抛 `ApiException(code=account_balance_not_zero)`，details 内带 balances。
   Future<void> closeAccount(String uuid) async {
     final r = await http.delete(
       Uri.parse('$base/api/accounts/$uuid'),
       headers: _headers,
     );
     _check(r);
+  }
+
+  // ---- 期初余额（0.4 期初重构，仅在线）----
+
+  /// 读取账户当前期初（GET /api/accounts/{uuid}/opening）。
+  Future<OpeningView> getOpening(String uuid) async {
+    final r = await http.get(
+      Uri.parse('$base/api/accounts/$uuid/opening'),
+      headers: _headers,
+    );
+    _check(r);
+    return OpeningView.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
+  }
+
+  /// 设置 / 修正 / 清空账户期初（POST /api/accounts/{uuid}/opening）。
+  ///
+  /// [direction] 取 `hold` / `owe`；[amount] 为非负的定点十进制字符串；
+  /// [commodity] 为空时由服务端按账户限制或账本默认币种推导。
+  Future<OpeningResult> setOpening(
+    String uuid, {
+    required String amount,
+    required String direction,
+    String commodity = '',
+    String date = '',
+  }) async {
+    final r = await http.post(
+      Uri.parse('$base/api/accounts/$uuid/opening'),
+      headers: _headers,
+      body: jsonEncode({
+        'amount': amount,
+        'direction': direction,
+        if (commodity.isNotEmpty) 'commodity': commodity,
+        if (date.isNotEmpty) 'date': date,
+      }),
+    );
+    _check(r);
+    return OpeningResult.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
+  }
+
+  /// 全账本恒等式检查（GET /api/identity/check）。
+  Future<IdentityResult> identityCheck() async {
+    final r = await http.get(
+      Uri.parse('$base/api/identity/check'),
+      headers: _headers,
+    );
+    _check(r);
+    return IdentityResult.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
   }
 
   /// 软删一笔交易（写 sync_log delete）。
@@ -361,12 +414,23 @@ class LedgerApi {
     return Ledger.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
   }
 
-  /// 更新账本名称与默认币种（仅 owner）。
-  Future<Ledger> updateLedger(int id, String name, String defaultCommodity) async {
+  /// 更新账本名称、默认币种与期初日期（仅 owner）。
+  ///
+  /// [openingDate] 为空时不下发 `opening_date`，避免误改（账本改名/改币种场景）。
+  Future<Ledger> updateLedger(
+    int id,
+    String name,
+    String defaultCommodity, {
+    String? openingDate,
+  }) async {
     final r = await http.patch(
       Uri.parse('$base/api/ledgers/$id'),
       headers: _headers,
-      body: jsonEncode({'name': name, 'default_commodity': defaultCommodity}),
+      body: jsonEncode({
+        'name': name,
+        'default_commodity': defaultCommodity,
+        if (openingDate != null && openingDate.isNotEmpty) 'opening_date': openingDate,
+      }),
     );
     _check(r);
     return Ledger.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
@@ -427,20 +491,57 @@ class LedgerApi {
 
   // ---- 导出 ----
 
-  Future<String> export() async {
+  /// 导出单文件 `.beancount`（仅正文，兼容既有调用方）。
+  Future<String> export() async => (await exportChecked()).text;
+
+  /// 导出单文件并解析服务端恒等式告警头（`x-ledger-balanced` / `x-ledger-diffs`）。
+  Future<ExportFileResult> exportChecked() async {
     final r = await http.get(Uri.parse('$base/api/export'), headers: _headers);
     _check(r);
-    return r.body;
+    return ExportFileResult(
+      text: r.body,
+      balanced: _parseBalanced(r.headers['x-ledger-balanced']),
+      diffs: _parseDiffs(r.headers['x-ledger-diffs']),
+    );
   }
 
   /// 导出多文件目录（main.bean + accounts/ + date/）打包的 zip 字节流。
-  Future<List<int>> exportArchive() async {
+  Future<List<int>> exportArchive() async => (await exportArchiveChecked()).bytes;
+
+  /// 导出目录并解析恒等式告警头。
+  Future<ExportArchiveResult> exportArchiveChecked() async {
     final r = await http.get(
       Uri.parse('$base/api/export/archive'),
       headers: _headers,
     );
     _check(r);
-    return r.bodyBytes;
+    return ExportArchiveResult(
+      bytes: r.bodyBytes,
+      balanced: _parseBalanced(r.headers['x-ledger-balanced']),
+      diffs: _parseDiffs(r.headers['x-ledger-diffs']),
+    );
+  }
+
+  /// 解析 `X-Ledger-Balanced`；缺失时按平衡处理（旧服务端兼容）。
+  bool _parseBalanced(String? raw) {
+    if (raw == null || raw.isEmpty) return true;
+    final v = raw.toLowerCase();
+    return v == 'true' || v == '1';
+  }
+
+  /// 解析 `X-Ledger-Diffs`（形如 `CNY=0.01;USD=-0.02`）。
+  List<IdentityDiff> _parseDiffs(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    final out = <IdentityDiff>[];
+    for (final part in raw.split(';')) {
+      final idx = part.indexOf('=');
+      if (idx <= 0) continue;
+      final commodity = part.substring(0, idx).trim();
+      final sum = part.substring(idx + 1).trim();
+      if (commodity.isEmpty || sum.isEmpty) continue;
+      out.add(IdentityDiff(commodity: commodity, sum: sum));
+    }
+    return out;
   }
 
   // ---- 备份（全库级，仅系统管理员）----
@@ -475,28 +576,11 @@ class LedgerApi {
     return r.bodyBytes;
   }
 
-  /// 检查响应：非 2xx 抛 ApiException（尽力提取服务端 error 字段）。
+  /// 检查响应：非 2xx 抛 ApiException（提取服务端 error/code/details）。
   void _check(http.Response r) {
     if (r.statusCode >= 200 && r.statusCode < 300) return;
-    var message = 'HTTP ${r.statusCode}';
-    try {
-      final j = jsonDecode(r.body);
-      if (j is Map && j['error'] is String) {
-        message = j['error'] as String;
-      }
-    } catch (_) {}
-    throw ApiException(r.statusCode, message);
+    throw ApiException.fromBody(r.statusCode, r.body);
   }
-}
-
-/// 带状态码的 API 异常，便于 UI 按 401/403 分别处理。
-class ApiException implements Exception {
-  final int statusCode;
-  final String message;
-  ApiException(this.statusCode, this.message);
-
-  @override
-  String toString() => message;
 }
 
 /// 后端 API 地址。

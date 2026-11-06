@@ -70,6 +70,7 @@ class _CalendarViewState extends State<CalendarView> {
     final totals = <String, Decimal>{};
     for (final t in widget.txns) {
       for (final p in t.postings) {
+        // 金额大小展示，与账本符号无关（选展示币种用）。
         totals[p.commodity] =
             (totals[p.commodity] ?? Decimal.zero) + (Decimal.tryParse(p.amount) ?? Decimal.zero).abs();
       }
@@ -93,8 +94,10 @@ class _CalendarViewState extends State<CalendarView> {
         } else {
           final ty = types[p.accountUuid];
           if (ty == 'Expenses') {
+            // 金额大小展示，与账本符号无关（支出按大小记为负）。
             delta = -v.abs();
           } else if (ty == 'Income') {
+            // 金额大小展示，与账本符号无关（收入按大小记为正）。
             delta = v.abs();
           } else {
             continue; // 资产/负债/权益之间的转移不计入当日收支

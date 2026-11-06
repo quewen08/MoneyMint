@@ -1,4 +1,5 @@
 /// 账户页（设计稿「账户」）：按 资产/负债/权益/收入/支出 分组展示，可跳转到该账户流水。
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../app/scope.dart';
 import '../../app/navigation.dart';
@@ -181,6 +182,15 @@ class _HeroAssets extends StatelessWidget {
     return m.entries.map((e) => formatMoney(e.value, e.key)).join('  ');
   }
 
+  /// 总负债按展示惯例取正数幅度；负债余额本身为负，这里显式 abs，不依赖格式化层吞符号。
+  String _moneyAbs(Map<String, String> m) {
+    if (m.isEmpty) return '—';
+    return m.entries
+        .map((e) => formatMoney(
+            (Decimal.tryParse(e.value) ?? Decimal.zero).abs().toString(), e.key))
+        .join('  ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final assets = ledger.byType['Assets'] ?? {};
@@ -202,7 +212,7 @@ class _HeroAssets extends StatelessWidget {
       summary: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('净资产（资产 − 负债）',
+          Text('净资产（资产 + 负债，负债为负）',
               style: TextStyle(
                   fontSize: 12, color: Colors.white.withValues(alpha: .72))),
           const SizedBox(height: 4),
@@ -228,7 +238,7 @@ class _HeroAssets extends StatelessWidget {
                   color: Colors.white.withValues(alpha: .22),
                   margin: const EdgeInsets.symmetric(horizontal: 14)),
               Expanded(
-                child: _heroCol('总负债', _money(liabs)),
+                child: _heroCol('总负债', _moneyAbs(liabs)),
               ),
             ],
           ),
@@ -269,6 +279,15 @@ class _AssetSummary extends StatelessWidget {
     return m.entries.map((e) => formatMoney(e.value, e.key)).join('  ');
   }
 
+  /// 总负债按展示惯例取正数幅度；负债余额本身为负，这里显式 abs，不依赖格式化层吞符号。
+  String _moneyAbs(Map<String, String> m) {
+    if (m.isEmpty) return '—';
+    return m.entries
+        .map((e) => formatMoney(
+            (Decimal.tryParse(e.value) ?? Decimal.zero).abs().toString(), e.key))
+        .join('  ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final assets = ledger.byType['Assets'] ?? {};
@@ -279,7 +298,7 @@ class _AssetSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('净资产（资产 − 负债）', style: AppTheme.muted),
+          const Text('净资产（资产 + 负债，负债为负）', style: AppTheme.muted),
           const SizedBox(height: 4),
           Text(
             net.isEmpty ? '¥ 0.00' : _money(net),
@@ -297,7 +316,7 @@ class _AssetSummary extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _SummaryItem(label: '总负债', value: _money(liabs), color: AppColors.warn),
+                child: _SummaryItem(label: '总负债', value: _moneyAbs(liabs), color: AppColors.warn),
               ),
             ],
           ),
@@ -345,6 +364,7 @@ class _AccountMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ledger = AppScope.of(context).ledger;
     return PopupMenuButton<String>(
       tooltip: '账户操作',
       icon: const Icon(Icons.more_vert, size: 18, color: AppColors.sub),
@@ -368,10 +388,11 @@ class _AccountMenu extends StatelessWidget {
         } else if (v == 'default') {
           _setDefault(context);
         } else if (v == 'close') {
-          _confirmClose(context);
+          runCloseAccountFlow(context, ledger, account);
         }
       },
       itemBuilder: (_) {
+        final online = ledger.online;
         final items = <PopupMenuItem<String>>[
           const PopupMenuItem(value: 'detail', child: Text('账户详情')),
           const PopupMenuItem(value: 'flow', child: Text('查看流水')),
@@ -382,9 +403,13 @@ class _AccountMenu extends StatelessWidget {
             child: Text(account.type == 'Expenses' ? '设为默认支出账户' : '设为默认收入账户'),
           ));
         }
-        items.add(const PopupMenuItem(
+        items.add(PopupMenuItem(
           value: 'close',
-          child: Text('关闭账户', style: TextStyle(color: AppColors.warn)),
+          enabled: online,
+          child: Text(
+            online ? '关闭账户' : '关闭账户（需联网）',
+            style: TextStyle(color: online ? AppColors.warn : AppColors.sub),
+          ),
         ));
         return items;
       },
@@ -400,37 +425,6 @@ class _AccountMenu extends StatelessWidget {
     } catch (e) {
       if (!context.mounted) return;
       showAppSnack(context, '设置失败: $e', warn: true);
-    }
-  }
-
-  Future<void> _confirmClose(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('关闭账户？'),
-        content: Text(
-            '将关闭账户「${account.display}」并同步到所有端。\n'
-            '历史交易全部保留，余额历史照常计入；\n'
-            '默认列表隐藏已关闭账户，可在「显示已关闭」中查看。'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.warn),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await AppScope.of(context).ledger.closeAccount(account);
-      if (!context.mounted) return;
-      showAppSnack(context, '账户已关闭');
-    } catch (e) {
-      if (!context.mounted) return;
-      showAppSnack(context, '关闭失败: $e', warn: true);
     }
   }
 }

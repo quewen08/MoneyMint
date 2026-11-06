@@ -24,6 +24,7 @@ var migrations = []struct {
 	{"009_app_settings", migrate009},
 	{"010_force_password_change", migrate010},
 	{"011_session_meta", migrate011},
+	{"012_opening_balance", migrate012},
 }
 
 // migrate011：sessions 增加设备信息（M3 会话列表与吊销）。

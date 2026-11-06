@@ -43,7 +43,8 @@ func readJSON(r *http.Request, v any) error {
 	return dec.Decode(v)
 }
 
-// writeError 把领域/业务错误映射为 HTTP 状态码并输出 {"error": ...}。
+// writeError 把领域/业务错误映射为 HTTP 状态码并输出结构化 JSON。
+// 新业务错误优先携带稳定错误码（code）与可选明细（如 balances）。
 func writeError(w http.ResponseWriter, err error) {
 	// 限流是独立语义：429 + Retry-After，且要给出「等多久」让前端能显示倒计时。
 	var rl *domain.RateLimitError
@@ -60,7 +61,55 @@ func writeError(w http.ResponseWriter, err error) {
 		})
 		return
 	}
+
+	// 关闭账户余额非 0：409 + 按币种差额明细（设计 §3.4.6）。
+	var bz *domain.BalanceNotZeroError
+	if errors.As(err, &bz) {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":        bz.Error(),
+			"code":         domain.CodeAccountBalanceNotZero,
+			"account_uuid": bz.AccountUUID,
+			"balances":     bz.Balances,
+		})
+		return
+	}
+
+	// 带错误码的业务错误：code 平铺 details，便于前端直接读取。
+	var ce *domain.CodedError
+	if errors.As(err, &ce) {
+		body := map[string]any{"error": ce.Message}
+		if ce.Code != "" {
+			body["code"] = ce.Code
+		}
+		if ce.Details != nil {
+			if m, ok := ce.Details.(map[string]any); ok {
+				for k, v := range m {
+					body[k] = v
+				}
+			} else {
+				body["details"] = ce.Details
+			}
+		}
+		writeJSON(w, statusForCoded(ce), body)
+		return
+	}
+
 	writeJSON(w, statusOf(err), map[string]string{"error": err.Error()})
+}
+
+// statusForCoded 决定 CodedError 的 HTTP 状态：优先哨兵语义，其次错误码。
+func statusForCoded(e *domain.CodedError) int {
+	if e.Sentinel != nil {
+		return statusOf(e)
+	}
+	switch e.Code {
+	case domain.CodeAccountNotFound:
+		return http.StatusNotFound
+	case domain.CodeAccountBalanceNotZero, domain.CodeAccountClosed, domain.CodeOpeningConflict:
+		return http.StatusConflict
+	default:
+		return http.StatusBadRequest
+	}
 }
 
 // statusOf 将哨兵错误映射为 HTTP 状态码，未知错误按 400 处理。

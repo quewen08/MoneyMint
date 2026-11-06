@@ -3,6 +3,7 @@
 /// P1-B2：push 逐条处理（单条失败不阻塞其余，results 逐条反馈）；
 /// 自然键合并：账户同名冲突时保留先到者，用 server_uuid 重映射本地引用。
 import '../api/ledger_api.dart';
+import '../api/opening_models.dart';
 import '../models/account.dart';
 import '../models/posting.dart';
 import '../models/transaction.dart';
@@ -129,6 +130,7 @@ class SyncService {
     required String name,
     required String type,
     required String openDate,
+    String? displayName,
     String? commodity,
     String? icon,
     String? color,
@@ -138,6 +140,7 @@ class SyncService {
     final a = LocalAccount(
       uuid: _newUuid(),
       name: name,
+      displayName: displayName,
       type: type,
       openDate: openDate,
       restriction: commodity,
@@ -215,6 +218,7 @@ class SyncService {
       color: a.color,
       parentUuid: a.parentUuid,
       subType: a.subType,
+      sortOrder: a.sortOrder,
     ));
     await store.addPending(PendingChange(
       entityType: 'account',
@@ -223,6 +227,41 @@ class SyncService {
       entity: {'uuid': a.uuid},
     ));
     await sync();
+  }
+
+  /// 在线设置期初（0.4 期初重构）：调用后端 opening 端点后增量拉取。
+  /// 期初仅在线可用，调用方必须先确认联网；离线不得落到待推送队列。
+  Future<OpeningResult> setOpeningOnline(
+    String accountUuid, {
+    required String amount,
+    required String direction,
+    String commodity = '',
+    String date = '',
+  }) async {
+    final result = await api.setOpening(
+      accountUuid,
+      amount: amount,
+      direction: direction,
+      commodity: commodity,
+      date: date,
+    );
+    await sync();
+    return result;
+  }
+
+  /// 在线关闭账户：服务端校验余额并在编辑/关闭日重建引用；成功后拉取关闭态。
+  /// 若拉取失败（网络抖动），本地先落 close 态，避免界面仍显示可记账。
+  Future<void> closeAccountOnline(LocalAccount a) async {
+    await api.closeAccount(a.uuid);
+    final ok = await sync();
+    if (!ok) {
+      final today = DateTime.now().toString().substring(0, 10);
+      await store.applyChange(
+        'account',
+        'close',
+        {'uuid': a.uuid, 'close_date': today},
+      );
+    }
   }
 
   /// 重排账户顺序（0.4-C 分类拖拽排序）：本地按传入顺序写 sort_order（1..N），

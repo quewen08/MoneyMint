@@ -42,13 +42,15 @@ type PushRequest struct {
 
 // PushResult 描述 push 中一条变更的逐条结果。
 type PushResult struct {
-	Index      int    `json:"index"`
-	EntityType string `json:"entity_type"`
-	UUID       string `json:"uuid,omitempty"`
-	Status     string `json:"status"`
-	Accepted   bool   `json:"accepted"`
-	ServerUUID string `json:"server_uuid,omitempty"`
-	Error      string `json:"error,omitempty"`
+	Index      int                   `json:"index"`
+	EntityType string                `json:"entity_type"`
+	UUID       string                `json:"uuid,omitempty"`
+	Status     string                `json:"status"`
+	Accepted   bool                  `json:"accepted"`
+	ServerUUID string                `json:"server_uuid,omitempty"`
+	Error      string                `json:"error,omitempty"`
+	Code       string                `json:"code,omitempty"`     // 稳定错误码（设计 §16）
+	Balances   []domain.BalanceDiff  `json:"balances,omitempty"` // 关闭账户余额非 0 明细
 }
 
 // PushResultOut 是 push 响应。
@@ -62,6 +64,8 @@ type PushResultOut struct {
 type pushApplyResult struct {
 	accepted   bool
 	serverUUID string
+	code       string
+	balances   []domain.BalanceDiff
 }
 
 // SyncPull 返回 since 之后的所有变更（水位增量），并记录客户端水位。
@@ -146,7 +150,7 @@ func (s *Service) loadEntity(ledgerID int64, typ, uuid string) (json.RawMessage,
 				"amount":       p.Amount,
 			})
 		}
-		return json.Marshal(map[string]any{
+		payload := map[string]any{
 			"uuid":           t.UUID,
 			"date":           t.Date,
 			"flag":           t.Flag,
@@ -154,7 +158,12 @@ func (s *Service) loadEntity(ledgerID int64, typ, uuid string) (json.RawMessage,
 			"tags":           t.Tags,
 			"created_by_name": nullIfEmpty(t.CreatedByName),
 			"postings":       postings,
-		})
+		}
+		// 冲正关系随 pull 下发（设计 §3.4.7）；无冲正关系时不输出该字段。
+		if t.ReversalOf != "" {
+			payload["reversed_of"] = t.ReversalOf
+		}
+		return json.Marshal(payload)
 	default:
 		return nil, fmt.Errorf("未知实体类型 %q", typ)
 	}
@@ -188,12 +197,23 @@ func (s *Service) SyncPush(ledgerID, userID int64, req PushRequest) (PushResultO
 		if err != nil {
 			pr.Status = "error"
 			pr.Error = err.Error()
+			var ce *domain.CodedError
+			if errors.As(err, &ce) {
+				pr.Code = ce.Code
+			}
+			var bz *domain.BalanceNotZeroError
+			if errors.As(err, &bz) {
+				pr.Code = domain.CodeAccountBalanceNotZero
+				pr.Balances = bz.Balances
+			}
 			results = append(results, pr)
 			return
 		}
 		pr.Status = "ok"
 		pr.Accepted = res.accepted
 		pr.ServerUUID = res.serverUUID
+		pr.Code = res.code
+		pr.Balances = res.balances
 		if res.accepted {
 			accepted++
 		}
@@ -353,6 +373,7 @@ func (s *Service) applyPushEntity(ledgerID, userID int64, typ, op string, raw js
 			Flag        string   `json:"flag"`
 			Description string   `json:"description"`
 			Tags        []string `json:"tags"`
+			ReversedOf  string   `json:"reversed_of"`
 			Postings    []struct {
 				AccountUUID string `json:"account_uuid"`
 				Commodity   string `json:"commodity"`
@@ -361,6 +382,11 @@ func (s *Service) applyPushEntity(ledgerID, userID int64, typ, op string, raw js
 		}
 		if err := json.Unmarshal(raw, &e); err != nil {
 			return pushApplyResult{}, err
+		}
+		// 期初只能由在线专用端点产生，禁止离线 push 伪造（设计 §3.4.7）。
+		if containsTag(e.Tags, "opening") {
+			return pushApplyResult{}, domain.Codedf(domain.ErrInvalid, domain.CodeOpeningViaAPIOnly,
+				"期初余额不能通过同步推送创建，请在在线端设置")
 		}
 		if e.UUID == "" || len(e.Postings) < 2 {
 			return pushApplyResult{}, domain.Invalidf("交易推送缺少 uuid 或分录不足")
@@ -383,7 +409,8 @@ func (s *Service) applyPushEntity(ledgerID, userID int64, typ, op string, raw js
 			date = time.Now().Format("2006-01-02")
 		}
 
-		txn := domain.Transaction{UUID: e.UUID, Date: date, Flag: flag, Description: e.Description, Tags: e.Tags, CreatedBy: userID}
+		txn := domain.Transaction{UUID: e.UUID, Date: date, Flag: flag, Description: e.Description,
+			Tags: e.Tags, ReversalOf: e.ReversedOf, CreatedBy: userID}
 		for _, p := range e.Postings {
 			accID, err := s.repo.AccountIDByUUID(ledgerID, p.AccountUUID)
 			if err != nil {
@@ -421,9 +448,8 @@ func (s *Service) applyDeleteEntity(ledgerID int64, typ string, raw json.RawMess
 	}
 	switch typ {
 	case domain.EntityAccount:
-		// 向前兼容：旧客户端 op=delete account → 按 close 处理。
-		closed, err := s.repo.CloseAccount(ledgerID, e.UUID)
-		return pushApplyResult{accepted: closed}, err
+		// 向前兼容：旧客户端 op=delete account → 按 close 处理（同样需余额为 0）。
+		return s.closeAccountCheckedResult(ledgerID, e.UUID)
 	case domain.EntityTransaction:
 		deleted, err := s.repo.SoftDeleteTransaction(ledgerID, e.UUID)
 		return pushApplyResult{accepted: deleted}, err
@@ -445,11 +471,23 @@ func (s *Service) applyCloseEntity(ledgerID int64, typ string, raw json.RawMessa
 	}
 	switch typ {
 	case domain.EntityAccount:
-		closed, err := s.repo.CloseAccount(ledgerID, e.UUID)
-		return pushApplyResult{accepted: closed}, err
+		return s.closeAccountCheckedResult(ledgerID, e.UUID)
 	default:
 		return pushApplyResult{}, fmt.Errorf("不支持关闭实体类型 %q", typ)
 	}
+}
+
+// closeAccountCheckedResult 是同步关闭账户的统一入口：与 REST 共用「余额必须为 0」校验。
+func (s *Service) closeAccountCheckedResult(ledgerID int64, uuid string) (pushApplyResult, error) {
+	closed, diffs, err := s.repo.CloseAccountChecked(ledgerID, uuid)
+	if err != nil {
+		return pushApplyResult{}, err
+	}
+	if len(diffs) > 0 {
+		return pushApplyResult{code: domain.CodeAccountBalanceNotZero, balances: diffs},
+			&domain.BalanceNotZeroError{AccountUUID: uuid, Balances: diffs}
+	}
+	return pushApplyResult{accepted: closed}, nil
 }
 
 // applyUpdateEntity 处理 op=update 的推送（0.4-C 起，仅账户排序等字段更新）。
