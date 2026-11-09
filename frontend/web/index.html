@@ -34,6 +34,13 @@
 
   <title>家庭记账</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    兼容门槛：ES5、零依赖、同步执行。必须在 flutter_bootstrap.js 之前，
+    用于把 Safari 14 / WebKit 14 的 CanvasKit 初始化白屏变成可读提示。
+    能力达标的浏览器不会看到任何额外内容。
+  -->
+  <script src="compat-gate.js"></script>
 </head>
 <body>
   <!-- Flutter bootstrap 会自动处理 Service Worker 注册（flutter_bootstrap.js 内 serviceWorkerSettings）。 -->

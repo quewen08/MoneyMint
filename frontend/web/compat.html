@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FamBean 浏览器兼容诊断</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#f4f6f8; color:#1b1f23; margin:0; padding:16px; -webkit-text-size-adjust:100%; }
+  h1 { font-size:20px; margin:0 0 6px; }
+  p.sub { font-size:13px; color:#5b6570; margin:0 0 16px; line-height:1.5; }
+  .card { background:#fff; border-radius:12px; padding:14px 16px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .card h2 { font-size:15px; margin:0 0 10px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td { padding:7px 0; border-bottom:1px solid #eef0f2; vertical-align:top; word-break:break-all; }
+  td:first-child { width:46%; color:#5b6570; }
+  td:last-child { text-align:right; font-family:ui-monospace,Menlo,monospace; }
+  .ok { color:#0a7a3f; font-weight:600; }
+  .bad { color:#c0392b; font-weight:600; }
+  .warn { color:#b26a00; font-weight:600; }
+  .neutral { color:#1b1f23; font-weight:500; }
+  .verdict { font-size:15px; line-height:1.6; padding:12px; border-radius:8px; margin-bottom:12px; }
+  .verdict.bad { background:#fdecea; }
+  .verdict.ok { background:#e8f6ee; }
+  .verdict.warn { background:#fff5e5; }
+  button { width:100%; padding:12px; font-size:15px; border:0; border-radius:10px; background:#1B6FD6; color:#fff; font-weight:600; }
+  button:active { background:#1257ac; }
+  textarea { width:100%; height:90px; font-size:11px; margin-top:10px; box-sizing:border-box; }
+  .small { font-size:12px; color:#5b6570; line-height:1.6; margin-top:10px; }
+</style>
+</head>
+<body>
+
+<h1>FamBean 浏览器兼容诊断</h1>
+<p class="sub">此页是纯静态 HTML，<b>不加载 Flutter 引擎</b>，用于确认浏览器运行时能力。<br><b>请在出问题的那台手机上打开</b>，在电脑上看结果没有意义。<br>如果这一页也白屏，问题在服务端或网络，不在 Flutter。</p>
+
+<div id="verdict" class="verdict warn">正在检测…</div>
+
+<div class="card">
+  <h2>环境</h2>
+  <table id="env"></table>
+</div>
+
+<div class="card">
+  <h2>运行时能力（Flutter Web 所需）</h2>
+  <table id="caps"></table>
+</div>
+
+<div class="card">
+  <h2>关键资源可达性（HEAD 请求，不下载内容）</h2>
+  <table id="res"></table>
+  <div class="small">这里探测的是<b>当前这个地址</b>上的资源。若本页是从源码目录或预览服务打开的，而不是部署后的 <b>frontend/build/web</b>，三个 Flutter 资源都会是 404 —— 这不代表正式部署缺文件。<br>判据：在<b>白屏的那个地址</b>直接打开 <code>/flutter_bootstrap.js</code>，能返回 JS 内容才算部署完整。</div>
+</div>
+
+<div class="card">
+  <h2>页面脚本错误</h2>
+  <table id="errs"></table>
+  <div class="small">此页不加载 Flutter 引擎，所以这里显示「无」是<b>正常的</b>，不能据此认为主应用没有报错。主应用的报错请用 Safari 远程调试查看 console。</div>
+</div>
+
+<div class="card">
+  <button id="copyBtn" type="button">复制诊断结果</button>
+  <textarea id="out" readonly></textarea>
+  <div class="small">把结果粘贴给开发，或截图本页。检测项里的「不支持」不等于一定导致白屏，需结合 console 判断。</div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var report = [];
+  var errors = [];
+
+  window.onerror = function (msg, src, line, col, err) {
+    errors.push(String(msg) + " @" + String(src) + ":" + String(line));
+    renderErrors();
+    return false;
+  };
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function yn(v) {
+    return v ? "支持" : "不支持";
+  }
+
+  function cell(v, level) {
+    var cls = level === "bad" ? "bad" : (level === "warn" ? "warn" : (level === "ok" ? "ok" : "neutral"));
+    return '<span class="' + cls + '">' + esc(v) + "</span>";
+  }
+
+  function lv(v) {
+    return v ? "ok" : "warn";
+  }
+
+  function row(tableId, k, v, level) {
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + esc(k) + "</td><td>" + cell(v, level) + "</td>";
+    document.getElementById(tableId).appendChild(tr);
+    report.push(k + ": " + v);
+  }
+
+  function renderErrors() {
+    var t = document.getElementById("errs");
+    t.innerHTML = "";
+    if (errors.length === 0) {
+      t.innerHTML = '<tr><td>脚本错误</td><td><span class="ok">无</span></td></tr>';
+      return;
+    }
+    for (var i = 0; i < errors.length; i++) {
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>错误 " + (i + 1) + "</td><td>" + cell(errors[i], "bad") + "</td>";
+      t.appendChild(tr);
+    }
+  }
+
+  function probeSyntax(code) {
+    try {
+      new Function(code);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function webglVersion() {
+    try {
+      var c = document.createElement("canvas");
+      c.width = 1; c.height = 1;
+      if (c.getContext("webgl2")) { return 2; }
+      if (c.getContext("webgl") || c.getContext("experimental-webgl")) { return 1; }
+      return 0;
+    } catch (e) {
+      return -1;
+    }
+  }
+
+  function wasmGC() {
+    try {
+      if (typeof WebAssembly === "undefined" || typeof WebAssembly.validate !== "function") { return "不可用"; }
+      var bytes = new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,95,1,120,0]);
+      return WebAssembly.validate(bytes) ? "支持" : "不支持";
+    } catch (e) {
+      return "检测抛错";
+    }
+  }
+
+  function parseSafari() {
+    var ua = navigator.userAgent;
+    var m = /Version\/([0-9]+(?:\.[0-9]+)*)/.exec(ua);
+    var ios = /OS ([0-9_]+)/.exec(ua);
+    return {
+      ua: ua,
+      safari: m ? m[1] : "非 Safari/WebKit 或未暴露",
+      ios: ios ? ios[1].replace(/_/g, ".") : "非 iOS"
+    };
+  }
+
+  function versionAtLeast(v, target) {
+    var a = String(v).split(".");
+    var b = String(target).split(".");
+    for (var i = 0; i < b.length; i++) {
+      var x = parseInt(a[i], 10) || 0;
+      var y = parseInt(b[i], 10) || 0;
+      if (x > y) { return true; }
+      if (x < y) { return false; }
+    }
+    return true;
+  }
+
+  function head(url, rowId) {
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open("HEAD", url + "?diag=" + (new Date()).getTime(), true);
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) { return; }
+        var td = document.getElementById(rowId);
+        var status = xhr.status;
+        var preview = location.protocol === "file:";
+        var txt = status ? String(status) + " " + (xhr.statusText || "") : (preview ? "本地预览跳过" : "网络失败");
+        var ok = status >= 200 && status < 400;
+        if (td) {
+          td.innerHTML = cell(txt, ok ? "ok" : (preview ? "warn" : "bad"));
+        }
+        var idx = rowId.replace("v-", "");
+        report.push("资源 " + url + ": " + txt);
+        refreshOut();
+      };
+      xhr.send();
+    } catch (e) {
+      var td2 = document.getElementById(rowId);
+      if (td2) { td2.innerHTML = cell("请求异常", "bad"); }
+    }
+  }
+
+  function resourceRow(id, label, url) {
+    var tr = document.createElement("tr");
+    tr.innerHTML = '<td>' + esc(label) + '</td><td id="v-' + id + '"><span class="warn">检测中…</span></td>';
+    document.getElementById("res").appendChild(tr);
+    head(url, "v-" + id);
+  }
+
+  var NOTE = "\n\n注：本页不加载 Flutter 引擎，「页面错误：无」属正常；资源 404 需结合部署地址判断（详见页面「关键资源可达性」说明）。";
+
+  function reportText(suffix) {
+    return report.join("\n") + "\n\n页面错误：\n" + (errors.length ? errors.join("\n") : "无") + NOTE + (suffix || "");
+  }
+
+  function refreshOut() {
+    document.getElementById("out").value = reportText("");
+  }
+
+  function main() {
+    var info = parseSafari();
+
+    row("env", "User-Agent", info.ua, "");
+    row("env", "iOS 版本", info.ios, "");
+    row("env", "Safari / WebKit 版本", info.safari, "");
+    row("env", "屏幕", screen.width + " x " + screen.height + " @ " + window.devicePixelRatio + "x", "");
+    var secure = window.isSecureContext === true;
+    var swOk = "serviceWorker" in navigator;
+    row("env", "安全上下文 HTTPS", secure ? "是" : "否（离线 / PWA 不可用，不影响页面显示）", secure ? "ok" : "warn");
+    row("env", "Service Worker API", yn(swOk) + (swOk || secure ? "" : "（HTTP 下浏览器禁用）"), swOk ? "ok" : "warn");
+    row("env", "Cache API", yn(typeof caches !== "undefined"), typeof caches !== "undefined" ? "ok" : "warn");
+
+    var hasWasm = typeof WebAssembly !== "undefined";
+    var hasStreaming = hasWasm && typeof WebAssembly.compileStreaming === "function";
+    var gl = webglVersion();
+    var gc = wasmGC();
+    var hasDynamicImport = probeSyntax('return import("data:text/javascript,export default 1");');
+    var hasNullishAssign = probeSyntax("var a; a ??= 1; return a === 1;");
+    var hasOptionalChain = probeSyntax("var a = null; return a?.b;");
+
+    row("caps", "WebAssembly", yn(hasWasm), hasWasm ? "ok" : "bad");
+    row("caps", "WebAssembly.compileStreaming", yn(hasStreaming), hasStreaming ? "ok" : "bad");
+    row("caps", "WASM GC（skwasm 必需）", gc, gc === "支持" ? "ok" : "warn");
+    row("caps", "WebGL", gl === 2 ? "WebGL 2.0" : (gl === 1 ? "WebGL 1.0（仅基础）" : (gl === 0 ? "不可用" : "检测抛错")), gl === 2 ? "ok" : (gl === 1 ? "warn" : "bad"));
+    row("caps", "动态 import()", yn(hasDynamicImport), hasDynamicImport ? "ok" : "bad");
+    row("caps", "??= 逻辑赋值", yn(hasNullishAssign), hasNullishAssign ? "ok" : "bad");
+    row("caps", "?. 可选链", yn(hasOptionalChain), hasOptionalChain ? "ok" : "bad");
+    var capSeg = typeof Intl !== "undefined" && typeof Intl.Segmenter === "function";
+    var capOffscreen = typeof OffscreenCanvas !== "undefined";
+    var capDecoder = typeof ImageDecoder !== "undefined";
+    var capClone = typeof structuredClone === "function";
+    var capSAB = typeof SharedArrayBuffer !== "undefined";
+    var capRO = typeof ResizeObserver !== "undefined";
+    row("caps", "Intl.Segmenter", yn(capSeg), lv(capSeg));
+    row("caps", "OffscreenCanvas", yn(capOffscreen), lv(capOffscreen));
+    row("caps", "ImageDecoder", yn(capDecoder), lv(capDecoder));
+    row("caps", "structuredClone", yn(capClone), lv(capClone));
+    row("caps", "SharedArrayBuffer", yn(capSAB), lv(capSAB));
+    row("caps", "ResizeObserver", yn(capRO), lv(capRO));
+
+    var verdict = document.getElementById("verdict");
+    var isOldSafari = /^[0-9]/.test(info.safari) && !versionAtLeast(info.safari, "15.6");
+    var lowCaps = !hasWasm || !hasStreaming || gl <= 0 || !hasDynamicImport;
+
+    var streamNote = hasStreaming
+      ? "流式编译能力存在，但版本仍低于官方支持基线。"
+      : "实测缺失 <b>WebAssembly.compileStreaming</b>：本项目 flutter_bootstrap.js 用它加载 CanvasKit 且没有回退，引擎初始化失败、runApp() 不执行，所以是纯白屏而不是报错页。";
+
+    if (isOldSafari) {
+      verdict.className = "verdict bad";
+      verdict.innerHTML = "<b>结论：浏览器基线不达标，且已定位到具体原因。</b><br>Flutter 官方 Web 支持矩阵要求 <b>Safari 15.6 及以上</b>，当前是 " + esc(info.safari) + "（iOS " + esc(info.ios) + "）。<br>" + streamNote + "<br><b>建议：升级系统到 iOS 15.x</b>（Apple Safari 15 同时补上了 WebAssembly 流式编译与 WebGL 2；iPhone 6s / 7 / SE 一代都在支持列表内），或查看修复计划中的兼容兜底方案。";
+    } else if (lowCaps) {
+      verdict.className = "verdict bad";
+      verdict.innerHTML = "<b>结论：Safari 版本达标，但关键运行时能力缺失。</b><br>重点看下面标红的检测项；也可能是 Service Worker 缓存或资源加载失败。";
+    } else {
+      verdict.className = "verdict ok";
+      verdict.innerHTML = "<b>结论：浏览器基线达标。</b><br>白屏更可能来自 Service Worker 缓存、HTTPS/安全上下文、部署路径或资源加载失败，请检查下方资源可达性与 console 报错。";
+    }
+
+    resourceRow("main", "main.dart.js", "main.dart.js");
+    resourceRow("boot", "flutter_bootstrap.js", "flutter_bootstrap.js");
+    resourceRow("wasm", "canvaskit/canvaskit.wasm", "canvaskit/canvaskit.wasm");
+    resourceRow("index", "index.html", "index.html");
+
+    renderErrors();
+    refreshOut();
+
+    document.getElementById("copyBtn").onclick = function () {
+      var out = document.getElementById("out");
+      out.value = reportText("\n\n判定：" + verdict.textContent);
+      out.focus();
+      out.select();
+      try {
+        document.execCommand("copy");
+        document.getElementById("copyBtn").innerHTML = "已复制（若失败请长按文本框全选）";
+      } catch (e) {
+        document.getElementById("copyBtn").innerHTML = "请长按文本框手动复制";
+      }
+    };
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", main);
+  } else {
+    main();
+  }
+})();
+</script>
+</body>
+</html>
