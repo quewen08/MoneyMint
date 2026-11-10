@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest'
 import {
   affectedTransactionCount,
   balanceOf,
+  buildAccountTree,
+  flattenAccountTree,
   groupAccountsByType,
   isClosed,
   openAccounts,
@@ -111,5 +113,133 @@ describe('受影响交易笔数（AC-29）', () => {
     expect(affectedTransactionCount(4, txns)).toBe(2)
     expect(affectedTransactionCount(3, txns)).toBe(1)
     expect(affectedTransactionCount(999, txns)).toBe(0)
+  })
+})
+
+describe('账户层级树（批 2.5 修 2）', () => {
+  // 三级：Food 挂在 FoodGroup（parent_uuid 显式），FoodGroup 冒号推导到根 Expenses。
+  const treeAccounts: SummaryAccount[] = [
+    {
+      id: 1,
+      uuid: 'u-root',
+      name: 'Expenses:Food',
+      display_name: '食品饮料',
+      type: 'Expenses',
+      sort_order: 0,
+      balances: { CNY: '100.00' },
+    },
+    {
+      id: 2,
+      uuid: 'u-food',
+      name: 'Expenses:Food:Snacks',
+      display_name: '零食',
+      type: 'Expenses',
+      parent_uuid: 'u-root',
+      sort_order: 0,
+      balances: { CNY: '30.00' },
+    },
+    {
+      id: 3,
+      uuid: 'u-drink',
+      name: 'Expenses:Food:Drinks',
+      display_name: '饮料',
+      type: 'Expenses',
+      parent_uuid: 'u-root',
+      sort_order: 1,
+      balances: { CNY: '12.50' },
+    },
+    {
+      // 孤儿：parent_uuid 指向不存在的节点 → 作为根。
+      id: 4,
+      uuid: 'u-orphan',
+      name: 'Expenses:Ghost',
+      display_name: '孤儿',
+      type: 'Expenses',
+      parent_uuid: 'u-missing',
+      sort_order: 2,
+      balances: { CNY: '5.00' },
+    },
+  ]
+
+  it('三级树：parent_uuid 优先建树，depth 逐层递增，子随父排序', () => {
+    const roots = buildAccountTree(treeAccounts)
+    expect(roots.map((node) => node.account.id)).toEqual([1, 4])
+    expect(roots[0].children.map((node) => node.account.id)).toEqual([2, 3])
+    const flat = flattenAccountTree(roots)
+    expect(flat.map((row) => row.account.id)).toEqual([1, 2, 3, 4])
+    expect(flat.map((row) => row.depth)).toEqual([0, 1, 1, 0])
+    expect(flat[1].childCount).toBe(0)
+    expect(roots[0].children.length).toBe(2)
+  })
+
+  it('父行小计 = 自身 + 全部后代（定点聚合，fava 折叠小计语义）', () => {
+    const roots = buildAccountTree(treeAccounts)
+    expect(roots[0].subtotal.CNY).toBe('142.50') // 100 + 30 + 12.50
+    expect(roots[1].subtotal.CNY).toBe('5.00')
+  })
+
+  it('parent_uuid 缺失时按 name 冒号层级推导兜底', () => {
+    const colonAccounts: SummaryAccount[] = [
+      { id: 1, name: 'Expenses:Food', type: 'Expenses' },
+      { id: 2, name: 'Expenses:Food:Snacks', type: 'Expenses' },
+    ]
+    const flat = flattenAccountTree(buildAccountTree(colonAccounts))
+    expect(flat.map((row) => row.account.id)).toEqual([1, 2])
+    expect(flat[1].depth).toBe(1)
+  })
+
+  it('parent 与冒号同时可用时 parent_uuid 胜出（显式关系优先，取舍已写入注释）', () => {
+    // id=3 冒号推导父应为 id=1，但显式 parent_uuid 指向 id=2。
+    const conflict: SummaryAccount[] = [
+      { id: 1, uuid: 'u-1', name: 'Expenses:Food', type: 'Expenses' },
+      { id: 2, uuid: 'u-2', name: 'Expenses:Other', type: 'Expenses' },
+      {
+        id: 3,
+        uuid: 'u-3',
+        name: 'Expenses:Food:Snacks',
+        type: 'Expenses',
+        parent_uuid: 'u-2',
+      },
+    ]
+    const roots = buildAccountTree(conflict)
+    expect(roots.map((node) => node.account.id)).toEqual([1, 2])
+    expect(roots[1].children.map((node) => node.account.id)).toEqual([3])
+  })
+
+  it('compare 注入：本地拖拽 order 对同层排序生效（供 CategoriesView 传入）', () => {
+    // order [3,2]：子层（id1 下）顺序反转为 [3, 2]；孤儿 4 不在 order → 落末尾。
+    const order = [3, 2]
+    const flat = flattenAccountTree(
+      buildAccountTree(treeAccounts, (a, b) => {
+        const indexA = order.indexOf(a.id)
+        const indexB = order.indexOf(b.id)
+        if (indexA === -1 && indexB === -1) return (a.sort_order ?? 0) - (b.sort_order ?? 0)
+        if (indexA === -1) return 1
+        if (indexB === -1) return -1
+        return indexA - indexB
+      }),
+    )
+    expect(flat.map((row) => row.account.id)).toEqual([1, 3, 2, 4])
+  })
+
+  it('compare 注入：order 外的新增分类落同层末尾', () => {
+    // order [4, 1]：根层 4 提前、1 靠后；id5 不在 order → 落同层末尾。
+    const order = [4, 1]
+    const withNew: SummaryAccount[] = [
+      ...treeAccounts,
+      { id: 5, uuid: 'u-new', name: 'Expenses:New', type: 'Expenses', sort_order: 3 },
+    ]
+    const flat = flattenAccountTree(
+      buildAccountTree(withNew, (a, b) => {
+        const indexA = order.indexOf(a.id)
+        const indexB = order.indexOf(b.id)
+        if (indexA === -1 && indexB === -1) return (a.sort_order ?? 0) - (b.sort_order ?? 0)
+        if (indexA === -1) return 1
+        if (indexB === -1) return -1
+        return indexA - indexB
+      }),
+    )
+    // flatten 顺序：根 [4, 1, 5]，id1 的子 [2, 3] 随父。
+    expect(flat.map((row) => row.account.id)).toEqual([4, 1, 2, 3, 5])
   })
 })

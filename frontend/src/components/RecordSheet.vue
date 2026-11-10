@@ -31,6 +31,7 @@ import {
   type RecordKind,
 } from '@/core/record'
 import { recordFundAccounts } from '@/core/accounts'
+import { balanceDiffByCommodity } from '@/core/record'
 import { clearDraft, readDraft, writeDraft } from '@/core/storage'
 import { usePrivacyStore } from '@/stores/privacy'
 import { useRecordSheetStore } from '@/stores/recordSheet'
@@ -72,7 +73,12 @@ const form = reactive<RecordForm>({
   fundAccountId: null,
   transferFromAccountId: null,
   transferToAccountId: null,
+  advancedPostings: [],
 })
+
+// 批 2.5 修 5：高级双录模式（默认仍简化三 Tab）。
+const advancedMode = ref(false)
+const advancedError = ref('')
 
 // 幂等键生命周期：提交成功 / 表单语义变化后换新键，纯网络重试复用。
 let idempotencyKey: string | null = null
@@ -156,7 +162,9 @@ const canSubmit = computed(
     accounts.value.length > 0 &&
     session.ledgerId !== null &&
     !session.isViewer &&
-    preview.value.length > 0,
+    (advancedMode.value
+      ? (form.advancedPostings?.length ?? 0) > 0
+      : preview.value.length > 0),
 )
 
 const tagsText = computed(() => form.tags.join(','))
@@ -219,6 +227,23 @@ function restoreDraft(): void {
   }
   if (typeof draft.transferToAccountId === 'number') {
     form.transferToAccountId = draft.transferToAccountId
+  }
+  if (Array.isArray(draft.advancedPostings)) {
+    const rows: Array<{ accountId: number | null; amount: string }> = []
+    for (const row of draft.advancedPostings) {
+      if (
+        typeof row === 'object' &&
+        row !== null &&
+        typeof (row as { accountId?: unknown }).accountId === 'number' &&
+        typeof (row as { amount?: unknown }).amount === 'string'
+      ) {
+        rows.push({
+          accountId: (row as { accountId: number }).accountId,
+          amount: (row as { amount: string }).amount,
+        })
+      }
+    }
+    form.advancedPostings = rows
   }
   notice.value = '已恢复上次未提交的表单草稿'
 }
@@ -400,8 +425,122 @@ function catIcon(account: AccountView): string {
   return account.icon !== undefined && account.icon !== '' ? account.icon : '📁'
 }
 
-function showAdvancedNotice(): void {
-  notice.value = '高级双录分录编辑将在后续批次开放，当前自动生成配平分录'
+// ─────────── 批 2.5 修 5：高级双录（逐条编辑双录分录） ───────────
+
+/** 进入高级模式时以简化模式生成的配平分录预填；退出即清空。 */
+function toggleAdvanced(): void {
+  advancedError.value = ''
+  if (!advancedMode.value) {
+    const current = preview.value
+    form.advancedPostings =
+      current.length > 0
+        ? current.map((posting) => ({ accountId: posting.accountId, amount: posting.amount }))
+        : defaultAdvancedRows()
+  } else {
+    form.advancedPostings = []
+  }
+  advancedMode.value = !advancedMode.value
+}
+
+function defaultAdvancedRows(): Array<{ accountId: number | null; amount: string }> {
+  const rows: Array<{ accountId: number | null; amount: string }> = []
+  for (const account of openAccounts.value.slice(0, 2)) {
+    rows.push({ accountId: account.id, amount: '' })
+  }
+  while (rows.length < 2) {
+    const first = openAccounts.value[0]
+    rows.push({ accountId: first === undefined ? null : first.id, amount: '' })
+  }
+  return rows
+}
+
+function onAdvancedAccount(index: number, event: Event): void {
+  const row = form.advancedPostings?.[index]
+  if (row === undefined) {
+    return
+  }
+  const raw = (event.target as HTMLSelectElement).value
+  if (raw === '' || !/^\d+$/.test(raw)) {
+    row.accountId = null
+  } else {
+    const id = Number(raw)
+    row.accountId = Number.isSafeInteger(id) && id > 0 ? id : null
+  }
+  resetIdempotencyKey()
+}
+
+function onAdvancedAmount(index: number, event: Event): void {
+  const row = form.advancedPostings?.[index]
+  if (row === undefined) {
+    return
+  }
+  row.amount = (event.target as HTMLInputElement).value
+  resetIdempotencyKey()
+}
+
+function addAdvancedRow(): void {
+  if (form.advancedPostings === undefined) {
+    form.advancedPostings = []
+  }
+  const first = openAccounts.value[0]
+  form.advancedPostings.push({ accountId: first === undefined ? null : first.id, amount: '' })
+  resetIdempotencyKey()
+}
+
+function removeAdvancedRow(index: number): void {
+  form.advancedPostings?.splice(index, 1)
+  resetIdempotencyKey()
+}
+
+function resolveAccountCommodity(account: AccountView): string {
+  return account.commodity_restriction !== undefined && account.commodity_restriction !== ''
+    ? account.commodity_restriction
+    : session.defaultCommodity
+}
+
+/**
+ * 高级双录分录构造：账户必选 + 金额非空 + 按 commodity 分组合计为 0
+ * （core.balanceDiffByCommodity，差额明细直出）。不平返回 null 并写 advancedError。
+ */
+function buildAdvancedPostings(): PostingDraft[] | null {
+  advancedError.value = ''
+  const rows = form.advancedPostings ?? []
+  if (rows.length < 2) {
+    advancedError.value = '高级双录至少需要 2 条分录'
+    return null
+  }
+  const drafts: PostingDraft[] = []
+  for (const row of rows) {
+    if (row.accountId === null) {
+      advancedError.value = '存在未选择账户的分录'
+      return null
+    }
+    const account = accounts.value.find((item) => item.id === row.accountId)
+    if (account === undefined) {
+      advancedError.value = '分录账户不在当前账本'
+      return null
+    }
+    if (row.amount.trim() === '') {
+      advancedError.value = '存在空金额的分录'
+      return null
+    }
+    drafts.push({
+      accountId: row.accountId,
+      accountName: accountLabel(account),
+      commodity: resolveAccountCommodity(account),
+      amount: row.amount.trim(),
+    })
+  }
+  const diffs = balanceDiffByCommodity(drafts)
+  if (diffs.length > 0) {
+    const parts: string[] = []
+    for (const diff of diffs) {
+      parts.push(`${diff.commodity} 差额 ${diff.diff}`)
+    }
+    advancedError.value = `分录不配平：${parts.join('；')}`
+    return null
+  }
+  return drafts
 }
 
 /**
@@ -423,11 +562,22 @@ async function submit(continueAfter: boolean): Promise<void> {
   }
 
   let postings: PostingDraft[]
-  try {
-    postings = buildPostings(snapshot(), accounts.value, session.defaultCommodity)
-  } catch (err) {
-    submitError.value = err instanceof Error ? err.message : '表单校验失败'
-    return
+  if (advancedMode.value) {
+    // 批 2.5 修 5：高级双录逐条编辑，按币种配平校验（差额明细给出）后
+    // 走与简化模式**完全相同**的提交路径（幂等键 / 草稿语义不变）。
+    const built = buildAdvancedPostings()
+    if (built === null) {
+      submitError.value = advancedError.value === '' ? '高级分录校验失败' : advancedError.value
+      return
+    }
+    postings = built
+  } else {
+    try {
+      postings = buildPostings(snapshot(), accounts.value, session.defaultCommodity)
+    } catch (err) {
+      submitError.value = err instanceof Error ? err.message : '表单校验失败'
+      return
+    }
   }
   const payload: CreateTransactionRequest = {
     date: form.date,
@@ -483,9 +633,11 @@ function resetForm(): void {
   form.amountExpression = ''
   form.description = ''
   form.tags = []
+  form.advancedPostings = []
   resetIdempotencyKey()
   showSuccess.value = false
   submitError.value = ''
+  advancedError.value = ''
   clearDraftIfPossible()
 }
 
@@ -582,6 +734,39 @@ watch(
         <div v-if="notice" class="rs-alert rs-alert--ok">{{ notice }}</div>
 
         <div class="rs-body">
+          <!-- 批 2.5 修 5：高级双录模式（逐条编辑分录，按币种配平） -->
+          <template v-if="advancedMode">
+            <div class="rs-advanced-head">
+              <span class="rs-label">双录分录（按币种合计必须为 0）</span>
+              <button type="button" class="rs-advanced" @click="toggleAdvanced">
+                ‹ 返回简化模式
+              </button>
+            </div>
+            <div v-for="(row, index) in form.advancedPostings" :key="index" class="rs-adv-row">
+              <select
+                class="fb-input rs-adv-account"
+                :value="row.accountId === null ? '' : String(row.accountId)"
+                @change="onAdvancedAccount(index, $event)"
+              >
+                <option value="">选择账户</option>
+                <option v-for="acc in openAccounts" :key="acc.id" :value="String(acc.id)">
+                  {{ accountLabel(acc) }}
+                </option>
+              </select>
+              <input
+                class="fb-input rs-adv-amount"
+                :value="row.amount"
+                placeholder="金额"
+                @change="onAdvancedAmount(index, $event)"
+              />
+              <button type="button" class="rs-adv-remove" aria-label="删除分录" @click="removeAdvancedRow(index)">✕</button>
+            </div>
+            <button type="button" class="rs-advanced" @click="addAdvancedRow">＋ 添加分录</button>
+            <div v-if="advancedError" class="rs-alert rs-alert--error" role="alert">{{ advancedError }}</div>
+            <p class="rs-hint">自动带出账户币种；提交走与简化模式相同的幂等提交路径。</p>
+          </template>
+
+          <template v-else>
           <template v-if="form.kind !== 'transfer'">
             <div class="rs-label">分类（必选）</div>
             <div class="rs-cats">
@@ -665,12 +850,13 @@ watch(
             </span>
             <span v-if="previewError" class="rs-preview__error">{{ previewError }}</span>
           </div>
-          <button type="button" class="rs-advanced" @click="showAdvancedNotice">
-            高级模式（手动调整双录分录）›
+          <button type="button" class="rs-advanced" @click="toggleAdvanced">
+            高级模式（逐条编辑双录分录）›
           </button>
+          </template>
         </div>
 
-        <div class="rs-keyboard">
+        <div v-if="!advancedMode" class="rs-keyboard">
           <button
             v-for="key in keyboardKeys"
             :key="key"
@@ -949,6 +1135,43 @@ watch(
   font-family: inherit;
   cursor: pointer;
   padding: 0;
+}
+
+/* 批 2.5 修 5：高级双录面板 */
+.rs-advanced-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.rs-adv-row {
+  display: grid;
+  grid-template-columns: 1fr 110px 34px;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.rs-adv-amount {
+  font-variant-numeric: var(--fb-font-numeric);
+}
+
+.rs-adv-remove {
+  border: 1px solid var(--fb-line);
+  background: var(--fb-card);
+  color: var(--fb-danger);
+  border-radius: var(--fb-radius-input);
+  height: 40px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.rs-hint {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--fb-sub);
 }
 
 .rs-keyboard {

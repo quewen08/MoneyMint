@@ -14,6 +14,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { accountApi, openingApi } from '@/api/client'
 import { ApiError } from '@/api/errors'
 import type { AccountView, OpeningDirection, OpeningView } from '@/api/types'
+import { isClosed } from '@/core/accounts'
 import { validateOpeningForm } from '@/core/opening'
 import { todayString } from '@/core/record'
 import { useSessionStore } from '@/stores/session'
@@ -45,6 +46,10 @@ const accountType = ref<'Assets' | 'Liabilities' | 'Expenses' | 'Income' | 'Equi
 const displayName = ref('')
 const openDate = ref(todayString())
 
+// 批 2.5 修 2c：父账户选择（create 模式；可选，选中后 name 自动拼前缀）。
+const parentAccountId = ref<number | null>(null)
+const knownAccounts = ref<AccountView[]>([])
+
 const openingAmount = ref('')
 const openingDirection = ref<OpeningDirection>('hold')
 const openingHasExisting = ref(false)
@@ -63,6 +68,45 @@ const isFundType = computed(
   () => accountType.value === 'Assets' || accountType.value === 'Liabilities',
 )
 
+/** 同类型、未关闭的可选父账户（批 2.5 修 2c）。 */
+const parentOptions = computed(() =>
+  knownAccounts.value.filter(
+    (account) => account.type === accountType.value && !isClosed(account),
+  ),
+)
+
+function resolveParent(): AccountView | null {
+  if (parentAccountId.value === null) {
+    return null
+  }
+  for (const account of knownAccounts.value) {
+    if (account.id === parentAccountId.value) {
+      return account
+    }
+  }
+  return null
+}
+
+function onParentChange(event: Event): void {
+  const raw = (event.target as HTMLSelectElement).value
+  if (raw === '' || !/^\d+$/.test(raw)) {
+    parentAccountId.value = null
+    return
+  }
+  const id = Number(raw)
+  parentAccountId.value = Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
+async function loadKnownAccounts(): Promise<void> {
+  try {
+    const res = await accountApi.list()
+    knownAccounts.value = Array.isArray(res.accounts) ? res.accounts : []
+  } catch {
+    // 父下拉为增强项，加载失败不阻断新建。
+    knownAccounts.value = []
+  }
+}
+
 /** FR-03：新建账户开户日默认 min(账本期初日期, 今日)，且不得晚于账本期初日期。 */
 function defaultOpenDate(): string {
   return ledgerOpeningDate.value < todayString() ? ledgerOpeningDate.value : todayString()
@@ -71,6 +115,7 @@ function defaultOpenDate(): string {
 function switchType(next: typeof accountType.value): void {
   accountType.value = next
   openingDirection.value = next === 'Liabilities' ? 'owe' : 'hold'
+  parentAccountId.value = null
 }
 
 function onOpenDateChange(event: Event): void {
@@ -166,11 +211,16 @@ async function submit(): Promise<void> {
         submitError.value = `开户日（${openDate.value}）不得晚于账本期初日期（${ledgerOpeningDate.value}）`
         return
       }
+      // 批 2.5 修 2c：选中父账户时 name 自动拼接其全名前缀（三层分类）。
+      const parent = resolveParent()
+      const fullName =
+        parent !== null ? `${parent.name}:${name}` : `${accountType.value}:${name}`
       const created = await accountApi.create({
-        name: `${accountType.value}:${name}`,
+        name: fullName,
         display_name: name,
         type: accountType.value,
         open_date: openDate.value,
+        parent_uuid: parent !== null ? parent.uuid : undefined,
       })
       if (isFundType.value && openingAmount.value.trim() !== '') {
         await submitOpening(created.uuid, resolveCommodity(created as unknown as AccountView))
@@ -207,6 +257,7 @@ function close(): void {
 onMounted(() => {
   if (props.mode === 'create') {
     openDate.value = defaultOpenDate()
+    void loadKnownAccounts()
   } else {
     void loadOpening()
   }
@@ -255,6 +306,15 @@ onMounted(() => {
           <label class="af-field">
             <span>名称（可含冒号形成三级分类，如 `餐饮:早餐`）</span>
             <input class="fb-input" v-model="displayName" placeholder="如：招商储蓄 / 餐饮" />
+          </label>
+          <label class="af-field">
+            <span>父账户（可选；选中后名称自动拼接其前缀）</span>
+            <select class="fb-input" :value="parentAccountId === null ? '' : String(parentAccountId)" @change="onParentChange">
+              <option value="">无（直接挂在类型根下）</option>
+              <option v-for="acc in parentOptions" :key="acc.id" :value="String(acc.id)">
+                {{ acc.name }}
+              </option>
+            </select>
           </label>
           <label class="af-field">
             <span>开户日（不得晚于账本期初日期 {{ ledgerOpeningDate }}）</span>

@@ -129,7 +129,7 @@ const calAccounts: SummaryAccount[] = [
 ]
 
 describe('批2-B：dailyTotals 口径（转账剔除 / 币种）', () => {
-  it('支出 / 收入按资金分录统计符号正确（三参 mainCommodity，对齐真实调用口径）', () => {
+  it('支出 / 收入按分类分录统计符号正确（批 2.5 分录级聚合：Expenses 借方正、Income 原值负）', () => {
     const totals = dailyTotals(
       [
         { date: '2026-11-10', postings: [
@@ -144,8 +144,10 @@ describe('批2-B：dailyTotals 口径（转账剔除 / 币种）', () => {
       calAccounts,
       'CNY',
     )
-    expect(totals['2026-11-10']).toEqual({ expense: '-38.50', income: '0.00' })
-    expect(totals['2026-11-11']).toEqual({ expense: '0.00', income: '9500.00' })
+    // Expenses 借方分录原值为正 → 支出桶 38.50；Income 分录原值为负 → 收入桶 -9500.00
+    // （fava income statement 口径，符号由展示层规则处理）。
+    expect(totals['2026-11-10']).toEqual({ expense: '38.50', income: '0.00' })
+    expect(totals['2026-11-11']).toEqual({ expense: '0.00', income: '-9500.00' })
   })
 
   it('【P1 证据】转账（资产→资产）不得计入当日收支（旧版明确剔除）', () => {
@@ -201,8 +203,8 @@ describe('批2-B：dailyTotals 口径（转账剔除 / 币种）', () => {
       calAccounts,
       'CNY',
     )
-    // 只统计 CNY 资金分录；USD -50 不得混入（对齐旧版主导币种口径）。
-    expect(totals['2026-11-10']?.expense).toBe('-100.00')
+    // 只统计 CNY 分类分录；USD +50 不得混入（对齐旧版主导币种口径）。
+    expect(totals['2026-11-10']?.expense).toBe('100.00')
   })
 
   it('两参兼容模式不过滤币种（现状锁定，calendar.ts:50 注释已声明调用方责任）', () => {
@@ -220,7 +222,7 @@ describe('批2-B：dailyTotals 口径（转账剔除 / 币种）', () => {
       calAccounts,
     )
     // 兼容模式下混加仍然发生；当前唯一调用处 TransactionsView.vue:84 已传三参。
-    expect(totals['2026-11-10']?.expense).toBe('-150.00')
+    expect(totals['2026-11-10']?.expense).toBe('150.00')
   })
 
   it('buildMonthGrid：周一开头 6×7=42 格，补位日 inMonth 正确、key 为真实日期', () => {

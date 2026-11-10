@@ -12,7 +12,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { accountApi, transactionApi } from '@/api/client'
 import { ApiError } from '@/api/errors'
 import type { AccountView, TransactionView } from '@/api/types'
-import { accountLabel, displayAmountOf, transactionKind, transferRoute } from '@/core/record'
+import { accountLabel, displayEntryOf, transactionKind, transferRoute } from '@/core/record'
 import { useSessionStore } from '@/stores/session'
 import MoneyText from '@/components/MoneyText.vue'
 
@@ -51,8 +51,10 @@ const txn = computed<TransactionView | null>(() => {
 const kind = computed(() =>
   txn.value === null ? 'expense' : transactionKind(txn.value.postings, accounts.value),
 )
-const amount = computed(() =>
-  txn.value === null ? '0.00' : displayAmountOf(txn.value.postings, accounts.value),
+const entry = computed(() =>
+  txn.value === null
+    ? { amount: '0.00', commodity: session.defaultCommodity }
+    : displayEntryOf(txn.value.postings, accounts.value),
 )
 const meta = computed(() => {
   if (txn.value === null) {
@@ -148,13 +150,14 @@ onMounted(() => {
         <div class="detail__label">{{ txn.date }} · {{ txn.flag === '!' ? '待核对' : '已核对' }}</div>
         <MoneyText
           class="detail__amount"
-          :amount="amount"
-          :commodity="session.defaultCommodity"
+          :amount="entry.amount"
+          :commodity="entry.commodity"
           size="lg"
           :signed="kind !== 'transfer'"
         />
         <div class="detail__meta">
           <span v-if="kind === 'transfer'" class="detail__badge">转账</span>
+          <span v-else-if="kind === 'opening'" class="detail__badge">期初</span>
           {{ txn.description }} · {{ meta }}
         </div>
       </div>

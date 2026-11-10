@@ -9,7 +9,7 @@ import { useRouter } from 'vue-router'
 import { accountApi } from '@/api/client'
 import { ApiError } from '@/api/errors'
 import type { AccountView } from '@/api/types'
-import { balanceOf, groupAccountsByType, isClosed } from '@/core/accounts'
+import { balanceOf, buildAccountTree, flattenAccountTree, groupAccountsByType, isClosed } from '@/core/accounts'
 import { accountLabel } from '@/core/record'
 import { usePrivacyStore } from '@/stores/privacy'
 import { useSessionStore } from '@/stores/session'
@@ -24,8 +24,14 @@ const loading = ref(false)
 const loadError = ref('')
 const notice = ref('')
 
+/** 批 2.5 修 2b：层级树渲染（parent_uuid 优先 / 冒号兜底；父行小计含子聚合）。 */
 const groups = computed(() =>
-  groupAccountsByType(accounts.value, ['Assets', 'Liabilities']),
+  groupAccountsByType(accounts.value, ['Assets', 'Liabilities']).map((group) => ({
+    type: group.type,
+    label: group.label,
+    subtotal: group.subtotal,
+    rows: flattenAccountTree(buildAccountTree(group.items)),
+  })),
 )
 
 function subtotalOf(group: { subtotal: Record<string, string> }): string {
@@ -33,11 +39,20 @@ function subtotalOf(group: { subtotal: Record<string, string> }): string {
   return value === undefined ? '0.00' : value
 }
 
-function balanceText(account: AccountView): string {
+/** 父行（有子）显示聚合小计；叶子行显示自身余额。 */
+function rowBalanceText(row: {
+  account: AccountView
+  childCount: number
+  subtotal: Record<string, string>
+}): string {
   if (privacy.enabled) {
     return '••••'
   }
-  return balanceOf(account, session.defaultCommodity)
+  if (row.childCount > 0) {
+    const value = row.subtotal[session.defaultCommodity]
+    return value === undefined ? '0.00' : value
+  }
+  return balanceOf(row.account, session.defaultCommodity)
 }
 
 function openDetail(account: AccountView): void {
@@ -100,15 +115,21 @@ onMounted(() => {
           <h3>{{ group.label }}</h3>
           <MoneyText :amount="subtotalOf(group)" :commodity="session.defaultCommodity" size="sm" />
         </div>
-        <p v-if="group.items.length === 0" class="accts__empty">暂无{{ group.label }}账户。</p>
+        <p v-if="group.rows.length === 0" class="accts__empty">暂无{{ group.label }}账户。</p>
         <ul v-else class="accts__list">
-          <li v-for="account in group.items" :key="account.id" class="accts__row">
-            <button type="button" class="accts__row-main" @click="openDetail(account)">
+          <li
+            v-for="row in group.rows"
+            :key="row.account.id"
+            class="accts__row"
+            :style="{ paddingLeft: row.depth * 16 + 'px' }"
+          >
+            <button type="button" class="accts__row-main" @click="openDetail(row.account)">
               <span class="accts__name">
-                {{ accountLabel(account) }}
-                <span v-if="isClosed(account)" class="accts__closed">已关户</span>
+                {{ accountLabel(row.account) }}
+                <span v-if="row.childCount > 0" class="accts__closed">含 {{ row.childCount }} 个子账户</span>
+                <span v-if="isClosed(row.account)" class="accts__closed">已关户</span>
               </span>
-              <span class="accts__meta">{{ account.type }} · {{ account.open_date }} · {{ balanceText(account) }}</span>
+              <span class="accts__meta">{{ row.account.type }} · {{ row.account.open_date }} · {{ rowBalanceText(row) }}</span>
             </button>
           </li>
         </ul>

@@ -14,7 +14,7 @@ import type { AccountView, TransactionView } from '@/api/types'
 import {
   accountLabel,
   computeBalanceSummary,
-  displayAmountOf,
+  displayEntryOf,
   transactionKind,
   transferRoute,
   type TransactionKind,
@@ -44,14 +44,14 @@ const balanceAccounts = computed(() =>
   ),
 )
 
-/** 展示类型：全资金分录 → transfer；含 Expenses / Income → 支出 / 收入；其余回退支出。 */
+/** 展示类型：Equity → opening；transfer；含 Expenses / Income → 支出 / 收入；其余回退支出。 */
 function txnKind(txn: TransactionView): TransactionKind {
   return transactionKind(txn.postings, accounts.value)
 }
 
-/** 用户视角金额：统一走 core 口径（转账取转出方绝对值，支出/收入带符号原值）。 */
-function displayAmount(txn: TransactionView): string {
-  return displayAmountOf(txn.postings, accounts.value)
+/** 用户视角代表分录（批 2.5）：金额与币种都取分录自身（转账取转出方绝对值）。 */
+function displayEntry(txn: TransactionView): { amount: string; commodity: string } {
+  return displayEntryOf(txn.postings, accounts.value)
 }
 
 /** 转账行的元信息：`转出账户 → 转入账户`。 */
@@ -192,6 +192,7 @@ watch(
             <span class="home__row-info">
               <span class="home__row-desc">
                 <span v-if="txnKind(txn) === 'transfer'" class="home__badge">转账</span>
+                <span v-else-if="txnKind(txn) === 'opening'" class="home__badge">期初</span>
                 {{ txn.description }}
               </span>
               <span class="home__row-meta">
@@ -204,8 +205,8 @@ watch(
               </span>
             </span>
             <MoneyText
-              :amount="displayAmount(txn)"
-              :commodity="summary.commodity"
+              :amount="displayEntry(txn).amount"
+              :commodity="displayEntry(txn).commodity"
               size="sm"
               :signed="txnKind(txn) !== 'transfer'"
             />

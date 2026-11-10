@@ -14,7 +14,12 @@ import { accountApi, transactionApi } from '@/api/client'
 import { ApiError } from '@/api/errors'
 import type { AccountView, TransactionView } from '@/api/types'
 import { affectedTransactionCount, balanceOf, isClosed } from '@/core/accounts'
-import { accountLabel, displayAmountOf, transactionKind } from '@/core/record'
+import {
+  accountLabel,
+  accountRunningBalances,
+  postingAmountForAccount,
+  transactionKind,
+} from '@/core/record'
 import { useSessionStore } from '@/stores/session'
 import MoneyText from '@/components/MoneyText.vue'
 import AccountForm from '@/components/AccountForm.vue'
@@ -84,19 +89,54 @@ const affectedCount = computed(() =>
 
 const closed = computed(() => account.value !== null && isClosed(account.value))
 
-/** 期初 / 关户写入口守卫：角色 + 关户状态（uuid 由列表接口透出，不再置灰）。 */
+/** 期初 / 关户写入口守卫：角色 + 关户状态（uuid 由列表接口透出）。 */
 const canManage = computed(
   () => account.value !== null && !closed.value && !session.isViewer,
 )
 
-function rowAmount(txn: TransactionView): string {
-  return displayAmountOf(txn.postings, accounts.value)
+/** 账户侧 journal（批 2.5 修 4a）：行金额取该账户自身分录的原值原符号。 */
+function rowPosting(txn: TransactionView): { amount: string; commodity: string } {
+  if (accountId.value === null) {
+    return { amount: '0.00', commodity: session.defaultCommodity }
+  }
+  for (const posting of txn.postings) {
+    if (posting.account_id === accountId.value) {
+      return { amount: posting.amount, commodity: posting.commodity }
+    }
+  }
+  return { amount: '0.00', commodity: session.defaultCommodity }
+}
+
+/** running balance（批 2.5 修 4b）：仅主币种累计（取舍见 core/record 注释）。 */
+const runningBalances = computed(() =>
+  accountRunningBalances(
+    accountTxns.value,
+    accountId.value ?? 0,
+    session.defaultCommodity,
+  ),
+)
+
+function runningBalanceOf(txn: TransactionView): string {
+  const value = runningBalances.value[txn.id]
+  return value === undefined ? '-' : value
+}
+
+/** 批 2.5 修 4c：跳全局流水并预填账户筛选。 */
+function openInGlobalTxns(): void {
+  if (accountId.value === null) {
+    return
+  }
+  notice.value = ''
+  void router.push({ name: 'transactions', query: { account: String(accountId.value) } })
 }
 
 function kindLabel(txn: TransactionView): string {
   const kind = transactionKind(txn.postings, accounts.value)
   if (kind === 'transfer') {
     return '转账'
+  }
+  if (kind === 'opening') {
+    return '期初'
   }
   return kind === 'income' ? '收入' : '支出'
 }
@@ -225,6 +265,7 @@ onMounted(() => {
     <template v-else-if="account !== null">
       <div class="fb-card acctd__card">
         <button type="button" class="acctd__action" :disabled="!canManage" @click="openOpening">期初余额设置</button>
+        <button type="button" class="acctd__action acctd__action--ghost" @click="openInGlobalTxns">在全局流水中查看本账户</button>
         <button type="button" class="acctd__action acctd__action--danger" :disabled="!canManage" @click="openCloseConfirm">
           关闭账户（Beancount close）
         </button>
@@ -267,11 +308,14 @@ onMounted(() => {
               <span class="acctd__row-desc">{{ txn.date }} · {{ txn.description }}</span>
               <span class="acctd__row-meta">{{ kindLabel(txn) }}</span>
             </span>
+            <span class="acctd__row-balance">
+              <span class="acctd__row-balance-label">余额</span>
+              <MoneyText :amount="runningBalanceOf(txn)" :commodity="session.defaultCommodity" size="sm" />
+            </span>
             <MoneyText
-              :amount="rowAmount(txn)"
-              :commodity="session.defaultCommodity"
+              :amount="rowPosting(txn).amount"
+              :commodity="rowPosting(txn).commodity"
               size="sm"
-              :signed="transactionKind(txn.postings, accounts) !== 'transfer'"
             />
           </li>
         </ul>
@@ -379,6 +423,12 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
+.acctd__action--ghost {
+  background: var(--fb-card);
+  color: var(--fb-blue);
+  border: 1px solid var(--fb-blue);
+}
+
 .acctd__action--danger {
   background: var(--fb-danger);
 }
@@ -463,6 +513,26 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+/* running balance：仅 PC 宽屏显示余额列，移动端折叠（批 2.5 修 4b） */
+.acctd__row-balance {
+  display: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.acctd__row-balance-label {
+  font-size: 10px;
+  color: var(--fb-sub);
+}
+
+@media (min-width: 1024px) {
+  .acctd__row-balance {
+    display: inline-flex;
+  }
 }
 
 .acctd__row-desc {

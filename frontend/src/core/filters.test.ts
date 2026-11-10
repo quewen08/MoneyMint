@@ -122,3 +122,54 @@ describe('筛选应用', () => {
     expect(applyFilters(txns, { ...emptyFilters(), member: '太太' }, accounts).map((t) => t.id)).toEqual([2])
   })
 })
+
+describe('批 2.5：kind 分录命中（三分法降级）', () => {
+  // 退款类混合交易：Expenses -50（冲回）+ Income -30 + Assets +80。
+  const refund = {
+    id: 9,
+    date: '2026-11-10',
+    flag: '*',
+    description: '退款+报销',
+    created_by_name: '阿文',
+    postings: [
+      { account_id: 4, amount: '-50.00' }, // Expenses（负，冲回）
+      { account_id: 5, amount: '-30.00' }, // Income
+      { account_id: 2, amount: '80.00' },  // Assets
+    ],
+  }
+
+  it('kind=expense / income 均按分录命中：混合交易同时命中两类筛选', () => {
+    expect(
+      applyFilters([refund], { ...emptyFilters(), kind: 'expense' }, accounts).map((t) => t.id),
+    ).toEqual([9])
+    expect(
+      applyFilters([refund], { ...emptyFilters(), kind: 'income' }, accounts).map((t) => t.id),
+    ).toEqual([9])
+  })
+
+  it('kind=transfer 维持全资金分录整笔判定：混合交易不命中', () => {
+    expect(
+      applyFilters([refund], { ...emptyFilters(), kind: 'transfer' }, accounts),
+    ).toEqual([])
+  })
+
+  it('kind=all 下混合交易与期初（Equity）交易均可见', () => {
+    const opening = {
+      id: 10,
+      date: '2026-11-11',
+      flag: '*',
+      description: '期初',
+      created_by_name: 'owner',
+      postings: [
+        { account_id: 6, amount: '12500.00' }, // Equity（accounts 里无 → 未知类型回退，模拟足够）
+        { account_id: 1, amount: '12500.00' },
+      ],
+    }
+    const all = applyFilters([refund, opening], emptyFilters(), accounts)
+    expect(all.map((t) => t.id)).toEqual([9, 10])
+    // 期初交易不含 Expenses/Income/全资金 → 不命中 expense/income/transfer 任一筛选。
+    expect(applyFilters([opening], { ...emptyFilters(), kind: 'expense' }, accounts)).toEqual([])
+    expect(applyFilters([opening], { ...emptyFilters(), kind: 'income' }, accounts)).toEqual([])
+    expect(applyFilters([opening], { ...emptyFilters(), kind: 'transfer' }, accounts)).toEqual([])
+  })
+})

@@ -129,3 +129,166 @@ export function affectedTransactionCount(
   }
   return count
 }
+
+/** 账户层级树节点（批 2.5 修 2）。 */
+export interface AccountTreeNode<T extends SummaryAccount> {
+  account: T
+  children: AccountTreeNode<T>[]
+  /** 树深度（根为 0，供渲染缩进）。 */
+  depth: number
+  /** 父账户自身 + 全部后代的按币种聚合小计（定点，符号保留）。 */
+  subtotal: Record<string, string>
+}
+
+interface TreeMoneyBucket {
+  [code: string]: Money
+}
+
+function mergeBucket(target: TreeMoneyBucket, source: TreeMoneyBucket): void {
+  for (const code of Object.keys(source)) {
+    const previous = target[code]
+    target[code] = previous === undefined ? source[code] : previous.plus(source[code])
+  }
+}
+
+function selfBucket(account: SummaryAccount): TreeMoneyBucket {
+  const bucket: TreeMoneyBucket = {}
+  const balances = account.balances === undefined ? {} : account.balances
+  for (const code of Object.keys(balances)) {
+    let value: Money
+    try {
+      value = Money.from(balances[code])
+    } catch {
+      value = Money.zero()
+    }
+    bucket[code] = value
+  }
+  return bucket
+}
+
+function subtreeBucket<T extends SummaryAccount>(node: AccountTreeNode<T>): TreeMoneyBucket {
+  const bucket = selfBucket(node.account)
+  for (const child of node.children) {
+    mergeBucket(bucket, subtreeBucket(child))
+  }
+  return bucket
+}
+
+/**
+ * 账户层级树（批 2.5 修 2；旧版 categories_screen.dart:45-48 同款 parent_uuid
+ * 优先、ledger_controller.dart:180-194 子随父排序）：
+ *
+ * - **parent_uuid 显式关系优先**：parent 在列表内即挂为其子节点；
+ * - parent_uuid 缺失时按 **name 冒号层级**推导兜底（`Expenses:食品饮料:食品`
+ *   的父是列表内 name 为 `Expenses:食品饮料` 的账户）——两者同时可用时
+ *   parent_uuid 胜出（显式关系优先，冒号推导只做兜底）；
+ * - 孤儿节点（parent 不在列表 / 推导不出父）作为根；
+ * - 同层按 `compare` 排序（缺省按 sort_order 升序、并列保持 name 字典序），
+ *   子随父；
+ * - 节点 subtotal = 自身 + 全部后代（fava 账户表折叠小计语义，定点、符号保留）。
+ */
+export function buildAccountTree<T extends SummaryAccount>(
+  accounts: readonly T[],
+  compare?: (a: T, b: T) => number,
+): AccountTreeNode<T>[] {
+  const byCompare =
+    compare ??
+    ((a: T, b: T) =>
+      (a.sort_order ?? 0) - (b.sort_order ?? 0) || (a.name < b.name ? -1 : 1))
+  const nodes = new Map<number, AccountTreeNode<T>>()
+  const byUuid = new Map<string, T>()
+  const byName = new Map<string, T>()
+  for (const account of accounts) {
+    nodes.set(account.id, { account, children: [], depth: 0, subtotal: {} })
+    if (account.uuid !== undefined && account.uuid !== '') {
+      byUuid.set(account.uuid, account)
+    }
+    byName.set(account.name, account)
+  }
+
+  // 父 id 解析：parent_uuid 优先，缺失时冒号层级推导（找不到父则视为根）。
+  const parentIds = new Map<number, number | null>()
+  for (const account of accounts) {
+    let parentId: number | null = null
+    const parentUuid = account.parent_uuid
+    if (parentUuid !== undefined && parentUuid !== '') {
+      const parentAccount = byUuid.get(parentUuid)
+      if (parentAccount !== undefined && parentAccount.id !== account.id) {
+        parentId = parentAccount.id
+      }
+    } else {
+      const lastColon = account.name.lastIndexOf(':')
+      if (lastColon > 0) {
+        const parentName = account.name.slice(0, lastColon)
+        const parent = byName.get(parentName)
+        if (parent !== undefined && parent.id !== account.id) {
+          parentId = parent.id
+        }
+      }
+    }
+    parentIds.set(account.id, parentId)
+  }
+
+  const roots: AccountTreeNode<T>[] = []
+  for (const account of accounts) {
+    const node = nodes.get(account.id)
+    const parentId = parentIds.get(account.id)
+    if (node === undefined) {
+      continue
+    }
+    if (parentId == null) {
+      roots.push(node)
+      continue
+    }
+    const parent = nodes.get(parentId)
+    if (parent === undefined) {
+      roots.push(node)
+    } else {
+      parent.children.push(node)
+    }
+  }
+
+  const attach = (node: AccountTreeNode<T>, depth: number): void => {
+    node.depth = depth
+    node.children.sort((a, b) => byCompare(a.account, b.account))
+    for (const child of node.children) {
+      attach(child, depth + 1)
+    }
+    node.subtotal = bucketToStrings(subtreeBucket(node))
+  }
+  roots.sort((a, b) => byCompare(a.account, b.account))
+  for (const root of roots) {
+    attach(root, 0)
+  }
+  return roots
+}
+
+/** 树的深度优先扁平化（渲染用：depth 供缩进，childCount 供父行小计展示）。 */
+export function flattenAccountTree<T extends SummaryAccount>(
+  roots: readonly AccountTreeNode<T>[],
+): Array<{
+  account: T
+  depth: number
+  subtotal: Record<string, string>
+  childCount: number
+}> {
+  const out: Array<{
+    account: T
+    depth: number
+    subtotal: Record<string, string>
+    childCount: number
+  }> = []
+  const walk = (nodes: readonly AccountTreeNode<T>[]): void => {
+    for (const node of nodes) {
+      out.push({
+        account: node.account,
+        depth: node.depth,
+        subtotal: node.subtotal,
+        childCount: node.children.length,
+      })
+      walk(node.children)
+    }
+  }
+  walk(roots)
+  return out
+}

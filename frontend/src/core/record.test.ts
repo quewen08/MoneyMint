@@ -6,13 +6,18 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  accountLabel,
+  balanceDiffByCommodity,
   buildPostings,
   computeBalanceSummary,
+  displayEntryOf,
   evaluateAmountExpression,
+  accountRunningBalances,
   postingsBalanced,
   todayString,
   transactionKind,
   transferAmount,
+  postingAmountForAccount,
   transferRoute,
   type PostingLike,
   type RecordForm,
@@ -201,12 +206,31 @@ describe('首页最近流水展示语义（转账 / 支出 / 收入）', () => {
     expect(transactionKind(postings, viewAccounts)).toBe('income')
   })
 
-  it('混合 / 异常回退 expense（未知账户类型、空分录、账户未加载）', () => {
+  it('混合 / 异常回退 expense（未知账户类型、空分录、账户未加载）；Equity 期初返回 opening（批 2.5）', () => {
+    // 未知账户类型（Equity 归入 opening，见下一条断言；此处用真正未知的类型）。
     expect(
-      transactionKind([posting(6, '1.00'), posting(1, '-1.00')], viewAccounts),
+      transactionKind([posting(998, '1.00'), posting(1, '-1.00')], viewAccounts),
     ).toBe('expense')
     expect(transactionKind([], viewAccounts)).toBe('expense')
     expect(transactionKind([posting(999, '-1.00')], viewAccounts)).toBe('expense')
+  })
+
+  it('批 2.5：含 Equity 分录的期初交易 → opening（优先级最高，禁止被标成支出）', () => {
+    // viewAccounts[?] 无 Equity：局部补充 Equity 账户定义。
+    const withEquity: SummaryAccount[] = [
+      ...viewAccounts,
+      { id: 6, name: 'Equity:Opening-Balances', type: 'Equity' },
+    ]
+    expect(
+      transactionKind([posting(6, '12500.00'), posting(1, '12500.00')], withEquity),
+    ).toBe('opening')
+    // 混合 Expenses + Equity 时 opening 仍优先（期初冲正场景）。
+    expect(
+      transactionKind(
+        [posting(6, '12500.00'), posting(4, '100.00'), posting(1, '12600.00')],
+        withEquity,
+      ),
+    ).toBe('opening')
   })
 
   it('转账金额无负值分录时回退第一条资金分录绝对值，非法金额容错为 0.00', () => {
@@ -276,5 +300,93 @@ describe('日期', () => {
   it('按本地时区补零，不依赖 toISOString 造成跨日', () => {
     expect(todayString(new Date(2026, 10, 9, 23, 30))).toBe('2026-11-09')
     expect(todayString(new Date(2026, 0, 5, 8, 0))).toBe('2026-01-05')
+  })
+})
+
+describe('批 2.5：混合交易回退 / 账户 journal / 高级双录配平', () => {
+  const viewAccounts: SummaryAccount[] = [
+    { id: 1, name: 'Assets:Cash', display_name: '招商储蓄', type: 'Assets' },
+    { id: 2, name: 'Assets:Bank', display_name: '工商银行', type: 'Assets', commodity_restriction: 'USD' },
+    { id: 3, name: 'Liabilities:Card', display_name: '信用卡', type: 'Liabilities' },
+    { id: 4, name: 'Expenses:Food', display_name: '食品饮料', type: 'Expenses' },
+    { id: 5, name: 'Income:Salary', display_name: '薪资收入', type: 'Income' },
+  ]
+  const posting = (account_id: number, amount: string, commodity?: string) => ({
+    account_id,
+    amount,
+    commodity,
+  })
+
+  it('混合交易（Expenses + Income）displayEntryOf 优先取正号资金分录（净收款）', () => {
+    const entry = displayEntryOf(
+      [
+        posting(4, '-50.00', 'CNY'),
+        posting(5, '-30.00', 'CNY'),
+        posting(1, '80.00', 'CNY'),
+      ],
+      viewAccounts,
+    )
+    expect(entry).toEqual({ amount: '80.00', commodity: 'CNY' })
+    // kind 整笔启发式仍标 expense（badge 用），统计不受影响。
+    expect(
+      transactionKind(
+        [posting(4, '-50.00', 'CNY'), posting(5, '-30.00', 'CNY'), posting(1, '80.00', 'CNY')],
+        viewAccounts,
+      ),
+    ).toBe('expense')
+  })
+
+  it('displayEntryOf 币种取代表分录自身（非主币种不错标）', () => {
+    const entry = displayEntryOf(
+      [posting(2, '-100.00', 'USD'), posting(4, '100.00', 'USD')],
+      viewAccounts,
+    )
+    expect(entry.commodity).toBe('USD')
+    // 转账：转出方分录的币种。
+    const transfer = displayEntryOf(
+      [posting(1, '-200.00', 'CNY'), posting(2, '200.00', 'CNY')],
+      viewAccounts,
+    )
+    expect(transfer).toEqual({ amount: '200.00', commodity: 'CNY' })
+  })
+
+  it('postingAmountForAccount：负债 / Income 账户按分录原值原符号（账户侧 journal）', () => {
+    const txn = {
+      postings: [posting(3, '3200.00', 'CNY'), posting(1, '-3200.00', 'CNY')],
+    }
+    // 信用卡（负债）分录原值为正（还款减少负债）。
+    expect(postingAmountForAccount(txn, 3)).toBe('3200.00')
+    expect(postingAmountForAccount(txn, 1)).toBe('-3200.00')
+    expect(postingAmountForAccount(txn, 999)).toBe('0.00')
+  })
+
+  it('accountRunningBalances：仅主币种累计（取舍见函数注释），按日期升序', () => {
+    const txns = [
+      { id: 3, date: '2026-11-03', postings: [posting(3, '-500.00', 'CNY')] },
+      { id: 1, date: '2026-11-01', postings: [posting(3, '3200.00', 'CNY')] },
+      { id: 2, date: '2026-11-02', postings: [posting(3, '100.00', 'USD')] },
+    ]
+    const balances = accountRunningBalances(txns, 3, 'CNY')
+    expect(balances[1]).toBe('3200.00')
+    expect(balances[2]).toBe('3200.00') // USD 分录不计入主币种 running balance
+    expect(balances[3]).toBe('2700.00')
+  })
+
+  it('balanceDiffByCommodity：按币种分组合计，差额明细供高级双录渲染', () => {
+    expect(
+      balanceDiffByCommodity([
+        { commodity: 'CNY', amount: '100.00' },
+        { commodity: 'CNY', amount: '-100.00' },
+      ]),
+    ).toEqual([])
+    expect(balanceDiffByCommodity([
+      { commodity: 'CNY', amount: '100.00' },
+      { commodity: 'CNY', amount: '-30.00' },
+      { commodity: 'USD', amount: '-5.00' },
+      { commodity: 'USD', amount: '-5.00' },
+    ])).toEqual([
+      { commodity: 'CNY', diff: '70.00' },
+      { commodity: 'USD', diff: '-10.00' },
+    ])
   })
 })

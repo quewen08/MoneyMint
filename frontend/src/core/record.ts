@@ -6,6 +6,12 @@
  * - 净资产口径统一 `ΣAssets + ΣLiabilities`，后端返回的账户余额本身带符号
  *   （Liabilities / Income 为负），禁止按类型 abs() 或乘系数（§6.4 / AC-12）；
  * - 在线 postings 只用账户整数 id，金额用定点十进制字符串。
+ *
+ * 批 3 前置铁律（老板拍板「基础核心必须 fava/beancount 一致」，勿删）：
+ * - 任何聚合函数签名必须**显式携带 commodity 维度**（如 dailyTotals 的
+ *   mainCommodity、账户余额的 balances[commodity]）；
+ * - **禁止跨币种求和**、禁止输出跨币种折算后的单值；
+ * - 报表（批 3）将带币种切换器，聚合一律在选定币种内进行。
  */
 import { Money } from './Money'
 
@@ -21,6 +27,10 @@ export interface SummaryAccount {
   close_date?: string
   /** 分类拖拽排序（0.4-C，同类型内升序）。 */
   sort_order?: number
+  /** 账户 uuid（批 2 起列表透出；层级树 parent 关系优先用它）。 */
+  uuid?: string
+  /** 父账户 uuid（三级分类结构；批 2.5 账户层级树用）。 */
+  parent_uuid?: string
 }
 
 /** 记账类型（C-01 三 Tab）。 */
@@ -48,6 +58,8 @@ export interface RecordForm {
   fundAccountId: number | null
   transferFromAccountId: number | null
   transferToAccountId: number | null
+  /** 高级双录模式的分录行（批 2.5；accountId 允许 null 表示未选择；旧草稿无此字段）。 */
+  advancedPostings?: Array<{ accountId: number | null; amount: string }>
 }
 
 /** 两位补零（不依赖 padStart / toISOString，避免跨时区跨日）。 */
@@ -318,13 +330,22 @@ export function computeBalanceSummary(
   }
 }
 
-/** 交易展示类型（首页最近流水区分转账 / 支出 / 收入）。 */
-export type TransactionKind = 'transfer' | 'expense' | 'income'
+/**
+ * 交易展示类型（整笔启发式）。
+ *
+ * ⚠️ 文档化口径（批 2.5 三分法降级）：本判定是**整笔启发式**，仅供
+ * 列表 badge 展示与 kind 筛选旧值兼容（transfer 项），**禁止作为任何
+ * 统计依据**——收支统计一律分录级（见 calendar.dailyTotals），筛选的
+ * expense / income 已改为分录命中（见 filters.applyFilters）。
+ */
+export type TransactionKind = 'transfer' | 'expense' | 'income' | 'opening'
 
 /** 判定展示类型所需的最小分录结构（与 api/types 的 PostingView 结构兼容）。 */
 export interface PostingLike {
   account_id: number
   amount: string
+  /** 分录币种（列表行内金额按分录自身币种渲染；可选，兜底由调用方决定）。 */
+  commodity?: string
 }
 
 function findAccount(
@@ -339,8 +360,25 @@ function findAccount(
   return undefined
 }
 
+/** postings 中是否含指定类型的账户分录（批 2.5：kind 筛选的分录命中口径）。 */
+export function hasAccountType(
+  postings: PostingLike[],
+  accounts: SummaryAccount[],
+  type: 'Expenses' | 'Income',
+): boolean {
+  for (const posting of postings) {
+    const account = findAccount(accounts, posting.account_id)
+    if (account !== undefined && account.type === type) {
+      return true
+    }
+  }
+  return false
+}
+
 /**
- * 判定一笔交易的展示类型：
+ * 判定一笔交易的整笔启发式类型：
+ * - 含 Equity 分录 → opening（优先级最高：期初交易在每个账户都有分录，
+ *   被标成「支出」是确定性错误）
  * - postings 全部属于 Assets / Liabilities → transfer（同账本内转账）
  * - 含 Expenses → expense
  * - 含 Income → income
@@ -356,6 +394,7 @@ export function transactionKind(
   let fundCount = 0
   let hasExpense = false
   let hasIncome = false
+  let hasEquity = false
   for (const posting of postings) {
     const account = findAccount(accounts, posting.account_id)
     const type = account === undefined ? '' : account.type
@@ -365,7 +404,12 @@ export function transactionKind(
       hasExpense = true
     } else if (type === 'Income') {
       hasIncome = true
+    } else if (type === 'Equity') {
+      hasEquity = true
     }
+  }
+  if (hasEquity) {
+    return 'opening'
   }
   if (hasExpense) {
     return 'expense'
@@ -444,25 +488,172 @@ export function transferRoute(
   return from !== '' ? from : to
 }
 
+/** 行内金额的代表分录（含币种）。 */
+export interface DisplayEntry {
+  amount: string
+  /** 分录自身币种（行内金额按此渲染，非主币种不得错标主币种符号）。 */
+  commodity: string
+}
+
 /**
- * 用户视角金额（首页 / 流水列表共用口径）：
- * - 转账取转出方绝对值（decimal abs，不显示负号）；
+ * 用户视角的代表分录（首页 / 流水列表共用口径）：
+ * - 转账取转出方（负值）资金分录的绝对值金额；
+ * - **混合交易回退**（批 2.5）：同时含 Expenses 与 Income 分录（退款 / 报销类）
+ *   时优先取**正号**资金分录——用户视角是净收款；
  * - 支出 / 收入取资金分录带符号原值（负=支出、正=收入）；
- * - 无资金分录取首条分录原值；空分录取 0.00。
+ * - 无资金分录取首条分录原值；空分录取 {0.00, ''}。
+ * 币种始终取代表分录自身的 commodity（行内金额按分录币种渲染，批 2.5 修 3）。
  */
-export function displayAmountOf(
+export function displayEntryOf(
   postings: PostingLike[],
   accounts: SummaryAccount[],
-): string {
+): DisplayEntry {
+  if (postings.length === 0) {
+    return { amount: '0.00', commodity: '' }
+  }
   if (transactionKind(postings, accounts) === 'transfer') {
-    return transferAmount(postings, accounts)
+    for (const posting of postings) {
+      const account = findAccount(accounts, posting.account_id)
+      const type = account === undefined ? '' : account.type
+      if (type !== 'Assets' && type !== 'Liabilities') {
+        continue
+      }
+      if (posting.amount.charAt(0) === '-') {
+        return { amount: amountAbs(posting.amount), commodity: posting.commodity ?? '' }
+      }
+    }
+    for (const posting of postings) {
+      const account = findAccount(accounts, posting.account_id)
+      const type = account === undefined ? '' : account.type
+      if (type === 'Assets' || type === 'Liabilities') {
+        return { amount: amountAbs(posting.amount), commodity: posting.commodity ?? '' }
+      }
+    }
+    return { amount: '0.00', commodity: '' }
+  }
+
+  let hasExpense = false
+  let hasIncome = false
+  for (const posting of postings) {
+    const account = findAccount(accounts, posting.account_id)
+    const type = account === undefined ? '' : account.type
+    if (type === 'Expenses') {
+      hasExpense = true
+    } else if (type === 'Income') {
+      hasIncome = true
+    }
+  }
+  // 混合交易：优先正号资金分录（净收款）。
+  if (hasExpense && hasIncome) {
+    for (const posting of postings) {
+      const account = findAccount(accounts, posting.account_id)
+      const type = account === undefined ? '' : account.type
+      if (
+        (type === 'Assets' || type === 'Liabilities') &&
+        posting.amount.charAt(0) !== '-'
+      ) {
+        return { amount: posting.amount, commodity: posting.commodity ?? '' }
+      }
+    }
   }
   for (const posting of postings) {
     const account = findAccount(accounts, posting.account_id)
     const type = account === undefined ? '' : account.type
     if (type === 'Assets' || type === 'Liabilities') {
+      return { amount: posting.amount, commodity: posting.commodity ?? '' }
+    }
+  }
+  return { amount: postings[0].amount, commodity: postings[0].commodity ?? '' }
+}
+
+/**
+ * 用户视角金额（兼容入口）：等价 `displayEntryOf(...).amount`。
+ * 需要币种时请改用 displayEntryOf（批 2.5 修 3：行内金额按分录币种渲染）。
+ */
+export function displayAmountOf(
+  postings: PostingLike[],
+  accounts: SummaryAccount[],
+): string {
+  return displayEntryOf(postings, accounts).amount
+}
+
+/**
+ * 账户侧 journal（批 2.5 修 4）：某账户在交易中的分录金额（原值原符号）。
+ * 负债 / Income 账户的分录符号与资金视角相反，必须按分录原值展示；
+ * 找不到该账户分录时返回 '0.00'。
+ */
+export function postingAmountForAccount(
+  txn: { postings: PostingLike[] },
+  accountId: number,
+): string {
+  for (const posting of txn.postings) {
+    if (posting.account_id === accountId) {
       return posting.amount
     }
   }
-  return postings.length > 0 ? postings[0].amount : '0.00'
+  return '0.00'
+}
+
+/**
+ * 账户侧 running balance（批 2.5 修 4）：按日期升序累计「仅主币种」分录。
+ *
+ * 取舍说明：多币种账户的 running balance 只对 `commodity === mainCommodity`
+ * 的分录累计（其余币种行余额显示 '-'）——旧版 journal 同款主导币种口径，
+ * 跨币种混合累计违反批 3 铁律（禁止跨币种求和）。
+ * 返回 map：txn.id → 累计后的余额（定点字符串，符号为账户视角原符号）。
+ */
+export function accountRunningBalances(
+  txns: ReadonlyArray<{ id: number; date: string; postings: PostingLike[] }>,
+  accountId: number,
+  mainCommodity: string,
+): { [txnId: number]: string } {
+  const ordered = txns.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+  const result: { [txnId: number]: string } = {}
+  let running = Money.zero()
+  for (const txn of ordered) {
+    for (const posting of txn.postings) {
+      if (posting.account_id !== accountId) {
+        continue
+      }
+      if (mainCommodity !== '' && posting.commodity !== mainCommodity) {
+        continue
+      }
+      try {
+        running = running.plus(Money.from(posting.amount))
+      } catch {
+        // 非法金额跳过（后端保证定点串，此处兜底）。
+      }
+      break
+    }
+    result[txn.id] = running.toString()
+  }
+  return result
+}
+
+/**
+ * 高级双录的配平校验（批 2.5 修 5）：按币种分组合计，任一币种合计非 0 即不平。
+ * 返回差额明细（币种 + 差额定点串），供 UI 直接渲染。
+ */
+export function balanceDiffByCommodity(
+  postings: ReadonlyArray<{ commodity: string; amount: string }>,
+): Array<{ commodity: string; diff: string }> {
+  const buckets: { [code: string]: Money } = {}
+  for (const posting of postings) {
+    let value: Money
+    try {
+      value = Money.from(posting.amount)
+    } catch {
+      value = Money.zero()
+    }
+    const code = posting.commodity === '' ? 'CNY' : posting.commodity
+    const previous = buckets[code]
+    buckets[code] = previous === undefined ? value : previous.plus(value)
+  }
+  const diffs: Array<{ commodity: string; diff: string }> = []
+  for (const code of Object.keys(buckets)) {
+    if (!buckets[code].isZero()) {
+      diffs.push({ commodity: code, diff: buckets[code].toString() })
+    }
+  }
+  return diffs
 }

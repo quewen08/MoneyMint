@@ -6,7 +6,7 @@
  * - 每日小计按资金分录正负分桶（负=支出、正=收入），core/Money 定点累加。
  */
 import { Money } from './Money'
-import { transactionKind, type SummaryAccount } from './record'
+import type { SummaryAccount } from './record'
 
 export interface DayTotal {
   expense: string
@@ -40,14 +40,15 @@ function addMoney(bucket: { [date: string]: Money }, date: string, amount: strin
 }
 
 /**
- * 按日聚合收支（P-04 日历视图与列表日小计共用口径）：
+ * 按日聚合收支（P-04 日历视图与列表日小计共用口径；批 2.5 改为**分录级聚合**，
+ * 对齐旧版 calendar_view.dart:83-110 与 fava income statement）：
  *
- * - **转账剔除**（AC-31 拍板口径含「转账剔除」；旧版 calendar_view.dart:103
- *   明确「资产/负债/权益之间的转移不计入当日收支」）：整笔交易经统一
- *   `transactionKind` 判定为 transfer 时整体不计入；
- * - 只看 Assets / Liabilities 分录（用户视角），负=支出、正=收入，禁止 abs / 乘系数；
- * - `mainCommodity` 给定时只统计该币种的资金分录（旧版只统计主导币种，
- *   不同币种金额不得混加）；未给定时为兼容模式（不过滤币种，调用方应传主导币种）。
+ * - **逐分录判账户类型**：Income 分录金额（原值，fava 口径下为负）计入收入桶；
+ *   Expenses 分录金额（原值，借方为正）计入支出桶；
+ *   Assets / Liabilities / Equity 分录不计入——转账没有 Income/Expenses 分录，
+ *   「转账不计入收支」的对外语义天然保持；期初（Equity）不计入收支；
+ * - 金额**原样入桶，禁止 abs / 乘系数**（符号由展示层 MoneyText 规则处理）；
+ * - `mainCommodity` 给定时只统计该币种分录（旧版只统计主导币种）。
  */
 export function dailyTotals(
   txns: TotalableTxn[],
@@ -57,19 +58,15 @@ export function dailyTotals(
   const expense: { [date: string]: Money } = {}
   const income: { [date: string]: Money } = {}
   for (const txn of txns) {
-    if (transactionKind(txn.postings, accounts) === 'transfer') {
-      continue
-    }
     for (const posting of txn.postings) {
       const type = findType(accounts, posting.account_id)
-      if (type !== 'Assets' && type !== 'Liabilities') {
+      if (type !== 'Income' && type !== 'Expenses') {
         continue
       }
       if (mainCommodity !== undefined && posting.commodity !== mainCommodity) {
         continue
       }
-      const isNegative = posting.amount.charAt(0) === '-'
-      addMoney(isNegative ? expense : income, txn.date, posting.amount)
+      addMoney(type === 'Expenses' ? expense : income, txn.date, posting.amount)
     }
   }
   const result: { [date: string]: DayTotal } = {}

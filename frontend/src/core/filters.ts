@@ -5,7 +5,7 @@
  * 形状的 query（与 vue-router LocationQuery 兼容），core 层不引入 vue-router。
  * 所有解析都容错：非法值一律回退默认，不抛错。
  */
-import { transactionKind, type SummaryAccount } from './record'
+import { hasAccountType, transactionKind, type SummaryAccount } from './record'
 
 /** 可筛选交易的最小结构（api/types 的 TransactionView 结构兼容）。 */
 export interface FilterableTxn {
@@ -125,8 +125,14 @@ export function hasActiveFilters(filters: TransactionFilters): boolean {
 }
 
 /**
- * 应用筛选。日期用 `YYYY-MM-DD` 字典序比较（含端点）；
- * kind 用统一 `transactionKind` 口径判定，禁止各处自行 abs / 乘系数。
+ * 应用筛选。日期用 `YYYY-MM-DD` 字典序比较（含端点）。
+ *
+ * kind 口径（批 2.5 三分法降级）：
+ * - expense / income 改为**分录命中**（postings 含 Expenses / Income 类型
+ *   账户分录即命中）——一笔退款 / 报销类交易可同时命中支出与收入筛选，
+ *   不会再被整笔启发式漏掉；
+ * - transfer 维持「全资金分录」整笔判定（transactionKind 旧值兼容）；
+ * - kind='opening' 的期初交易不在筛选项中，在 all 下可见。
  * 泛型保留元素类型，调用方可直接得到 TransactionView[]。
  */
 export function applyFilters<T extends FilterableTxn>(
@@ -141,8 +147,18 @@ export function applyFilters<T extends FilterableTxn>(
     if (filters.to !== '' && txn.date > filters.to) {
       return false
     }
-    if (filters.kind !== 'all' && transactionKind(txn.postings, accounts) !== filters.kind) {
-      return false
+    if (filters.kind !== 'all') {
+      if (filters.kind === 'expense') {
+        if (!hasAccountType(txn.postings, accounts, 'Expenses')) {
+          return false
+        }
+      } else if (filters.kind === 'income') {
+        if (!hasAccountType(txn.postings, accounts, 'Income')) {
+          return false
+        }
+      } else if (transactionKind(txn.postings, accounts) !== 'transfer') {
+        return false
+      }
     }
     if (filters.account !== null) {
       let hit = false

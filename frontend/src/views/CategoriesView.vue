@@ -13,7 +13,13 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { accountApi } from '@/api/client'
 import { ApiError } from '@/api/errors'
 import type { AccountView } from '@/api/types'
-import { balanceOf, groupAccountsByType, isClosed } from '@/core/accounts'
+import {
+  balanceOf,
+  buildAccountTree,
+  flattenAccountTree,
+  groupAccountsByType,
+  isClosed,
+} from '@/core/accounts'
 import { moveItem, sortBySortOrder } from '@/core/ordering'
 import { accountLabel, todayString } from '@/core/record'
 import { readCategoryOrder, writeCategoryOrder } from '@/core/storage'
@@ -37,34 +43,56 @@ const newName = ref('')
 const creating = ref(false)
 const deleteTarget = ref<AccountView | null>(null)
 
+/**
+ * 批 2.5 修 2b：树形渲染（parent_uuid / 冒号兜底；子随父、缩进展示）。
+ * 本地拖拽 order 对同层排序依旧生效（作为 buildAccountTree 的比较器传入），
+ * 服务端 sort_order 与本地 order 的合并语义不变（新增落末尾 / 删除无幽灵）。
+ */
 const groups = computed(() =>
   groupAccountsByType(accounts.value, ['Expenses', 'Income']).map((group) => {
-    let items = sortBySortOrder(group.items, (account) => account.sort_order)
     const order = dragOrders[group.type]
+    let sorted = sortBySortOrder(group.items, (account) => account.sort_order)
     if (order !== undefined) {
-      const byId = new Map<number, AccountView>()
-      for (const item of items) {
-        byId.set(item.id, item)
-      }
-      const ordered: AccountView[] = []
-      for (const id of order) {
-        const found = byId.get(id)
-        if (found !== undefined) {
-          ordered.push(found)
-          byId.delete(id)
-        }
-      }
-      for (const item of byId.values()) {
-        ordered.push(item)
-      }
-      items = ordered
+      sorted = sortBySortOrder(sorted, (account) => {
+        const index = order.indexOf(account.id)
+        return index === -1 ? order.length + account.id : index
+      })
     }
-    return { type: group.type, label: group.label, items }
+    const compare =
+      order === undefined
+        ? undefined
+        : (a: AccountView, b: AccountView) => {
+            const indexA = order.indexOf(a.id)
+            const indexB = order.indexOf(b.id)
+            if (indexA === -1 && indexB === -1) {
+              return (a.sort_order ?? 0) - (b.sort_order ?? 0)
+            }
+            if (indexA === -1) {
+              return 1
+            }
+            if (indexB === -1) {
+              return -1
+            }
+            return indexA - indexB
+          }
+    return {
+      type: group.type,
+      label: group.label,
+      rows: flattenAccountTree(buildAccountTree(sorted, compare)),
+    }
   }),
 )
 
 function balanceText(account: AccountView): string {
   return balanceOf(account, session.defaultCommodity)
+}
+
+/** 父行（有子）的小计展示（自身 + 全部后代，定点、符号保留）。 */
+function rowSubtotalText(row: {
+  subtotal: Record<string, string>
+}): string {
+  const value = row.subtotal[session.defaultCommodity]
+  return value === undefined ? '0.00' : value
 }
 
 function onDragStart(groupType: string, index: number, event: DragEvent): void {
@@ -83,15 +111,19 @@ function onDrop(groupType: string, index: number): void {
   if (dragGroup.value !== groupType || dragIndex.value === null) {
     return
   }
-  const group = groups.value.find((g) => g.type === groupType)
-  if (group === undefined) {
-    return
-  }
   const from = dragIndex.value
   if (from === null) {
     return
   }
-  const next = moveItem(group.items, from, index)
+  const group = groups.value.find((g) => g.type === groupType)
+  if (group === undefined) {
+    return
+  }
+  const next = moveItem(
+    group.rows.map((row) => row.account),
+    from,
+    index,
+  )
   const ids: number[] = []
   for (const item of next) {
     ids.push(item.id)
@@ -260,14 +292,15 @@ onMounted(() => {
       </div>
 
       <div v-for="group in groups" :key="group.type" class="fb-card cats__card">
-        <h3>{{ group.label }}（{{ group.items.length }}）</h3>
-        <p v-if="group.items.length === 0" class="cats__empty">暂无{{ group.label }}。</p>
+        <h3>{{ group.label }}（{{ group.rows.length }}）</h3>
+        <p v-if="group.rows.length === 0" class="cats__empty">暂无{{ group.label }}。</p>
         <ul v-else class="cats__list">
           <li
-            v-for="(account, index) in group.items"
-            :key="account.id"
+            v-for="(row, index) in group.rows"
+            :key="row.account.id"
             class="cats__row"
             draggable="true"
+            :style="{ paddingLeft: row.depth * 14 + 'px' }"
             @dragstart="onDragStart(group.type, index, $event)"
             @dragover="onDragOver"
             @drop="onDrop(group.type, index)"
@@ -275,16 +308,19 @@ onMounted(() => {
             <span class="cats__drag" aria-hidden="true">⋮⋮</span>
             <span class="cats__info">
               <span class="cats__name">
-                {{ accountLabel(account) }}
-                <span v-if="isClosed(account)" class="cats__closed">已关闭</span>
+                {{ accountLabel(row.account) }}
+                <span v-if="isClosed(row.account)" class="cats__closed">已关闭</span>
               </span>
-              <span class="cats__meta">{{ account.name }} · {{ balanceText(account) }}</span>
+              <span class="cats__meta">
+                {{ row.account.name }} · {{ balanceText(row.account) }}
+                <template v-if="row.childCount > 0"> · 小计 {{ rowSubtotalText(row) }}</template>
+              </span>
             </span>
             <button
               type="button"
               class="cats__delete"
               :disabled="busyUuid !== null || session.isViewer"
-              @click="askDelete(account)"
+              @click="askDelete(row.account)"
             >删除</button>
           </li>
         </ul>

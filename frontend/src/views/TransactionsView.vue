@@ -26,10 +26,11 @@ import {
 import { formatAmount } from '@/core/Money'
 import {
   accountLabel,
-  displayAmountOf,
+  displayEntryOf,
   todayString,
   transactionKind,
   transferRoute,
+  type DisplayEntry,
   type TransactionKind,
 } from '@/core/record'
 import { useSessionStore } from '@/stores/session'
@@ -106,8 +107,8 @@ function kindOf(txn: TransactionView): TransactionKind {
   return transactionKind(txn.postings, accounts.value)
 }
 
-function rowAmount(txn: TransactionView): string {
-  return displayAmountOf(txn.postings, accounts.value)
+function rowEntry(txn: TransactionView): DisplayEntry {
+  return displayEntryOf(txn.postings, accounts.value)
 }
 
 function rowMeta(txn: TransactionView): string {
@@ -351,13 +352,14 @@ onMounted(() => {
               <button type="button" class="txn__row-main" @click="openDetail(txn)">
                 <span class="txn__row-desc">
                   <span v-if="kindOf(txn) === 'transfer'" class="txn__badge">转账</span>
+                  <span v-else-if="kindOf(txn) === 'opening'" class="txn__badge">期初</span>
                   {{ txn.description }}
                 </span>
                 <span class="txn__row-meta">{{ rowMeta(txn) }}</span>
               </button>
               <MoneyText
-                :amount="rowAmount(txn)"
-                :commodity="session.defaultCommodity"
+                :amount="rowEntry(txn).amount"
+                :commodity="rowEntry(txn).commodity"
                 size="sm"
                 :signed="kindOf(txn) !== 'transfer'"
               />
