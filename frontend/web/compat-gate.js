@@ -14,9 +14,18 @@
  *     「增加了对 WebGL 2 的支持」；MDN 兼容表 Safari on iOS 15+。
  *     所以升级到 iOS 15.x 能同时补上两道坎。
  *
+ * v2（不升级 iOS 的方案）：
+ *   Safari 14 只是缺 compileStreaming，但 WebAssembly.compile / Response.arrayBuffer()
+ *   都是 2017 年就有的老 API。这里在 bootstrap 之前注入一个 compileStreaming polyfill：
+ *       fetch(url) → Response.arrayBuffer() → WebAssembly.compile(bytes)
+ *   不改 Flutter 生成的任何文件、不动构建流程、不影响 SW 资源清单。
+ *   能力补齐后让引擎尝试启动；真跑不起来再由 watchdog 显示兜底页。
+ *   用 ?nocompat=1 可关闭补丁做 A/B 对照。
+ *
  * 约束：
  *   - 纯 ES5、零依赖、同步加载于 <head>，老 WebKit 必须能解析；
  *   - 不修改、不拦截 Flutter 生成的 flutter_bootstrap.js；
+ *   - 只在原生缺 compileStreaming 时打补丁，绝不覆盖原生实现；
  *   - 能力达标时不打扰（只在明确报错或超时后才提示）；
  *   - 引擎一旦画出画面，提示自动消失，避免误判挡住正常用户。
  */
@@ -33,6 +42,7 @@
   var mounted = false;
   var dismissed = false;
   var pollTimer = null;
+  var patchNote = "";
 
   var CSS = [
     "#" + GATE_ID + "{--fb-bg:#f4f7f8;--fb-card:#fff;--fb-text:#1b252c;--fb-sub:#5c6b73;--fb-line:#e2e9ec;--fb-accent:#00897b;--fb-accent-text:#fff;position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;box-sizing:border-box;overflow:auto;-webkit-overflow-scrolling:touch;background:var(--fb-bg);color:var(--fb-text);font-family:-apple-system,BlinkMacSystemFont,\"PingFang SC\",\"Microsoft YaHei\",sans-serif;padding:32px 16px}",
@@ -54,14 +64,15 @@
   var UNSUPPORTED_HTML = [
     '<div class="fb-card">',
     '<div class="fb-badge">兼容性提示</div>',
-    "<h1>当前浏览器版本过低</h1>",
-    "<p>这个页面需要 Safari 15.6 或更高版本才能显示。当前系统的 WebKit 缺少 WebAssembly 流式编译能力，Flutter 引擎无法初始化，所以页面是空白的。</p>",
+    "<h1>这台设备暂时跑不了当前版本</h1>",
+    "<p>页面已经尝试自动补齐缺失的 WebAssembly 流式编译能力，仍未能完成引擎初始化，所以显示这页提示而不是白屏。</p>",
     '<div class="fb-detail" id="fb-gate-detail"></div>',
     "<ol>",
-    "<li>升级到 iOS 15.x：设置 → 通用 → 软件更新，升级前先备份。iPhone 6s / 7 / SE 一代都在支持列表内。</li>",
+    "<li>打开<a href=\"compat.html\">完整诊断页</a>，点「兼容补丁实测」，把结果发给管理员，判断是否值得继续适配。</li>",
+    "<li>若这台设备必须能用，请让管理员启用<b>轻量记账页</b>（不依赖 WebGL / WASM）。</li>",
     "<li>或改用 Safari 15.6 以上的设备、桌面浏览器访问同一地址。</li>",
     "</ol>",
-    "<p>iOS 上的 Chrome、Firefox、Edge 都使用系统自带 WebKit，换浏览器不会改变结果。</p>",
+    "<p>iOS 上的 Chrome、Firefox、Edge 都使用系统自带 WebKit，换浏览器不会改变结果；升级系统最省事，但不是唯一选择。</p>",
     '<div class="fb-actions">',
     '<a class="fb-btn fb-ghost" href="compat.html">查看完整诊断</a>',
     '<button class="fb-btn fb-ghost" type="button" id="fb-gate-dismiss">忽略提示</button>',
@@ -90,6 +101,49 @@
     "</div>"
   ].join("");
 
+  // Safari 14 / WebKit 14.1 缺的是 compileStreaming；WebAssembly.compile 与
+  // Response.arrayBuffer() 都是 2017 年的老 API。用老路径实现同名方法，
+  // Flutter 生成的 bootstrap 一行都不用改。
+  function installStreamingPolyfill() {
+    if (typeof WebAssembly === "undefined") {
+      return { installed: false, native: false, reason: "浏览器没有 WebAssembly" };
+    }
+    if (typeof WebAssembly.compileStreaming === "function") {
+      return { installed: false, native: true, reason: "原生已支持" };
+    }
+    if (typeof WebAssembly.compile !== "function" || typeof window.fetch !== "function") {
+      return { installed: false, native: false, reason: "缺少 WebAssembly.compile 或 fetch" };
+    }
+    var poly = function (source) {
+      return Promise.resolve(source).then(function (resp) {
+        if (!resp || typeof resp.arrayBuffer !== "function") {
+          throw new TypeError("compileStreaming 兼容实现：需要 Response 对象");
+        }
+        return resp.arrayBuffer();
+      }).then(function (bytes) {
+        return WebAssembly.compile(bytes);
+      });
+    };
+    try {
+      WebAssembly.compileStreaming = poly;
+      if (WebAssembly.compileStreaming !== poly) {
+        return { installed: false, native: false, reason: "WebAssembly 对象不可写" };
+      }
+      window.__fambeanStreamingPolyfilled = true;
+      return { installed: true, native: false, reason: "" };
+    } catch (e) {
+      return { installed: false, native: false, reason: String((e && e.message) || e) };
+    }
+  }
+
+  function compatDisabled() {
+    try {
+      return /[?&]nocompat=1(?:&|$)/.test(window.location.search || "");
+    } catch (e) {
+      return false;
+    }
+  }
+
   function capability() {
     var wasm = typeof WebAssembly !== "undefined";
     var streaming = wasm && typeof WebAssembly.compileStreaming === "function";
@@ -110,7 +164,7 @@
     var m = [];
     if (!c.wasm) { m.push("WebAssembly"); }
     if (c.wasm && !c.streaming) {
-      m.push("WebAssembly.compileStreaming（Safari 15 起才支持，本构建无回退）");
+      m.push("WebAssembly.compileStreaming（Safari 15 起原生支持，兼容补丁未生效）");
     }
     if (!c.fetch) { m.push("fetch"); }
     if (!c.gl) { m.push("WebGL"); }
@@ -203,7 +257,10 @@
 
   function show(kind, detail) {
     if (dismissed || mounted) { return; }
-    pending = { kind: kind, detail: detail };
+    pending = {
+      kind: kind,
+      detail: detail + (patchNote ? "\n兼容补丁：" + patchNote : "")
+    };
     flush();
   }
 
@@ -229,11 +286,27 @@
   }
 
   function init() {
+    var patch;
+    if (compatDisabled()) {
+      patchNote = "关闭（?nocompat=1，用于对照测试）";
+    } else {
+      patch = installStreamingPolyfill();
+      if (patch.native) {
+        patchNote = "未启用（浏览器原生支持）";
+      } else if (patch.installed) {
+        patchNote = "已启用：fetch → arrayBuffer → WebAssembly.compile";
+      } else {
+        patchNote = "启用失败：" + patch.reason;
+      }
+    }
+
+    // 注意：capability() 必须在补丁之后调用，streaming 才会被补上。
     var miss = missingList(capability());
     if (miss.length > 0) {
-      // 已知能力不达标：直接给出升级指引，不再监听引擎错误（避免把提示覆盖掉）。
+      // 补丁也没救回来：给出可读提示，不再监听引擎错误（避免被覆盖）。
       show("unsupported", "缺失能力：" + miss.join("、"));
     } else {
+      // 能力齐备（可能是补丁补齐的）：让引擎尝试启动，真失败再由兜底页接住。
       installWatchdog();
     }
 

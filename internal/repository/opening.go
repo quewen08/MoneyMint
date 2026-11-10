@@ -470,6 +470,10 @@ type txnInsert struct {
 }
 
 // insertTxnTx 插入一条期初/冲正交易（不含分录）。
+//
+// 注意：期初/冲正的身份由 opening_key（部分唯一索引）承载，
+// 不复用 013 引入的 client_request_id——两者语义不同（幂等键是「同一次客户端提交」，
+// opening_key 是「某账户某版本的期初」），混用会吞掉合法的再次期初调整。
 func insertTxnTx(tx execer, ledgerID int64, t txnInsert) (int64, error) {
 	res, err := tx.Exec(
 		`INSERT INTO transactions

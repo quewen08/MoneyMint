@@ -25,12 +25,13 @@ var migrations = []struct {
 	{"010_force_password_change", migrate010},
 	{"011_session_meta", migrate011},
 	{"012_opening_balance", migrate012},
+	{"013_txn_idempotency", migrate013},
 }
 
 // migrate011：sessions 增加设备信息（M3 会话列表与吊销）。
 //
 // 列都带常量默认值：SQLite 的 ALTER TABLE ADD COLUMN 不接受非常量默认值，
-// 因此 last_seen_at 也先给 ''，由 CreateSession 显式写入。
+// 因此 last_seen_at 也先给 ”，由 CreateSession 显式写入。
 func migrate011(conn *sql.DB) error {
 	cols := []struct{ name, ddl string }{
 		{"user_agent", "TEXT NOT NULL DEFAULT ''"},
@@ -346,6 +347,7 @@ func migrate003(conn *sql.DB) error {
 //   - color       : 颜色 hex（展示用，导出忽略）
 //   - parent_uuid : 父账户 uuid（三级分类结构）
 //   - sub_type    : 账户子类型（借记账户/信用卡/虚拟账户等，展示用）
+//
 // 均为可选列，旧库升级后默认 NULL，向前兼容。
 func migrate004(conn *sql.DB) error {
 	for _, col := range []string{"icon", "color", "parent_uuid", "sub_type"} {
@@ -362,6 +364,7 @@ func migrate004(conn *sql.DB) error {
 
 // migrate005：交易增加 tags（005_txn_tags）。
 //   - tags : JSON 数组字符串，如 ["餐饮","出差"]（展示/检索/导出 #tag 用）。
+//
 // 为空时存 NULL，导出不输出 #tag。
 func migrate005(conn *sql.DB) error {
 	if ok, err := columnExists(conn, "transactions", "tags"); err != nil {

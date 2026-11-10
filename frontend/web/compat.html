@@ -52,6 +52,14 @@
 </div>
 
 <div class="card">
+  <h2>兼容补丁实测（不升级系统时先测这个）</h2>
+  <p class="small" style="margin-top:0">Safari 14 缺 <code>WebAssembly.compileStreaming</code>，但可以用老的 <code>fetch → arrayBuffer → WebAssembly.compile</code> 路径补齐。下面按真实流程走一遍，判断主应用在这台设备上到底有没有救。<br><b>会下载并编译约 7 MB 的 canvaskit.wasm，需手动点击开始</b>；老设备可能要十几秒，卡住不动就刷新页面。</p>
+  <button id="probeBtn" type="button">开始实测</button>
+  <table id="probe" style="margin-top:10px"></table>
+  <div id="probeVerdict" class="verdict warn" style="display:none;margin:10px 0 0"></div>
+</div>
+
+<div class="card">
   <h2>页面脚本错误</h2>
   <table id="errs"></table>
   <div class="small">此页不加载 Flutter 引擎，所以这里显示「无」是<b>正常的</b>，不能据此认为主应用没有报错。主应用的报错请用 Safari 远程调试查看 console。</div>
@@ -69,6 +77,9 @@
 
   var report = [];
   var errors = [];
+  var probeLogs = [];
+  var probeReport = [];
+  var probeRunning = false;
 
   window.onerror = function (msg, src, line, col, err) {
     errors.push(String(msg) + " @" + String(src) + ":" + String(line));
@@ -203,11 +214,154 @@
   var NOTE = "\n\n注：本页不加载 Flutter 引擎，「页面错误：无」属正常；资源 404 需结合部署地址判断（详见页面「关键资源可达性」说明）。";
 
   function reportText(suffix) {
-    return report.join("\n") + "\n\n页面错误：\n" + (errors.length ? errors.join("\n") : "无") + NOTE + (suffix || "");
+    var probePart = probeReport.length ? "\n\n兼容补丁实测：\n" + probeReport.join("\n") : "";
+    return report.join("\n") + "\n\n页面错误：\n" + (errors.length ? errors.join("\n") : "无") + NOTE + probePart + (suffix || "");
   }
 
   function refreshOut() {
     document.getElementById("out").value = reportText("");
+  }
+
+  /* ---- 兼容补丁实测：判断 Safari 14 能否走「非流式编译」老路径 ---- */
+  function probeRow(k, v, level) {
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + esc(k) + "</td><td>" + cell(v, level) + "</td>";
+    document.getElementById("probe").appendChild(tr);
+    probeLogs.push(k + ": " + v);
+  }
+
+  function nowMs() {
+    return new Date().getTime();
+  }
+
+  function withTimeout(p, ms, label) {
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var timer = setTimeout(function () {
+        if (done) { return; }
+        done = true;
+        reject(new Error(label + " 超过 " + Math.round(ms / 1000) + " 秒未返回"));
+      }, ms);
+      p.then(function (v) {
+        if (done) { return; }
+        done = true; clearTimeout(timer); resolve(v);
+      }, function (e) {
+        if (done) { return; }
+        done = true; clearTimeout(timer); reject(e);
+      });
+    });
+  }
+
+  function finishProbe(level, html) {
+    var v = document.getElementById("probeVerdict");
+    v.style.display = "block";
+    v.className = "verdict " + level;
+    v.innerHTML = html;
+    var btn = document.getElementById("probeBtn");
+    btn.disabled = false;
+    btn.innerHTML = "重新实测";
+    probeLogs.push("结论：" + String(html).replace(/<[^>]+>/g, ""));
+    probeReport = probeLogs.slice();
+    refreshOut();
+    probeRunning = false;
+  }
+
+  function runProbe() {
+    if (probeRunning) { return; }
+    probeRunning = true;
+    var btn = document.getElementById("probeBtn");
+    btn.disabled = true;
+    btn.innerHTML = "实测中…";
+    document.getElementById("probe").innerHTML = "";
+    document.getElementById("probeVerdict").style.display = "none";
+    probeLogs = [];
+    probeReport = [];
+
+    var bytes = null;
+    var chain = Promise.resolve();
+
+    // ① 老编译 API 是否存在，并真编译一个最小合法 wasm 模块
+    chain = chain.then(function () {
+      if (typeof WebAssembly === "undefined" || typeof WebAssembly.compile !== "function") {
+        probeRow("WebAssembly.compile", "不支持", "bad");
+        throw new Error("NO_COMPILE");
+      }
+      var t = nowMs();
+      return WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])).then(function () {
+        probeRow("WebAssembly.compile（空模块）", "通过 " + (nowMs() - t) + " ms", "ok");
+      });
+    });
+
+    // ② Response.arrayBuffer() 是否存在
+    chain = chain.then(function () {
+      var ok = typeof Response !== "undefined" && typeof Response.prototype.arrayBuffer === "function";
+      probeRow("Response.arrayBuffer()", yn(ok), ok ? "ok" : "bad");
+      if (!ok) { throw new Error("NO_ARRAYBUFFER"); }
+    });
+
+    // ③ WebAssembly 命名空间能否补写 compileStreaming（测完立刻恢复）
+    chain = chain.then(function () {
+      if (typeof WebAssembly.compileStreaming === "function") {
+        probeRow("compileStreaming", "原生支持（无需补丁）", "ok");
+        return;
+      }
+      var marker = function () {};
+      var writable = false;
+      try {
+        WebAssembly.compileStreaming = marker;
+        writable = WebAssembly.compileStreaming === marker;
+      } catch (e) { writable = false; }
+      try { delete WebAssembly.compileStreaming; } catch (e2) {}
+      probeRow("compileStreaming 可补写", yn(writable), writable ? "ok" : "bad");
+      if (!writable) { throw new Error("NOT_WRITABLE"); }
+    });
+
+    // ④ 真实下载 6.9 MB wasm 并读成 ArrayBuffer
+    chain = chain.then(function () {
+      if (typeof fetch !== "function") {
+        probeRow("fetch", "不支持", "bad");
+        throw new Error("NO_FETCH");
+      }
+      var t = nowMs();
+      return withTimeout(fetch("canvaskit/canvaskit.wasm"), 20000, "下载 canvaskit.wasm").then(function (resp) {
+        if (!resp.ok) {
+          probeRow("canvaskit.wasm 下载", "HTTP " + resp.status, "bad");
+          throw new Error("WASM_404");
+        }
+        return resp.arrayBuffer();
+      }).then(function (buf) {
+        bytes = buf;
+        probeRow("canvaskit.wasm 下载", (buf.byteLength / 1048576).toFixed(2) + " MB / " + (nowMs() - t) + " ms", "ok");
+      });
+    });
+
+    // ⑤ 用老路径真实编译整个 CanvasKit 模块（最大不确定项：内存 / 耗时）
+    chain = chain.then(function () {
+      var t = nowMs();
+      return withTimeout(WebAssembly.compile(bytes), 30000, "编译 canvaskit.wasm").then(function () {
+        probeRow("WebAssembly.compile（真实模块）", "通过 " + (nowMs() - t) + " ms", "ok");
+      });
+    });
+
+    chain.then(function () {
+      finishProbe("ok", "<b>结论：兼容补丁在这台设备上有较高可行性。</b><br>请回到主应用首页重新打开（<b>不要</b>带 <code>?nocompat=1</code>），门槛脚本会自动启用补丁并让 Flutter 尝试启动。若仍白屏，把本页结果与首页提示一起发回。");
+    }, function (err) {
+      var code = (err && err.message) ? err.message : String(err);
+      probeRow("失败原因", code, "bad");
+      var msg;
+      if (code === "WASM_404") {
+        msg = "<b>结论：当前地址不是完整部署，测不了。</b><br>请到主应用实际部署地址（<code>LEDGER_WEB_ROOT = frontend/build/web</code>）再打开本页实测。";
+      } else if (code === "NOT_WRITABLE") {
+        msg = "<b>结论：WebAssembly 对象不可写，页面级补丁无法生效。</b><br>要么改构建产物里的 bootstrap，要么启用轻量记账页。";
+      } else if (code === "NO_COMPILE" || code === "NO_ARRAYBUFFER" || code === "NO_FETCH") {
+        msg = "<b>结论：老路径必需的 API 缺失。</b><br>页面级补丁走不通，建议启用轻量记账页。";
+      } else if (/超过|超时|RangeError|OutOfMemory|memory/.test(code)) {
+        msg = "<b>结论：下载或编译超时 / 内存不足。</b><br>非流式编译 6.9 MB wasm 在老设备上可能 OOM，别再硬扛，建议启用轻量记账页。";
+      } else {
+        msg = "<b>结论：真实 wasm 编译失败。</b><br>" + esc(code) + "<br>建议启用轻量记账页。";
+      }
+      finishProbe("bad", msg);
+    });
   }
 
   function main() {
@@ -257,11 +411,11 @@
 
     var streamNote = hasStreaming
       ? "流式编译能力存在，但版本仍低于官方支持基线。"
-      : "实测缺失 <b>WebAssembly.compileStreaming</b>：本项目 flutter_bootstrap.js 用它加载 CanvasKit 且没有回退，引擎初始化失败、runApp() 不执行，所以是纯白屏而不是报错页。";
+      : "实测缺失 <b>WebAssembly.compileStreaming</b>（Safari 15 起原生支持）。主应用已在 bootstrap 之前<b>自动注入兼容补丁</b>，改走 fetch → arrayBuffer → WebAssembly.compile；能否跑起来取决于下方实测，尤其是 6.9 MB wasm 的非流式编译。";
 
     if (isOldSafari) {
-      verdict.className = "verdict bad";
-      verdict.innerHTML = "<b>结论：浏览器基线不达标，且已定位到具体原因。</b><br>Flutter 官方 Web 支持矩阵要求 <b>Safari 15.6 及以上</b>，当前是 " + esc(info.safari) + "（iOS " + esc(info.ios) + "）。<br>" + streamNote + "<br><b>建议：升级系统到 iOS 15.x</b>（Apple Safari 15 同时补上了 WebAssembly 流式编译与 WebGL 2；iPhone 6s / 7 / SE 一代都在支持列表内），或查看修复计划中的兼容兜底方案。";
+      verdict.className = "verdict warn";
+      verdict.innerHTML = "<b>结论：版本低于官方基线，但先试兼容补丁，不必急着升级。</b><br>Flutter 官方 Web 支持矩阵要求 <b>Safari 15.6 及以上</b>，当前是 " + esc(info.safari) + "（iOS " + esc(info.ios) + "）。<br>" + streamNote + "<br><b>下一步：点上面「开始实测」</b>。通过则回首页重开（不要带 <code>?nocompat=1</code>）；不通过再考虑轻量记账页。";
     } else if (lowCaps) {
       verdict.className = "verdict bad";
       verdict.innerHTML = "<b>结论：Safari 版本达标，但关键运行时能力缺失。</b><br>重点看下面标红的检测项；也可能是 Service Worker 缓存或资源加载失败。";
@@ -277,6 +431,8 @@
 
     renderErrors();
     refreshOut();
+
+    document.getElementById("probeBtn").onclick = runProbe;
 
     document.getElementById("copyBtn").onclick = function () {
       var out = document.getElementById("out");

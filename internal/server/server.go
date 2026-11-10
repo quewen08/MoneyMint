@@ -62,12 +62,28 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	h := handler.New(svc, engine)
+	// D-7：会话形态与 CORS 策略全部来自环境变量，支持服务端回退，无需重新构建前端。
+	h.ConfigureAuth(handler.AuthOptions{
+		CookieEnabled: cfg.AuthCookie,
+		CookieSecure:  cfg.CookieSecure,
+		ExposeToken:   cfg.AuthExposeToken,
+	})
 
 	return &App{
 		DB:      conn,
-		Handler: newRouter(h, svc, cfg.WebRoot),
+		Handler: newRouter(h, svc, cfg.WebRoot, corsOptionsFromConfig(cfg)),
 		Backup:  engine,
 	}, nil
+}
+
+// corsOptionsFromConfig 把 LEDGER_CORS_ORIGINS 的解析结果转换为中间件策略。
+// 未配置 → zero value（仅同源）；"*" → 通配且不带凭证；否则精确白名单 + 凭证。
+func corsOptionsFromConfig(cfg config.Config) corsOptions {
+	origins := cfg.CORSWhitelist()
+	if len(origins) == 1 && origins[0] == "*" {
+		return corsOptions{wildcard: true}
+	}
+	return corsOptions{origins: origins}
 }
 
 // initDeploymentSettings 部署与账号初始化（B-3 / B-4，启动时执行一次）：

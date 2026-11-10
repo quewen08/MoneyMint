@@ -187,6 +187,112 @@ func (s *Store) SavePushTransaction(ledgerID int64, txn domain.Transaction) (boo
 	return created, err
 }
 
+// IdempotentCreateResult 是 CreateTransactionIdempotent 的落库结果。
+//
+// Created=false 表示幂等键已存在（本次未新增任何行）：
+//   - Deleted=true：命中的交易已软删（调用方映射 409 idempotency_key_deleted）；
+//   - Hash 非空且与本次请求哈希不同：同一键被用于不同内容
+//     （调用方映射 409 idempotency_payload_mismatch）。
+type IdempotentCreateResult struct {
+	ID       int64
+	UUID     string
+	Date     string
+	Postings int
+	Created  bool
+	Deleted  bool
+	Hash     string
+}
+
+// CreateTransactionIdempotent 在线创建交易，带可选客户端幂等键（G-04 / AC-23）。
+//
+// 关键点：绝不「先查后写」——并发重复提交只有唯一索引能挡住。
+// 这里先 INSERT ... ON CONFLICT(ledger_id, client_request_id)
+// （WHERE 谓词必须与部分索引一致，否则 SQLite 报 no matching unique index），
+// RowsAffected=0 时在同一事务内回查既有行。
+// 业务行 + postings + sync_log 始终在同一事务内提交。
+func (s *Store) CreateTransactionIdempotent(
+	ledgerID int64, txn domain.Transaction, clientRequestID, payloadHash string,
+) (IdempotentCreateResult, error) {
+	if clientRequestID == "" {
+		id, err := s.CreateTransaction(ledgerID, txn)
+		if err != nil {
+			return IdempotentCreateResult{}, err
+		}
+		return IdempotentCreateResult{
+			ID: id, UUID: txn.UUID, Date: txn.Date,
+			Postings: len(txn.Postings), Created: true,
+		}, nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return IdempotentCreateResult{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	txnID, inserted, err := insertTransactionRowTx(tx, ledgerID, txn, clientRequestID, payloadHash)
+	if err != nil {
+		return IdempotentCreateResult{}, err
+	}
+	if !inserted {
+		// 幂等命中：回查既有行（含已软删），由 service 判断 200 / 409。
+		res, err := lookupIdempotentTx(tx, ledgerID, clientRequestID)
+		if err != nil {
+			return IdempotentCreateResult{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return IdempotentCreateResult{}, err
+		}
+		return res, nil
+	}
+
+	// 只在真正新建时补建币种，避免重放请求产生多余的 commodity create 同步事件。
+	for _, p := range txn.Postings {
+		if err := ensureCommodityOn(tx, ledgerID, p.Commodity); err != nil {
+			return IdempotentCreateResult{}, err
+		}
+	}
+	if err := insertPostingRowsTx(tx, txnID, txn.Postings); err != nil {
+		return IdempotentCreateResult{}, err
+	}
+	if _, err := appendSyncLogOn(tx, ledgerID, domain.EntityTransaction, txn.UUID, domain.OpCreate); err != nil {
+		return IdempotentCreateResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return IdempotentCreateResult{}, err
+	}
+	return IdempotentCreateResult{
+		ID: txnID, UUID: txn.UUID, Date: txn.Date,
+		Postings: len(txn.Postings), Created: true,
+	}, nil
+}
+
+// lookupIdempotentTx 按 (ledger_id, client_request_id) 读取既有交易。
+// 使用 COALESCE 保证已软删行也能读到；行一定存在（唯一索引刚刚拒绝插入）。
+func lookupIdempotentTx(tx *sql.Tx, ledgerID int64, clientRequestID string) (IdempotentCreateResult, error) {
+	var res IdempotentCreateResult
+	var deletedAt, hash sql.NullString
+	err := tx.QueryRow(
+		`SELECT id, uuid, date, deleted_at, COALESCE(client_payload_hash, '')
+		 FROM transactions WHERE ledger_id=? AND client_request_id=?`,
+		ledgerID, clientRequestID,
+	).Scan(&res.ID, &res.UUID, &res.Date, &deletedAt, &hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return IdempotentCreateResult{}, fmt.Errorf("幂等键 %q 冲突但回查不到既有交易", clientRequestID)
+	}
+	if err != nil {
+		return IdempotentCreateResult{}, err
+	}
+	res.Deleted = deletedAt.Valid
+	res.Hash = hash.String
+	if err := tx.QueryRow(
+		`SELECT count(*) FROM postings WHERE transaction_id=?`, res.ID,
+	).Scan(&res.Postings); err != nil {
+		return IdempotentCreateResult{}, err
+	}
+	return res, nil
+}
+
 // saveTransaction 是 CreateTransaction / SavePushTransaction 的公共实现。
 func (s *Store) saveTransaction(ledgerID int64, txn domain.Transaction, idempotent bool) (int64, bool, error) {
 	tx, err := s.db.Begin()
@@ -215,30 +321,15 @@ func (s *Store) saveTransaction(ledgerID int64, txn domain.Transaction, idempote
 		}
 	}
 
-	var createdBy any
-	if txn.CreatedBy != 0 {
-		createdBy = txn.CreatedBy
-	}
-	res, err := tx.Exec(
-		`INSERT INTO transactions(ledger_id, uuid, date, flag, description, tags, created_by, reversal_of)
-		 VALUES(?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))`,
-		ledgerID, txn.UUID, txn.Date, txn.Flag, txn.Description, marshalTags(txn.Tags), createdBy, txn.ReversalOf,
-	)
+	// 在线/离线 push 路径都不带 client_request_id：由 service 保证冲正/期初
+	// 沿用 opening_key，不复用本幂等键（语义不同，混用会吞掉合法交易）。
+	txnID, _, err := insertTransactionRowTx(tx, ledgerID, txn, "", "")
 	if err != nil {
-		return 0, false, fmt.Errorf("写入交易失败: %w", err)
+		return 0, false, err
 	}
-	txnID, _ := res.LastInsertId()
-
-	for i, p := range txn.Postings {
-		if _, err := tx.Exec(
-			`INSERT INTO postings(transaction_id, account_id, commodity, amount, position)
-			 VALUES(?, ?, ?, ?, ?)`,
-			txnID, p.AccountID, p.Commodity, p.Amount, i,
-		); err != nil {
-			return 0, false, fmt.Errorf("写入分录失败(账户 %d): %w", p.AccountID, err)
-		}
+	if err := insertPostingRowsTx(tx, txnID, txn.Postings); err != nil {
+		return 0, false, err
 	}
-
 	if _, err := appendSyncLogOn(tx, ledgerID, domain.EntityTransaction, txn.UUID, domain.OpCreate); err != nil {
 		return 0, false, err
 	}
@@ -248,12 +339,69 @@ func (s *Store) saveTransaction(ledgerID int64, txn domain.Transaction, idempote
 	return txnID, true, nil
 }
 
+// insertTransactionRowTx 写入交易主行，返回 (id, 是否插入)。
+//
+// clientRequestID 非空时附带部分唯一索引的 upsert 谓词：重复提交时
+// ON CONFLICT DO NOTHING 命中，inserted=false，由调用方回查既有行。
+func insertTransactionRowTx(
+	tx *sql.Tx, ledgerID int64, txn domain.Transaction, clientRequestID, payloadHash string,
+) (int64, bool, error) {
+	var createdBy any
+	if txn.CreatedBy != 0 {
+		createdBy = txn.CreatedBy
+	}
+	res, err := tx.Exec(
+		`INSERT INTO transactions
+		 (ledger_id, uuid, date, flag, description, tags, created_by, reversal_of,
+		  client_request_id, client_payload_hash)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, NULLIF(?,''), NULLIF(?,''), NULLIF(?,''))
+		 ON CONFLICT(ledger_id, client_request_id) WHERE client_request_id IS NOT NULL DO NOTHING`,
+		ledgerID, txn.UUID, txn.Date, txn.Flag, txn.Description, marshalTags(txn.Tags),
+		createdBy, txn.ReversalOf, clientRequestID, payloadHash,
+	)
+	if err != nil {
+		return 0, false, fmt.Errorf("写入交易失败: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, false, err
+	}
+	if n == 0 {
+		return 0, false, nil
+	}
+	id, _ := res.LastInsertId()
+	return id, true, nil
+}
+
+// insertPostingRowsTx 写入分录（币种补建由调用方按需提前完成）。
+func insertPostingRowsTx(tx *sql.Tx, txnID int64, postings []domain.Posting) error {
+	for i, p := range postings {
+		if _, err := tx.Exec(
+			`INSERT INTO postings(transaction_id, account_id, commodity, amount, position)
+			 VALUES(?, ?, ?, ?, ?)`,
+			txnID, p.AccountID, p.Commodity, p.Amount, i,
+		); err != nil {
+			return fmt.Errorf("写入分录失败(账户 %d): %w", p.AccountID, err)
+		}
+	}
+	return nil
+}
+
 // RestoreTransaction 从回收站恢复一笔交易：清空 deleted_at，并写 sync_log op=create
 // 让其他设备重新拉回这笔交易（客户端只认 create/delete/update/close 四种 op，
 // 恢复复用 create 语义，不引入新 op，旧客户端也能正确合并）。
 // 幂等：不存在或未删除返回 false。
+//
+// 「业务 UPDATE + sync_log 追加」在同一事务内：若 sync_log 写失败而 UPDATE 已生效，
+// 其他设备永远拉不到这笔恢复，账本会出现「本地可见、远端不可见」的静默不一致。
 func (s *Store) RestoreTransaction(ledgerID int64, uuid string) (bool, error) {
-	res, err := s.db.Exec(
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.Exec(
 		`UPDATE transactions SET deleted_at=NULL
 		 WHERE ledger_id=? AND uuid=? AND deleted_at IS NOT NULL`,
 		ledgerID, uuid,
@@ -265,7 +413,10 @@ func (s *Store) RestoreTransaction(ledgerID int64, uuid string) (bool, error) {
 	if n == 0 {
 		return false, nil
 	}
-	if _, err := appendSyncLogOn(s.db, ledgerID, domain.EntityTransaction, uuid, domain.OpCreate); err != nil {
+	if _, err := appendSyncLogOn(tx, ledgerID, domain.EntityTransaction, uuid, domain.OpCreate); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -302,8 +453,17 @@ func (s *Store) ClosedAccountsOfTransaction(ledgerID int64, uuid string) ([]stri
 }
 
 // SoftDeleteTransaction 软删一笔交易并写 sync_log delete。幂等：已删/不存在返回 false。
+//
+// 与 RestoreTransaction 同理：UPDATE 与 sync_log 必须同事务，
+// 否则删除对本地生效、其他设备却收不到 delete 事件。
 func (s *Store) SoftDeleteTransaction(ledgerID int64, uuid string) (bool, error) {
-	res, err := s.db.Exec(
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.Exec(
 		`UPDATE transactions SET deleted_at=datetime('now')
 		 WHERE ledger_id=? AND uuid=? AND deleted_at IS NULL`,
 		ledgerID, uuid,
@@ -315,7 +475,10 @@ func (s *Store) SoftDeleteTransaction(ledgerID int64, uuid string) (bool, error)
 	if n == 0 {
 		return false, nil
 	}
-	if _, err := appendSyncLogOn(s.db, ledgerID, domain.EntityTransaction, uuid, domain.OpDelete); err != nil {
+	if _, err := appendSyncLogOn(tx, ledgerID, domain.EntityTransaction, uuid, domain.OpDelete); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
 		return false, err
 	}
 	return true, nil

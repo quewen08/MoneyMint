@@ -33,19 +33,27 @@ func (e *invalidError) Unwrap() error { return ErrInvalid }
 // 稳定错误码（与设计 §16 对齐）。handler 依码表映射 HTTP 状态，
 // 前端可据此做结构化处理，避免依赖易变的中文文案。
 const (
-	CodeAccountBalanceNotZero    = "account_balance_not_zero"
-	CodeAccountNotFound          = "account_not_found"
-	CodeAccountClosed            = "account_closed"
-	CodeAccountOpenDateAfter     = "account_open_date_after_ledger"
-	CodeOpeningAmountInvalid     = "opening_amount_invalid"
-	CodeOpeningDirectionInvalid  = "opening_direction_invalid"
-	CodeOpeningCommodityMismatch = "opening_commodity_mismatch"
+	CodeAccountBalanceNotZero     = "account_balance_not_zero"
+	CodeAccountNotFound           = "account_not_found"
+	CodeAccountClosed             = "account_closed"
+	CodeAccountOpenDateAfter      = "account_open_date_after_ledger"
+	CodeOpeningAmountInvalid      = "opening_amount_invalid"
+	CodeOpeningDirectionInvalid   = "opening_direction_invalid"
+	CodeOpeningCommodityMismatch  = "opening_commodity_mismatch"
 	CodeOpeningAccountNotOpenable = "opening_account_not_openable"
-	CodeOpeningDateMismatch      = "opening_date_mismatch"
-	CodeOpeningConflict          = "opening_conflict"
-	CodeOpeningViaAPIOnly        = "opening_via_api_only"
-	CodeLedgerOpeningDateInvalid = "ledger_opening_date_invalid"
+	CodeOpeningDateMismatch       = "opening_date_mismatch"
+	CodeOpeningConflict           = "opening_conflict"
+	CodeOpeningViaAPIOnly         = "opening_via_api_only"
+	CodeLedgerOpeningDateInvalid  = "ledger_opening_date_invalid"
 	CodeLedgerOpeningDateAfterTxn = "ledger_opening_date_after_first_txn"
+
+	// ---- 认证形态（D-7）：Cookie 路径缺少 CSRF 头 ----
+	CodeCSRFRequired = "csrf_required"
+	// ---- 在线记账幂等（G-04 / AC-23）----
+	// CodeIdempotencyKeyDeleted：幂等键命中的交易已被软删，需换新键重提。
+	CodeIdempotencyKeyDeleted = "idempotency_key_deleted"
+	// CodeIdempotencyPayloadMismatch：同一幂等键被用于内容不同的交易。
+	CodeIdempotencyPayloadMismatch = "idempotency_payload_mismatch"
 )
 
 // CodedError 是携带稳定错误码与结构化明细的业务错误。

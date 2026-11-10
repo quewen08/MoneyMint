@@ -12,7 +12,14 @@ import (
 //
 // webRoot 为前端构建产物目录；非空且存在时，未匹配的路径交由静态托管处理
 // （含 SPA 回退），实现「一个进程 + 一个端口」开箱可用。
-func newRouter(h *handler.Handler, svc *service.Service, webRoot string) http.Handler {
+//
+// corsCfg 可选（不传 = 仅同源）：组合根按 LEDGER_CORS_ORIGINS 解析后传入；
+// 既有测试的 newRouter(h, svc, "") 调用无需改动。
+func newRouter(h *handler.Handler, svc *service.Service, webRoot string, corsCfg ...corsOptions) http.Handler {
+	var corsOpt corsOptions
+	if len(corsCfg) > 0 {
+		corsOpt = corsCfg[0]
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/health", h.HandleHealth)
@@ -131,7 +138,7 @@ func newRouter(h *handler.Handler, svc *service.Service, webRoot string) http.Ha
 	// cors 必须包在最外层：浏览器对带 Authorization / X-Ledger-Id 等自定义头的
 	// 请求会先发 OPTIONS 预检，预检请求没有 token，若先经过 authMiddleware 会被 401
 	// 拦截（到不了 cors 的 OPTIONS 处理），导致浏览器拒绝发真实请求、前端表现为「无响应」。
-	return cors(authMiddleware(svc, mux))
+	return cors(corsOpt, authMiddleware(h, svc, mux))
 }
 
 // methodSwitch 按 HTTP 方法分发到对应 handler。

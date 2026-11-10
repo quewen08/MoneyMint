@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 刘海屏安全区：viewport-fit=cover 与 Flutter 版保持一致 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="家庭协作复式记账（类 Beancount），支持离线多端记账与增量同步。"
+    />
+    <!-- 主题色：与 Flutter Material3 teal 一致 -->
+    <meta name="theme-color" content="#00897B" />
+
+    <!-- iOS PWA 元信息（逐条搬运自 frontend/web/index.html） -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="家庭记账" />
+    <link rel="apple-touch-icon" href="./icons/Icon-192.png" />
+
+    <!-- Favicon 与 PWA manifest（资源在 public/ 下） -->
+    <link rel="icon" type="image/png" href="./favicon.png" />
+    <link rel="manifest" href="./manifest.json" />
+
+    <title>家庭记账</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

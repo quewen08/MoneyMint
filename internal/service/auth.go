@@ -19,8 +19,10 @@ type UserInfo struct {
 }
 
 // AuthResult 是注册/登录成功的返回。
+// Token 在兼容期（LEDGER_AUTH_EXPOSE_TOKEN=true）继续返回，供 /legacy/ 旧版走 Bearer；
+// 关闭暴露时置空并由 omitempty 从响应体移除——会话只走 httpOnly Cookie。
 type AuthResult struct {
-	Token string   `json:"token"`
+	Token string   `json:"token,omitempty"`
 	User  UserInfo `json:"user"`
 }
 

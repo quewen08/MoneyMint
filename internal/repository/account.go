@@ -110,8 +110,16 @@ func (s *Store) AccountByUUID(ledgerID int64, uuid string) (domain.Account, erro
 // UpdateAccountSortOrder 更新账户自定义排序序号（0.4-C 分类拖拽排序）。
 // op=update 写入 sync_log，使其他端经 pull 收到更新事件并重排。
 // 账户不存在或无变动时不写 sync_log（幂等）。
+//
+// UPDATE 与 sync_log 同事务：避免「本地顺序变了、其他端收不到」的静默漂移。
 func (s *Store) UpdateAccountSortOrder(ledgerID int64, uuid string, order int64) error {
-	res, err := s.db.Exec(
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.Exec(
 		`UPDATE accounts SET sort_order=?, updated_at=datetime('now')
 		 WHERE ledger_id=? AND uuid=? AND deleted_at IS NULL`,
 		order, ledgerID, uuid,
@@ -120,12 +128,13 @@ func (s *Store) UpdateAccountSortOrder(ledgerID int64, uuid string, order int64)
 		return err
 	}
 	n, _ := res.RowsAffected()
-	if n > 0 {
-		if _, err := appendSyncLogOn(s.db, ledgerID, domain.EntityAccount, uuid, domain.OpUpdate); err != nil {
-			return err
-		}
+	if n == 0 {
+		return nil
 	}
-	return nil
+	if _, err := appendSyncLogOn(tx, ledgerID, domain.EntityAccount, uuid, domain.OpUpdate); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // AccountIDByUUID 按 uuid 查询未关闭账户的 id（用于记账引用，已关闭账户不可记账）。
@@ -185,7 +194,14 @@ func (s *Store) InsertAccount(ledgerID int64, a domain.Account) (int64, error) {
 			return 0, err
 		}
 	}
-	res, err := s.db.Exec(
+	// 账户行与 sync_log(create) 同事务：否则新建账户可能对本地可见、其他端拉不到。
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.Exec(
 		`INSERT INTO accounts(ledger_id, uuid, name, display_name, type, open_date, commodity_restriction,
 		        icon, color, parent_uuid, sub_type)
 		 VALUES(?, ?, ?, NULLIF(?,'') , ?, ?, NULLIF(?,'') , NULLIF(?,'') , NULLIF(?,'') , NULLIF(?,'') , NULLIF(?,'') )`,
@@ -196,7 +212,10 @@ func (s *Store) InsertAccount(ledgerID int64, a domain.Account) (int64, error) {
 		return 0, fmt.Errorf("创建账户失败: %w", err)
 	}
 	id, _ := res.LastInsertId()
-	if _, err := appendSyncLogOn(s.db, ledgerID, domain.EntityAccount, a.UUID, domain.OpCreate); err != nil {
+	if _, err := appendSyncLogOn(tx, ledgerID, domain.EntityAccount, a.UUID, domain.OpCreate); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	return id, nil

@@ -5,15 +5,21 @@
 #   bash scripts/local.sh <command>
 #
 # 命令：
-#   dev       启动后端（托管 frontend/build/web，端口 8080）
-#   build     编译后端二进制到 dist/
-#   web       构建前端产物
-#   test      后端 vet + 全部测试（严格 bean-check）
-#   test-web  前端静态分析 + 单元测试
-#   check     test + 版本校验 + bean-check 自检（CI 同款）
-#   version   版本号三处一致性校验
-#   smoke     端到端冒烟
-#   rehearse  迁移 012 副本库预演（VACUUM INTO 快照 + 两次迁移 + bean-check）
+#   dev           启动后端（托管 frontend/build/web，端口 8080）
+#   build         编译后端二进制到 dist/
+#   web           构建 Flutter 产物
+#   web-build     构建 Vue 前端（Vite → frontend/dist）
+#   web-dev       启动 Vite 开发服务器（/api 代理到 127.0.0.1:8080）
+#   web-test      Vue 单元测试（Vitest）
+#   web-typecheck Vue 类型检查（vue-tsc）
+#   web-compat    扫描构建产物 ES2015 语法兼容性（es-check）
+#   web-legacy    重建 Flutter 旧版到 frontend/dist/legacy 并校验
+#   test          后端 vet + 全部测试（严格 bean-check）
+#   test-web      前端静态分析 + 单元测试
+#   check         test + 版本校验 + bean-check 自检（CI 同款）
+#   version       版本号三处一致性校验
+#   smoke         端到端冒烟
+#   rehearse      迁移 012 副本库预演（VACUUM INTO 快照 + 两次迁移 + bean-check）
 #
 # 存在原因：本机 Windows 无 make，Makefile 无法直接使用。
 
@@ -57,6 +63,31 @@ case "$cmd" in
     echo "✅ frontend/build/web"
     ;;
 
+  web-build)
+    ( cd frontend && npm run build )
+    echo "✅ frontend/dist"
+    ;;
+
+  web-dev)
+    ( cd frontend && npm run dev )
+    ;;
+
+  web-test)
+    ( cd frontend && npm run test )
+    ;;
+
+  web-typecheck)
+    ( cd frontend && npm run typecheck )
+    ;;
+
+  web-compat)
+    ( cd frontend && npm run compat )
+    ;;
+
+  web-legacy)
+    bash scripts/build-legacy.sh
+    ;;
+
   test)
     go vet ./...
     BEAN_CHECK_STRICT=1 go test ./...
@@ -88,6 +119,6 @@ case "$cmd" in
     ;;
 
   help|*)
-    sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
 esac

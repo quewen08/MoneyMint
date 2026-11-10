@@ -22,12 +22,25 @@ type Handler struct {
 	// engine 为备份引擎；为 nil 表示备份功能未启用（初始化失败或显式关闭），
 	// 此时备份端点统一返回 503，而不是伪装成功。
 	engine *backup.Engine
+	// auth 是会话凭据的下发/读取选项（D-7）。默认兼容期形态：
+	// Cookie 开启、内网 HTTP 不设 Secure、响应体保留 token（旧版 /legacy/ 仍用 Bearer）。
+	auth AuthOptions
 }
 
-// New 构造 Handler。
+// New 构造 Handler。默认按兼容期（D-7 观察期）配置会话凭据，
+// 组合根如需改写，调用 ConfigureAuth。
 func New(svc *service.Service, engine *backup.Engine) *Handler {
-	return &Handler{svc: svc, engine: engine}
+	return &Handler{svc: svc, engine: engine, auth: DefaultAuthOptions()}
 }
+
+// ConfigureAuth 覆盖会话凭据选项（由组合根按环境变量注入）。
+func (h *Handler) ConfigureAuth(opts AuthOptions) { h.auth = opts }
+
+// AuthOptions 返回当前会话凭据选项（供鉴权中间件判断 Cookie / CSRF 策略）。
+func (h *Handler) AuthOptions() AuthOptions { return h.auth }
+
+// WriteError 把错误按统一契约写出（供 server 中间件复用，避免两套错误格式）。
+func WriteError(w http.ResponseWriter, err error) { writeError(w, err) }
 
 // ---------- 响应辅助 ----------
 

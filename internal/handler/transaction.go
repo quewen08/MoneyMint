@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"familyledger/internal/auth"
 	"familyledger/internal/domain"
@@ -35,7 +36,10 @@ func (h *Handler) HandleCreateTransaction(w http.ResponseWriter, r *http.Request
 		Flag        string   `json:"flag"`
 		Description string   `json:"description"`
 		Tags        []string `json:"tags"`
-		Postings    []struct {
+		// ClientRequestID 是客户端幂等键（可选）。为兼容旧前端，缺省即关闭幂等。
+		// 与 Idempotency-Key 头同时存在时以头为准（头是标准位置，body 是历史兼容）。
+		ClientRequestID string `json:"client_request_id"`
+		Postings        []struct {
 			AccountID int64  `json:"account_id"`
 			Commodity string `json:"commodity"`
 			Amount    string `json:"amount"`
@@ -57,12 +61,22 @@ func (h *Handler) HandleCreateTransaction(w http.ResponseWriter, r *http.Request
 	if uid, ok := auth.UserID(r.Context()); ok {
 		createdBy = uid
 	}
-	created, err := h.svc.CreateTransaction(ledgerID, req.Date, req.Flag, req.Description, postings, createdBy, req.Tags...)
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if idempotencyKey == "" {
+		idempotencyKey = req.ClientRequestID
+	}
+	created, err := h.svc.CreateTransactionIdempotent(
+		ledgerID, idempotencyKey, req.Date, req.Flag, req.Description, postings, createdBy, req.Tags...)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, created)
+	// 新建 → 201；幂等命中 → 200（响应体结构不变，附 "idempotent": true）。
+	status := http.StatusCreated
+	if created.Idempotent {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, created)
 }
 
 // HandleListTrash 列出回收站内的交易（已软删，按删除时间倒序）。

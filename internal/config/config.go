@@ -6,6 +6,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -55,6 +56,25 @@ type Config struct {
 	LoginWindowMinutes int
 	// LoginLockoutMinutes：超限后的锁定长度（分钟）。
 	LoginLockoutMinutes int
+
+	// ---- 认证形态与 CORS（D-7）----
+
+	// AuthCookie 控制会话是否通过 httpOnly Cookie 承载
+	// （LEDGER_AUTH_COOKIE，默认 true）。置 false 时完全退回 Bearer 旧行为：
+	// 不下发 Cookie、不读取 Cookie、也不要求 X-CSRF 头。
+	AuthCookie bool
+	// CookieSecure 控制 Set-Cookie 的 Secure 属性
+	// （LEDGER_COOKIE_SECURE，默认 false，对应内网 HTTP 部署）。
+	CookieSecure bool
+	// CORSOrigins 是允许跨域携带凭证的来源白名单
+	// （LEDGER_CORS_ORIGINS，逗号分隔）。空 = 仅同源、不输出 CORS 头；
+	// "*" = 恢复旧的全放开行为（不带凭证）；否则仅命中项回显 Origin + 凭证。
+	CORSOrigins string
+	// AuthExposeToken 控制登录/刷新/改密响应体是否继续返回 token
+	// （LEDGER_AUTH_EXPOSE_TOKEN，默认 true）。兼容期必须为 true：
+	// /legacy/ 的 Flutter 版本登录后仍要拿 token 走 Bearer 头；
+	// 批 6 cutover 完成后再置 false，届时响应不再向 JS 暴露 token。
+	AuthExposeToken bool
 }
 
 // Load 从环境变量构造 Config，未设置时使用默认值。
@@ -71,23 +91,31 @@ type Config struct {
 //	LEDGER_LOGIN_MAX_ATTEMPTS 登录失败次数上限（默认 5；0 关闭限流）
 //	LEDGER_LOGIN_WINDOW_MINUTES 失败计数窗口（默认 15 分钟）
 //	LEDGER_LOGIN_LOCKOUT_MINUTES 超限后的锁定时间（默认 10 分钟）
+//	LEDGER_AUTH_COOKIE        会话是否用 httpOnly Cookie 承载（默认 true；false 退回 Bearer）
+//	LEDGER_COOKIE_SECURE      Set-Cookie 的 Secure 属性（默认 false，内网 HTTP）
+//	LEDGER_CORS_ORIGINS       跨域来源白名单（逗号分隔；空=仅同源，"*"=通配不带凭证）
+//	LEDGER_AUTH_EXPOSE_TOKEN  响应体是否继续返回 token（默认 true，兼容 /legacy/ 旧版）
 func Load() Config {
 	return Config{
-		DBPath:            envOr("LEDGER_DB", "data/ledger.db"),
-		ListenAddr:        envOr("LISTEN", ":8080"),
-		SchemaPath:        envOr("LEDGER_SCHEMA", "schema.sql"),
-		WebRoot:           envOr("LEDGER_WEB_ROOT", "./web"),
-		BackupEnabled:     envBool("LEDGER_BACKUP_ENABLED", true),
-		BackupDir:         envOr("LEDGER_BACKUP_DIR", ""),
-		BackupHour:        envInt("LEDGER_BACKUP_HOUR", 3),
-		BackupKeepDaily:   envInt("LEDGER_BACKUP_KEEP_DAILY", 14),
-		BackupKeepMonthly: envInt("LEDGER_BACKUP_KEEP_MONTHLY", 12),
-		OwnerUser:         envOr("LEDGER_OWNER_USER", ""),
-		OwnerPassword:     os.Getenv("LEDGER_OWNER_PASSWORD"),
+		DBPath:              envOr("LEDGER_DB", "data/ledger.db"),
+		ListenAddr:          envOr("LISTEN", ":8080"),
+		SchemaPath:          envOr("LEDGER_SCHEMA", "schema.sql"),
+		WebRoot:             envOr("LEDGER_WEB_ROOT", "./web"),
+		BackupEnabled:       envBool("LEDGER_BACKUP_ENABLED", true),
+		BackupDir:           envOr("LEDGER_BACKUP_DIR", ""),
+		BackupHour:          envInt("LEDGER_BACKUP_HOUR", 3),
+		BackupKeepDaily:     envInt("LEDGER_BACKUP_KEEP_DAILY", 14),
+		BackupKeepMonthly:   envInt("LEDGER_BACKUP_KEEP_MONTHLY", 12),
+		OwnerUser:           envOr("LEDGER_OWNER_USER", ""),
+		OwnerPassword:       os.Getenv("LEDGER_OWNER_PASSWORD"),
 		RegistrationEnabled: envBool("LEDGER_REGISTRATION_ENABLED", true),
 		LoginMaxAttempts:    envInt("LEDGER_LOGIN_MAX_ATTEMPTS", 5),
 		LoginWindowMinutes:  envInt("LEDGER_LOGIN_WINDOW_MINUTES", 15),
 		LoginLockoutMinutes: envInt("LEDGER_LOGIN_LOCKOUT_MINUTES", 10),
+		AuthCookie:          envBool("LEDGER_AUTH_COOKIE", true),
+		CookieSecure:        envBool("LEDGER_COOKIE_SECURE", false),
+		CORSOrigins:         envOr("LEDGER_CORS_ORIGINS", ""),
+		AuthExposeToken:     envBool("LEDGER_AUTH_EXPOSE_TOKEN", true),
 	}
 }
 
@@ -126,7 +154,68 @@ func (c Config) Validate() error {
 	if c.LoginLockoutMinutes <= 0 {
 		return fmt.Errorf("LEDGER_LOGIN_LOCKOUT_MINUTES 必须 > 0，当前为 %d", c.LoginLockoutMinutes)
 	}
+	// CORS 白名单：空表示仅同源；"*" 单独使用表示通配；
+	// 其余必须是可解析的 http(s) 绝对来源（不带路径/查询/片段），否则浏览器不会回显。
+	if _, err := parseCORSOrigins(c.CORSOrigins); err != nil {
+		return err
+	}
 	return nil
+}
+
+// CORSWhitelist 返回解析后的跨域来源白名单。
+// 空切片表示仅同源（不输出 CORS 头）；["*"] 表示通配（不带凭证）。
+// 解析失败时返回空切片——Load 之后的 Validate 已负责在启动时拦截非法值。
+func (c Config) CORSWhitelist() []string {
+	origins, err := parseCORSOrigins(c.CORSOrigins)
+	if err != nil {
+		return nil
+	}
+	return origins
+}
+
+// parseCORSOrigins 解析逗号分隔的 CORS 来源白名单并做合法性校验。
+// 规则：空串 → nil；"*" 只能单独出现；其余项必须是不带路径的 http(s) 绝对来源，
+// 末尾斜杠会被去掉，重复项去重。
+func parseCORSOrigins(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	seen := make(map[string]struct{}, len(parts))
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		origin := strings.TrimSpace(p)
+		if origin == "" {
+			continue
+		}
+		if origin == "*" {
+			if len(parts) > 1 {
+				return nil, fmt.Errorf("LEDGER_CORS_ORIGINS 中 \"*\" 必须单独使用，不能与其他来源混用")
+			}
+			return []string{"*"}, nil
+		}
+		u, err := url.Parse(origin)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return nil, fmt.Errorf("LEDGER_CORS_ORIGINS 含非法来源 %q：必须是 http(s)://host[:port]", origin)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return nil, fmt.Errorf("LEDGER_CORS_ORIGINS 来源 %q 的协议只支持 http/https", origin)
+		}
+		if u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+			return nil, fmt.Errorf("LEDGER_CORS_ORIGINS 来源 %q 不能包含用户信息、路径、查询或片段", origin)
+		}
+		normalized := u.Scheme + "://" + u.Host
+		if _, dup := seen[normalized]; dup {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("LEDGER_CORS_ORIGINS 未包含有效来源")
+	}
+	return out, nil
 }
 
 // ResolvedBackupDir 返回实际使用的备份目录：未显式配置时放在数据库同级 backups/。

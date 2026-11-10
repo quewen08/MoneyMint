@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Node / Vite（M7 新前端）：依赖与构建产物只在本地，不入库
+node_modules/
+dist/

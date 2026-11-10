@@ -12,12 +12,50 @@ import (
 	"familyledger/internal/service"
 )
 
-// cors 允许前端跨域访问（开发期放开所有来源）。
-func cors(next http.Handler) http.Handler {
+// corsOptions 是 CORS 策略（D-7）。
+//
+//   - zero value（未配置）→ 仅同源：不输出 Access-Control-Allow-Origin，
+//     浏览器同源请求不受影响，跨域脚本拿不到响应；
+//   - wildcard=true（LEDGER_CORS_ORIGINS=*）→ 恢复旧行为，但不允许携带凭证；
+//   - origins 白名单 → 仅命中的 Origin 回显，并允许凭证（Cookie 认证必需），
+//     同时输出 Vary: Origin 防止 CDN/代理把 A 源的响应缓存给 B 源。
+type corsOptions struct {
+	wildcard bool
+	origins  []string
+}
+
+// allows 判断来源是否命中白名单（精确匹配 scheme://host[:port]）。
+func (o corsOptions) allows(origin string) bool {
+	for _, it := range o.origins {
+		if it == origin {
+			return true
+		}
+	}
+	return false
+}
+
+// cors 应用 CORS 策略；OPTIONS 预检直接 204，不进入认证。
+//
+// 预检必须由最外层处理：浏览器对带 Authorization / X-Ledger-Id / X-CSRF
+// 等自定义头的请求会先发 OPTIONS，预检没有 token，若先经过 authMiddleware 会被 401，
+// 浏览器随即拒绝发真实请求，前端表现为「无响应」。
+func cors(opt corsOptions, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		switch {
+		case opt.wildcard:
+			// 通配模式不能与凭证共存（浏览器规范），旧版 Bearer 客户端不依赖 Cookie。
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		case len(opt.origins) > 0:
+			// 无论命中与否都声明 Vary，避免共享缓存串源。
+			w.Header().Add("Vary", "Origin")
+			if origin != "" && opt.allows(origin) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,PATCH,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Ledger-Id")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Ledger-Id, X-CSRF")
 		// 导出接口通过响应头附带恒等式提示，跨域部署时浏览器必须被显式允许读取。
 		w.Header().Set("Access-Control-Expose-Headers", "X-Ledger-Balanced, X-Ledger-Diffs, Content-Disposition")
 		if r.Method == http.MethodOptions {
@@ -31,7 +69,9 @@ func cors(next http.Handler) http.Handler {
 // authMiddleware 包裹所有路由：
 //   - 非 /api/ 前缀（前端静态资源与 SPA 入口）完全放行，交由 static.go 处理
 //   - 放行 /api/health 与公开认证端点（register/login）
-//   - 其余 /api/ 路由必须携带有效 Bearer token，否则 401
+//   - 其余 /api/ 路由必须携带有效会话（Cookie 优先、Bearer 兜底），否则 401
+//   - Cookie 会话的非 GET/HEAD/OPTIONS 请求必须带 X-CSRF 头，缺失 403 csrf_required；
+//     显式使用 Bearer 的请求豁免（旧版 Flutter 不在浏览器里受跨站脚本影响）
 //   - 处于「必须先改密」状态时，除自服务端点外一律 428
 //   - 认证自服务端点（me/logout/change-password/refresh）仅需登录态
 //   - 账本管理端点（/api/ledgers）仅需登录态（具体权限在 service 层校验）
@@ -40,7 +80,7 @@ func cors(next http.Handler) http.Handler {
 //
 // 鉴权范围按 /api/ 前缀划分（而非逐一列白名单）：这样新增前端路由、
 // 新增静态资源都无需回来改这里，也避免「忘了加白名单导致页面 401」。
-func authMiddleware(svc *service.Service, next http.Handler) http.Handler {
+func authMiddleware(h *handler.Handler, svc *service.Service, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqPath := r.URL.Path
 
@@ -50,19 +90,20 @@ func authMiddleware(svc *service.Service, next http.Handler) http.Handler {
 			return
 		}
 
+		// 公开端点必须放在 token 校验之前：注册/登录本身没有 Cookie，
+		// 也不应被 CSRF 拦截（此处曾把注册开关查询放在校验之后，永远走不到）。
 		if reqPath == "/api/health" || reqPath == "/api/auth/register" || reqPath == "/api/auth/login" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		// 注册开关查询（B-4）：注册页在登录前就要用，必须无 token 可访问。
-		// 注意必须放在 token 校验之前——放在后面永远走不到（此处曾实测踩坑）。
 		if reqPath == "/api/settings/registration" && r.Method == http.MethodGet {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		tok := handler.BearerToken(r)
+		tok := h.RequestToken(r)
 		if tok == "" {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 			return
@@ -73,6 +114,15 @@ func authMiddleware(svc *service.Service, next http.Handler) http.Handler {
 			return
 		}
 		uid := sess.UserID
+
+		// CSRF（D-7）：只针对 Cookie 会话的写请求。Bearer 请求豁免——
+		// 旧版 Flutter 用 localStorage token 走 Authorization，不能被新规则打断；
+		// 且跨站表单无法设置 Authorization 头，豁免不降低安全性。
+		if csrfRequired(h, r) && strings.TrimSpace(r.Header.Get("X-CSRF")) == "" {
+			handler.WriteError(w, domain.Codedf(domain.ErrForbidden, domain.CodeCSRFRequired,
+				"缺少 CSRF 头 X-CSRF，写请求被拒绝"))
+			return
+		}
 
 		// 「登录设备」也是自服务：不涉及账本数据，强制改密期间也允许查看与吊销
 		// （用户可能正是发现异常登录才来处理的）。
@@ -138,6 +188,27 @@ func authMiddleware(svc *service.Service, next http.Handler) http.Handler {
 		ctx = auth.WithLedger(ctx, ledgerID, role)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// csrfRequired 判断本次请求是否必须携带 X-CSRF。
+//
+// 规则（D-7 定死）：
+//   - LEDGER_AUTH_COOKIE=false 时整条 Cookie 通道关闭，不需要 CSRF；
+//   - 请求显式带 Authorization: Bearer 时豁免——旧版客户端不受影响，
+//     且跨站攻击者无法给表单/图片请求设置该头；
+//   - 仅 GET/HEAD/OPTIONS 视为安全方法；其余（POST/PUT/PATCH/DELETE）视为写操作。
+func csrfRequired(h *handler.Handler, r *http.Request) bool {
+	if !h.AuthOptions().CookieEnabled {
+		return false
+	}
+	if handler.BearerToken(r) != "" {
+		return false
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	}
+	return true
 }
 
 // ledgerIDFromRequest 从 X-Ledger-Id 头解析账本 id；缺失或非法时回退默认账本，
