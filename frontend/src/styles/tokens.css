@@ -1,0 +1,143 @@
+/*
+ * 设计 token（批 0）
+ * 数值直接取自 docs/prototype/pc-redesign.html 与 mobile-redesign-v2.html，
+ * 不新建设计系统；后续页面只能引用变量，禁止散落硬编码色值。
+ */
+:root {
+  /* 主色与语义色 */
+  --fb-blue: #3b6ef6;
+  --fb-green: #2ba471;
+  --fb-warn: #e8590c;
+  --fb-danger: #d93025;
+
+  /* 背景与文字 */
+  --fb-bg: #f5f6f8;
+  --fb-card: #ffffff;
+  --fb-ink: #1a1d1f;
+  --fb-sub: #6b7280;
+  --fb-line: #e5e7eb;
+  --fb-soft: #eef1f6;
+
+  /* PC 侧栏 */
+  --fb-sidebar: #15203b;
+  --fb-side-fg: #c7d0e0;
+  --fb-side-head: #7e8aa3;
+
+  /* 渐变蓝（首页 hero） */
+  --fb-hero-gradient: linear-gradient(150deg, #1d2b5f 0%, #2e4bb8 55%, #3b6ef6 100%);
+
+  /* 圆角与阴影 */
+  --fb-radius-card: 18px;
+  --fb-radius-input: 10px;
+  --fb-radius-pill: 999px;
+  --fb-shadow-card: 0 2px 12px rgba(23, 32, 68, 0.05);
+  --fb-shadow-header: 0 8px 24px rgba(21, 32, 59, 0.18);
+
+  /* 间距 */
+  --fb-space-1: 4px;
+  --fb-space-2: 8px;
+  --fb-space-3: 12px;
+  --fb-space-4: 16px;
+  --fb-space-5: 20px;
+  --fb-space-6: 24px;
+
+  /* 金额必须等宽数字，避免列表跳动 */
+  --fb-font-numeric: tabular-nums;
+
+  /* 批 1 补充：hero 上的文字 / 胶囊底色与语义色浅底，避免组件散落硬编码色值 */
+  --fb-white: #ffffff;
+  --fb-on-hero-muted: rgba(255, 255, 255, 0.78);
+  --fb-on-hero-pill: rgba(255, 255, 255, 0.16);
+  --fb-danger-soft: #fdecea;
+  --fb-green-soft: #e8f6ef;
+  --fb-blue-soft: #eef3ff;
+  --fb-warn-soft: #fff0e6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--fb-bg);
+  color: var(--fb-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI',
+    Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 移动端断点：与 Flutter 版 isWide(1024) 对齐 */
+@media (min-width: 1024px) {
+  body {
+    background: var(--fb-soft);
+  }
+}
+
+/* ---------- 批 1 共享基础类（组件只引用变量，不散落硬编码色值） ---------- */
+.fb-card {
+  background: var(--fb-card);
+  border-radius: var(--fb-radius-card);
+  box-shadow: var(--fb-shadow-card);
+}
+
+.fb-hero {
+  background: var(--fb-hero-gradient);
+  color: var(--fb-white);
+}
+
+.fb-muted {
+  color: var(--fb-sub);
+}
+
+.fb-btn-primary,
+.fb-btn-ghost {
+  min-height: 40px;
+  border-radius: var(--fb-radius-input);
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.fb-btn-primary {
+  border: none;
+  background: var(--fb-blue);
+  color: var(--fb-white);
+}
+
+.fb-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.fb-btn-ghost {
+  border: 1px solid var(--fb-blue);
+  background: var(--fb-card);
+  color: var(--fb-blue);
+}
+
+.fb-input {
+  width: 100%;
+  min-height: 46px;
+  border: 1.5px solid var(--fb-line);
+  border-radius: var(--fb-radius-input);
+  padding: 10px 14px;
+  font-size: 15px;
+  font-family: inherit;
+  background: var(--fb-card);
+  color: var(--fb-ink);
+}
+
+.fb-input:focus {
+  outline: none;
+  border-color: var(--fb-blue);
+}
