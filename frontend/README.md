@@ -52,3 +52,36 @@ flutter run -d chrome       # 本地调试；拉动浏览器宽度可切换 PC/�
 - 交易不可变：改账 = 新增冲正交易（`LocalTxn.reversedOf`），绝不覆盖。
 - 在线记账 posting 用服务端 `account_id`；离线 push 交易 posting 用 `account_uuid`（见 `../AGENTS.md` §6.1）。
 - 后端地址默认 `http://localhost:8080`，部署 NAS 时改 `core/api/ledger_api.dart` 的 `kDefaultApiBase` 或注入覆盖。
+
+## M7 新前端（Vue 3 + Vite，批 0 起）
+
+新前端与 Flutter 旧版**并存于同一目录**，但源码零重叠：`lib/` / `test/` / `pubspec.*` 不动，
+新代码在 `index.html` + `src/` + `public/`，产物在 `dist/`。
+
+```
+frontend/
+├── index.html            # Vite 入口（PWA meta 搬运自 web/index.html）
+├── package.json          # npm scripts（dev/build/test/typecheck/compat）
+├── vite.config.ts        # base './'、outDir ../dist、es2015、/api 代理
+├── public/               # manifest.json + icons/ + favicon.png（从 web/ 复制）
+├── src/
+│   ├── main.ts / App.vue / router/
+│   ├── styles/tokens.css # 设计 token（取 docs/prototype）
+│   ├── core/Money.ts     # 定点金额（decimal.js 封装，禁止裸浮点）
+│   └── api/              # 31 端点类型 / 路由常量 / ApiError
+└── dist/                 # 构建产物（gitignore），含 legacy/ 旧版回滚目录
+```
+
+常用命令（仓库根目录）：
+
+```bash
+bash scripts/local.sh web-build      # Vite 构建 → frontend/dist
+bash scripts/local.sh web-dev        # Vite dev server，/api 代理到 127.0.0.1:8080
+bash scripts/local.sh web-test       # Vitest
+bash scripts/local.sh web-typecheck  # vue-tsc
+bash scripts/local.sh web-compat     # es-check es2015 扫描 dist/assets
+bash scripts/local.sh web-legacy     # 重建 Flutter 旧版 → dist/legacy 并校验
+```
+
+> `web-build` 的 `emptyOutDir` 会清空 `frontend/dist`，**每次构建后需再跑一次 `web-legacy`**，
+> 否则 `/legacy/` 回滚目录缺失。

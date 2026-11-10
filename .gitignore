@@ -57,3 +57,4 @@ Thumbs.db
 
 # Agent working memory (local only)
 .workbuddy/
+.trae/
