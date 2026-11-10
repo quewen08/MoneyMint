@@ -739,3 +739,44 @@ func TestLoginRateLimit(t *testing.T) {
 		t.Fatalf("bob 应拿到凭证错误，实际 %v", errBob)
 	}
 }
+
+// TestCreateTransactionRejectsClosedAccount AC-28 服务端半边（批 2 追加授权）：
+// 在线记账对已关户账户返回 409 account_closed（错误构造与期初路径同款）。
+// 离线 sync push 走 SavePushTransaction 不经过本路径（离线优先语义，
+// 离线记账不受阻，补录由 push 独立裁决）。
+func TestCreateTransactionRejectsClosedAccount(t *testing.T) {
+	svc := newTestService(t)
+	registerOwner(t, svc)
+
+	cash, err := svc.CreateAccount(lid, "Assets:Cash:CNY", "", "Assets", "2026-08-01", "CNY", "", "", "", "")
+	if err != nil {
+		t.Fatalf("create cash: %v", err)
+	}
+	food, err := svc.CreateAccount(lid, "Expenses:Food:CNY", "", "Expenses", "2026-08-01", "CNY", "", "", "", "")
+	if err != nil {
+		t.Fatalf("create food: %v", err)
+	}
+
+	// close 要求余额为 0：cash/food 初始余额均为 0，可直接关户。
+	if err := svc.DeleteAccount(lid, cash.UUID); err != nil {
+		t.Fatalf("close account: %v", err)
+	}
+
+	// 关户后在线记账 → 409 account_closed。
+	_, err = svc.CreateTransaction(lid, "2026-08-03", "*", "关户后记账", []PostingInput{
+		{AccountID: cash.ID, Commodity: "CNY", Amount: "-5.00"},
+		{AccountID: food.ID, Commodity: "CNY", Amount: "5.00"},
+	}, 1)
+	if code := codedCode(t, err); code != domain.CodeAccountClosed {
+		t.Fatalf("已关户账户在线记账应返回 account_closed，实际 %s (%v)", code, err)
+	}
+
+	// 关户校验必须拦在落库之前：交易不得写入。
+	txns, err := svc.ListTransactions(lid)
+	if err != nil {
+		t.Fatalf("list txns: %v", err)
+	}
+	if len(txns) != 0 {
+		t.Fatalf("关户校验应拦下交易，实际列表 %d 笔", len(txns))
+	}
+}

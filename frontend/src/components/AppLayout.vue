@@ -8,7 +8,7 @@
  * 不产生死链。
  */
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { useSessionStore } from '@/stores/session'
 import { usePrivacyStore } from '@/stores/privacy'
@@ -19,9 +19,11 @@ interface NavItem {
   key: string
   label: string
   icon: string
+  to?: string
   ready: boolean
 }
 
+const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
 const privacy = usePrivacyStore()
@@ -29,11 +31,12 @@ const sheet = useRecordSheetStore()
 const notice = ref('')
 
 const navItems: NavItem[] = [
-  { key: 'home', label: '总览', icon: '▦', ready: true },
-  { key: 'transactions', label: '交易流水', icon: '≣', ready: false },
-  { key: 'accounts', label: '账户管理', icon: '▤', ready: false },
-  { key: 'assets', label: '资产', icon: '💎', ready: false },
-  { key: 'categories', label: '分类管理', icon: '▥', ready: false },
+  { key: 'home', label: '总览', icon: '▦', to: '/', ready: true },
+  { key: 'transactions', label: '交易流水', icon: '≣', to: '/transactions', ready: true },
+  { key: 'trash', label: '回收站', icon: '🗑', to: '/trash', ready: true },
+  { key: 'accounts', label: '账户管理', icon: '▤', to: '/accounts', ready: true },
+  { key: 'categories', label: '分类管理', icon: '▥', to: '/categories', ready: true },
+  { key: 'commodities', label: '币种管理', icon: '💱', to: '/commodities', ready: true },
   { key: 'reports', label: '报表分析', icon: '📈', ready: false },
   { key: 'members', label: '成员管理', icon: '◯', ready: false },
   { key: 'settings', label: '设置', icon: '⚙', ready: false },
@@ -41,26 +44,36 @@ const navItems: NavItem[] = [
 
 const desktopGroups: Array<{ title: string; items: NavItem[] }> = [
   { title: '概览', items: [navItems[0], navItems[1]] },
-  { title: '管理', items: [navItems[2], navItems[3], navItems[4], navItems[6]] },
-  { title: '工具', items: [navItems[5]] },
-  { title: '系统', items: [navItems[7]] },
+  { title: '管理', items: [navItems[3], navItems[4], navItems[5], navItems[7]] },
+  { title: '工具', items: [navItems[2], navItems[6]] },
+  { title: '系统', items: [navItems[8]] },
 ]
 
 const mobileNav = computed<NavItem[]>(() => [
   navItems[0],
+  navItems[1],
   navItems[3],
-  navItems[5],
   // 原型第 4 个 Tab 是「更多」；PC 侧栏对应项叫「设置」，IA 保持一致。
   { key: 'more', label: '更多', icon: '👤', ready: false },
 ])
 
+function isActive(item: NavItem): boolean {
+  if (item.to === undefined) {
+    return false
+  }
+  if (item.to === '/') {
+    return route.path === '/'
+  }
+  return route.path === item.to || route.path.startsWith(`${item.to}/`)
+}
+
 function navigate(item: NavItem): void {
-  if (!item.ready) {
+  if (!item.ready || item.to === undefined) {
     notice.value = `${item.label}将在后续批次开放`
     return
   }
   notice.value = ''
-  void router.push('/')
+  void router.push(item.to)
 }
 
 function openRecord(): void {
@@ -106,7 +119,7 @@ function goChangePassword(): void {
             :key="item.key"
             type="button"
             class="layout__nav-item"
-            :class="{ on: item.key === 'home' }"
+            :class="{ on: isActive(item) }"
             @click="navigate(item)"
           >
             <span class="layout__nav-icon">{{ item.icon }}</span>{{ item.label }}
@@ -158,7 +171,7 @@ function goChangePassword(): void {
         :key="item.key"
         type="button"
         class="layout__tab"
-        :class="{ on: item.key === 'home' }"
+        :class="{ on: isActive(item) }"
         @click="navigate(item)"
       >
         <span class="layout__tab-icon">{{ item.icon }}</span>

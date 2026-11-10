@@ -107,6 +107,48 @@ func (s *Store) AccountByUUID(ledgerID int64, uuid string) (domain.Account, erro
 	return a, nil
 }
 
+// AccountByID 按自增 id 查询未删除账户（在线记账的关户校验用：
+// postings 引用的是整数 id，而非 uuid）。
+func (s *Store) AccountByID(ledgerID, id int64) (domain.Account, error) {
+	var a domain.Account
+	var closeDate, restr, disp, icon, color, parent, sub sql.NullString
+	err := s.db.QueryRow(
+		`SELECT id, uuid, name, display_name, type, open_date, close_date, commodity_restriction,
+		        icon, color, parent_uuid, sub_type, sort_order
+		 FROM accounts WHERE ledger_id=? AND id=? AND deleted_at IS NULL`,
+		ledgerID, id,
+	).Scan(&a.ID, &a.UUID, &a.Name, &disp, &a.Type, &a.OpenDate, &closeDate, &restr,
+		&icon, &color, &parent, &sub, &a.SortOrder)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Account{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.Account{}, err
+	}
+	if disp.Valid {
+		a.DisplayName = disp.String
+	}
+	if closeDate.Valid {
+		a.CloseDate = closeDate.String
+	}
+	if restr.Valid {
+		a.Restriction = restr.String
+	}
+	if icon.Valid {
+		a.Icon = icon.String
+	}
+	if color.Valid {
+		a.Color = color.String
+	}
+	if parent.Valid {
+		a.ParentUUID = parent.String
+	}
+	if sub.Valid {
+		a.SubType = sub.String
+	}
+	return a, nil
+}
+
 // UpdateAccountSortOrder 更新账户自定义排序序号（0.4-C 分类拖拽排序）。
 // op=update 写入 sync_log，使其他端经 pull 收到更新事件并重排。
 // 账户不存在或无变动时不写 sync_log（幂等）。

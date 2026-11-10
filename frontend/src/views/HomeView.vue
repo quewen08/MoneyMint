@@ -14,8 +14,8 @@ import type { AccountView, TransactionView } from '@/api/types'
 import {
   accountLabel,
   computeBalanceSummary,
+  displayAmountOf,
   transactionKind,
-  transferAmount,
   transferRoute,
   type TransactionKind,
 } from '@/core/record'
@@ -44,36 +44,14 @@ const balanceAccounts = computed(() =>
   ),
 )
 
-function typeOf(accountId: number): string {
-  for (const account of accounts.value) {
-    if (account.id === accountId) {
-      return account.type
-    }
-  }
-  return ''
-}
-
 /** 展示类型：全资金分录 → transfer；含 Expenses / Income → 支出 / 收入；其余回退支出。 */
 function txnKind(txn: TransactionView): TransactionKind {
   return transactionKind(txn.postings, accounts.value)
 }
 
-/**
- * 用户视角金额：支出为负、收入为正（保持 signed 显示）；
- * 转账取转出方绝对值（core/Money 的 decimal abs），不再显示负号，
- * 避免与支出在视觉上混淆。
- */
+/** 用户视角金额：统一走 core 口径（转账取转出方绝对值，支出/收入带符号原值）。 */
 function displayAmount(txn: TransactionView): string {
-  if (txnKind(txn) === 'transfer') {
-    return transferAmount(txn.postings, accounts.value)
-  }
-  for (const posting of txn.postings) {
-    const type = typeOf(posting.account_id)
-    if (type === 'Assets' || type === 'Liabilities') {
-      return posting.amount
-    }
-  }
-  return txn.postings.length > 0 ? txn.postings[0].amount : '0.00'
+  return displayAmountOf(txn.postings, accounts.value)
 }
 
 /** 转账行的元信息：`转出账户 → 转入账户`。 */

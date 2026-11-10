@@ -129,3 +129,53 @@ export function writeDraft<T>(ledgerId: number, draft: T): void {
 export function clearDraft(ledgerId: number): void {
   removeKey(draftKey(ledgerId))
 }
+
+/** 分类拖拽顺序键前缀（按账本命名空间），值为 `{ Expenses: [id…], Income: [id…] }`。 */
+export const CATEGORY_ORDER_KEY_PREFIX = 'fambean.category_order.'
+
+export function categoryOrderKey(ledgerId: number): string {
+  return `${CATEGORY_ORDER_KEY_PREFIX}${ledgerId}`
+}
+
+/**
+ * 读取分类拖拽顺序（§14.5 #2：顺序写回本地并随下次数据加载合并校准）。
+ * 损坏 JSON / 非法 id 一律容错为空对象，绝不抛错。
+ */
+export function readCategoryOrder(ledgerId: number): Record<string, number[]> {
+  const raw = readString(categoryOrderKey(ledgerId))
+  if (raw === null || raw === '') {
+    return {}
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return {}
+    }
+    const out: Record<string, number[]> = {}
+    const record = parsed as Record<string, unknown>
+    for (const key of Object.keys(record)) {
+      const list = record[key]
+      if (!Array.isArray(list)) {
+        continue
+      }
+      const ids: number[] = []
+      for (const item of list) {
+        if (typeof item === 'number' && Number.isSafeInteger(item) && item > 0) {
+          ids.push(item)
+        }
+      }
+      out[key] = ids
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+/** 写回分类拖拽顺序（按账本命名空间；只存账户 id 序列，不含任何凭据）。 */
+export function writeCategoryOrder(
+  ledgerId: number,
+  order: Record<string, number[]>,
+): void {
+  writeString(categoryOrderKey(ledgerId), JSON.stringify(order))
+}

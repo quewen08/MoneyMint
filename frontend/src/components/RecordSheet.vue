@@ -30,6 +30,7 @@ import {
   type RecordForm,
   type RecordKind,
 } from '@/core/record'
+import { recordFundAccounts } from '@/core/accounts'
 import { clearDraft, readDraft, writeDraft } from '@/core/storage'
 import { usePrivacyStore } from '@/stores/privacy'
 import { useRecordSheetStore } from '@/stores/recordSheet'
@@ -102,11 +103,8 @@ const expenseAccounts = computed(() =>
 const incomeAccounts = computed(() =>
   openAccounts.value.filter((account) => account.type === 'Income'),
 )
-const fundAccounts = computed(() =>
-  openAccounts.value.filter(
-    (account) => account.type === 'Assets' || account.type === 'Liabilities',
-  ),
-)
+// AC-28：记一笔可选资金账户 = 未关闭的 Assets / Liabilities（统一 core 口径）。
+const fundAccounts = computed(() => recordFundAccounts(accounts.value))
 const categoryOptions = computed(() =>
   form.kind === 'income' ? incomeAccounts.value : expenseAccounts.value,
 )

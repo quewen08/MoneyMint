@@ -17,6 +17,10 @@ export interface SummaryAccount {
   type: string
   commodity_restriction?: string
   balances?: Record<string, string>
+  /** 关户守门用（后端 close_date，非空即已关闭）。 */
+  close_date?: string
+  /** 分类拖拽排序（0.4-C，同类型内升序）。 */
+  sort_order?: number
 }
 
 /** 记账类型（C-01 三 Tab）。 */
@@ -438,4 +442,27 @@ export function transferRoute(
     return `${from} → ${to}`
   }
   return from !== '' ? from : to
+}
+
+/**
+ * 用户视角金额（首页 / 流水列表共用口径）：
+ * - 转账取转出方绝对值（decimal abs，不显示负号）；
+ * - 支出 / 收入取资金分录带符号原值（负=支出、正=收入）；
+ * - 无资金分录取首条分录原值；空分录取 0.00。
+ */
+export function displayAmountOf(
+  postings: PostingLike[],
+  accounts: SummaryAccount[],
+): string {
+  if (transactionKind(postings, accounts) === 'transfer') {
+    return transferAmount(postings, accounts)
+  }
+  for (const posting of postings) {
+    const account = findAccount(accounts, posting.account_id)
+    const type = account === undefined ? '' : account.type
+    if (type === 'Assets' || type === 'Liabilities') {
+      return posting.amount
+    }
+  }
+  return postings.length > 0 ? postings[0].amount : '0.00'
 }

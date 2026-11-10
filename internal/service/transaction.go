@@ -3,6 +3,7 @@ package service
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ type PostingView struct {
 // TransactionView 是交易列表项的返回视图。
 type TransactionView struct {
 	ID            int64         `json:"id"`
+	UUID          string        `json:"uuid"` // 批 2：列表透出 uuid（前端软删依赖）
 	Date          string        `json:"date"`
 	Flag          string        `json:"flag"`
 	Description   string        `json:"description"`
@@ -54,6 +56,7 @@ func (s *Service) ListTransactions(ledgerID int64) ([]TransactionView, error) {
 	for _, t := range txns {
 		v := TransactionView{
 			ID:            t.ID,
+			UUID:          t.UUID,
 			Date:          t.Date,
 			Flag:          t.Flag,
 			Description:   t.Description,
@@ -114,6 +117,25 @@ func (s *Service) createTransaction(
 	}
 	if len(postings) < 2 {
 		return TransactionCreated{}, domain.Invalidf("一笔交易至少需要 2 条分录")
+	}
+	// AC-28 服务端半边：在线记账不允许使用已关户账户（close_date 非空即 409
+	// account_closed，错误构造与期初路径同款）。前端已过滤（AC-28 守门），
+	// 这里兜底防绕过。注意：离线 sync push 走 SavePushTransaction，不经过
+	// 本函数（离线优先语义：离线记账不受阻，补录由 push 独立裁决）。
+	seenAccounts := make(map[int64]bool, len(postings))
+	for _, p := range postings {
+		if seenAccounts[p.AccountID] {
+			continue
+		}
+		seenAccounts[p.AccountID] = true
+		acc, err := s.repo.AccountByID(ledgerID, p.AccountID)
+		if err != nil {
+			return TransactionCreated{}, err
+		}
+		if acc.CloseDate != "" {
+			msg := fmt.Sprintf("账户已关闭，不能记账: %s", acc.Name)
+			return TransactionCreated{}, domain.Codedf(domain.ErrConflict, domain.CodeAccountClosed, "%s", msg)
+		}
 	}
 	if err := validateBalance(postings); err != nil {
 		return TransactionCreated{}, err

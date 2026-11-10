@@ -15,18 +15,25 @@ import { clearLegacyToken } from '@/core/storage'
 import { ApiError } from './errors'
 import { API_ROUTES, isNoLedgerPath } from './routes'
 import type {
+  AccountCreated,
   AccountListResponse,
   AuthResult,
   ChangePasswordRequest,
   ChangePasswordResponse,
+  CreateAccountRequest,
   CreateTransactionRequest,
   LedgerListResponse,
   LoginRequest,
   LogoutResponse,
   MeResponse,
+  OkResponse,
+  OpeningResult,
+  OpeningView,
   RegisterRequest,
+  SetOpeningRequest,
   TransactionCreated,
   TransactionListResponse,
+  TrashListResponse,
 } from './types'
 
 // 启动时清理旧版 localStorage token（§13 D-7 实施清单 #7）。
@@ -412,10 +419,47 @@ export const ledgerApi = {
   },
 }
 
+/**
+ * 把 `/api/accounts/{uuid}` 里的 `{key}` 占位符替换为实际值
+ * （encodeURIComponent，防注入路径段）。替换后的路径仍由 request 统一
+ * 注入 X-CSRF / X-Ledger-Id 并断言。
+ */
+export function formatApiPath(
+  template: string,
+  params: Record<string, string>,
+): string {
+  let out = template
+  const keys = Object.keys(params)
+  for (const key of keys) {
+    out = out.split(`{${key}}`).join(encodeURIComponent(params[key]))
+  }
+  return out
+}
+
 /** 账户端点（业务端点，必须携带 X-Ledger-Id）。 */
 export const accountApi = {
   list(): Promise<AccountListResponse> {
     return api.get<AccountListResponse>(API_ROUTES.accounts)
+  },
+  create(body: CreateAccountRequest): Promise<AccountCreated> {
+    return api.post<AccountCreated>(API_ROUTES.accounts, body)
+  },
+  /** 关闭账户（Beancount close 语义；余额非 0 时 409 + balances 差额明细）。 */
+  close(accountUuid: string): Promise<OkResponse> {
+    return api.delete<OkResponse>(formatApiPath(API_ROUTES.accountByUuid, { uuid: accountUuid }))
+  },
+}
+
+/** 期初余额端点（GET 查询 / POST 设置；冲正 + 新建由后端 opening_key 幂等保证）。 */
+export const openingApi = {
+  get(accountUuid: string): Promise<OpeningView> {
+    return api.get<OpeningView>(formatApiPath(API_ROUTES.accountOpening, { uuid: accountUuid }))
+  },
+  set(accountUuid: string, body: SetOpeningRequest): Promise<OpeningResult> {
+    return api.post<OpeningResult>(
+      formatApiPath(API_ROUTES.accountOpening, { uuid: accountUuid }),
+      body,
+    )
   },
 }
 
@@ -431,5 +475,21 @@ export const transactionApi = {
     return api.post<TransactionCreateResult>(API_ROUTES.transactions, body, {
       idempotencyKey,
     })
+  },
+  /** 回收站列表（软删交易，按删除时间倒序）。 */
+  trash(): Promise<TrashListResponse> {
+    return api.get<TrashListResponse>(API_ROUTES.transactionsTrash)
+  },
+  /** 软删交易（可从回收站恢复）。 */
+  remove(transactionUuid: string): Promise<OkResponse> {
+    return api.delete<OkResponse>(
+      formatApiPath(API_ROUTES.transactionByUuid, { uuid: transactionUuid }),
+    )
+  },
+  /** 从回收站恢复。 */
+  restore(transactionUuid: string): Promise<OkResponse> {
+    return api.post<OkResponse>(
+      formatApiPath(API_ROUTES.transactionRestore, { uuid: transactionUuid }),
+    )
   },
 }

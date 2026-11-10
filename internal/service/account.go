@@ -11,6 +11,7 @@ import (
 // AccountView 是账户列表项的返回视图（含按币种余额）。
 type AccountView struct {
 	ID          int64             `json:"id"`
+	UUID        string            `json:"uuid"` // 批 2：列表透出 uuid（前端期初编辑/关户/删除依赖）
 	Name        string            `json:"name"`
 	DisplayName string            `json:"display_name,omitempty"`
 	Type        string            `json:"type"`
@@ -54,6 +55,7 @@ func (s *Service) ListAccounts(ledgerID int64, includeClosed bool) ([]AccountVie
 	for _, a := range accounts {
 		out = append(out, AccountView{
 			ID:          a.ID,
+			UUID:        a.UUID,
 			Name:        a.Name,
 			DisplayName: a.DisplayName,
 			Type:        a.Type,

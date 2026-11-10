@@ -204,6 +204,48 @@ func TestAuthCookieAttributesAndCSRF(t *testing.T) {
 		t.Fatalf("Cookie 记账期望 201，实际 %d: %s", resp.StatusCode, raw)
 	}
 
+	// 批 2：列表响应必须透出 uuid（前端期初编辑 / 关户 / 软删的解锁钥匙）。
+	resp, raw = e.do(c2, http.MethodGet, "/api/accounts", nil, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/accounts 期望 200，实际 %d: %s", resp.StatusCode, raw)
+	}
+	var accList struct {
+		Accounts []struct {
+			UUID string `json:"uuid"`
+		} `json:"accounts"`
+	}
+	if err := json.Unmarshal(raw, &accList); err != nil {
+		t.Fatalf("解析账户列表失败: %v %s", err, raw)
+	}
+	if len(accList.Accounts) == 0 {
+		t.Fatalf("账户列表不应为空: %s", raw)
+	}
+	for _, a := range accList.Accounts {
+		if a.UUID == "" {
+			t.Fatalf("账户列表响应必须含非空 uuid: %s", raw)
+		}
+	}
+	resp, raw = e.do(c2, http.MethodGet, "/api/transactions", nil, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/transactions 期望 200，实际 %d: %s", resp.StatusCode, raw)
+	}
+	var txnList struct {
+		Transactions []struct {
+			UUID string `json:"uuid"`
+		} `json:"transactions"`
+	}
+	if err := json.Unmarshal(raw, &txnList); err != nil {
+		t.Fatalf("解析交易列表失败: %v %s", err, raw)
+	}
+	if len(txnList.Transactions) == 0 {
+		t.Fatalf("交易列表不应为空: %s", raw)
+	}
+	for _, item := range txnList.Transactions {
+		if item.UUID == "" {
+			t.Fatalf("交易列表响应必须含非空 uuid: %s", raw)
+		}
+	}
+
 	// Bearer 请求豁免 CSRF（旧版客户端）。
 	bearer := &http.Client{}
 	resp, raw = e.do(bearer, http.MethodPost, "/api/accounts",

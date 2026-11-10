@@ -13,10 +13,17 @@ import {
 
 import { setApiClientHooks } from '@/api/client'
 import { useSessionStore } from '@/stores/session'
+import AccountsView from '@/views/AccountsView.vue'
+import AccountDetailView from '@/views/AccountDetailView.vue'
 import AwaitInviteView from '@/views/AwaitInviteView.vue'
+import CategoriesView from '@/views/CategoriesView.vue'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
+import CommoditiesView from '@/views/CommoditiesView.vue'
 import HomeView from '@/views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
+import TrashView from '@/views/TrashView.vue'
+import TransactionDetailView from '@/views/TransactionDetailView.vue'
+import TransactionsView from '@/views/TransactionsView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -41,6 +48,48 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     name: 'home',
     component: HomeView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/transactions',
+    name: 'transactions',
+    component: TransactionsView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/transactions/detail',
+    name: 'transaction-detail',
+    component: TransactionDetailView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/trash',
+    name: 'trash',
+    component: TrashView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/accounts',
+    name: 'accounts',
+    component: AccountsView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/accounts/:id',
+    name: 'account-detail',
+    component: AccountDetailView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/categories',
+    name: 'categories',
+    component: CategoriesView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/commodities',
+    name: 'commodities',
+    component: CommoditiesView,
     meta: { requiresAuth: true },
   },
   {

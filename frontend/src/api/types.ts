@@ -176,6 +176,8 @@ export interface AccountView {
   id: number
   name: string
   display_name?: string
+  /** 账户 uuid（批 2 起列表响应已透出；期初编辑 / 关户 / 删除依赖）。 */
+  uuid: string
   type: AccountType
   open_date: ISODate
   close_date?: ISODate
@@ -290,6 +292,8 @@ export interface PostingView {
 /** 交易列表项。 */
 export interface TransactionView {
   id: number
+  /** 交易 uuid（批 2 起列表响应已透出；软删依赖）。 */
+  uuid: string
   date: ISODate
   flag: TxnFlag
   description: string
