@@ -1,11 +1,11 @@
 # CLAUDE.md — FamBean 工作约定
 
-> 给 Claude 系工具的项目速查。**权威技术上下文在 [`AGENTS.md`](AGENTS.md)，重构方案在 [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（v2.3）**；本文只记「怎么干活」与「不要做什么」，不重复全文。
+> 给 Claude 系工具的项目速查。**权威技术上下文在 [`AGENTS.md`](AGENTS.md)，重构方案在 [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（v2.5）**；本文只记「怎么干活」与「不要做什么」，不重复全文。
 
 ## 先读这三件事
 
-1. **当前是 M7 全量重构的双前端并存期**：默认生产前端仍是 **Flutter Web**（`frontend/lib/` → `frontend/build/web`）；**Vue 3 + Vite SPA**（`frontend/src/` → `frontend/dist`）处于批 0/1 骨架阶段，只有 10 个源文件，**尚未 cutover**。
-2. **别把方案当现状**：v2.3 里写的 20 个页面、离线内核、迁移 014、M2 四端点、PWA、CI `web-verify`、Dockerfile Node 化**都还没实现**。判断「有没有」以代码为准，不以方案章节为准。
+1. **当前是 M7 全量重构的双前端并存期**：默认生产前端仍是 **Flutter Web**（`frontend/lib/` → `frontend/build/web`）；**Vue 3 + Vite SPA**（`frontend/src/` → `frontend/dist`）已落地批 0~2.5（57 文件 / 14,067 行 / 11 页 / Vitest 202 用例全过），**尚未 cutover**。
+2. **别把方案当现状**：方案 v2.5 的 20 个页面只完成 11 个；离线内核、迁移 014、M2 四端点、PWA、Dockerfile Node 化**都还没实现**；CI `web-verify` 门禁与工具链钉版按 2026-11-11 决策**暂缓**（不是「已做」）。判断「有没有」以代码为准，不以方案章节为准。
 3. **账芯不可动**：复式借贷平衡、append-only 不可变交易、导出必须过 `bean-check`、定点十进制金额。改的是前端，不是全栈。
 
 ## 命令速查
@@ -40,7 +40,7 @@
 | 静态托管 / SPA 回退 | `internal/server/static.go` |
 | 导出器 | `internal/export/{beancount,files}.go` |
 | Vue 定点金额 | `frontend/src/core/Money.ts` + `Money.test.ts` |
-| Vue 端点契约 | `frontend/src/api/{types,routes,errors}.ts` |
+| Vue 端点契约 | `frontend/src/api/{types,routes,errors,client}.ts` |
 | 构建与兼容基线 | `frontend/vite.config.ts`、`frontend/package.json` |
 | 旧版回滚 | `scripts/build-legacy.sh`、`scripts/check-legacy.sh`、`frontend/dist/legacy/` |
 
@@ -76,4 +76,4 @@
 4. 涉及认证 / 幂等 / 同步 → 跑 `internal/server/*_test.go` 与 `internal/db/migrate013_test.go`，并核对 Bearer 兼容路径未被破坏。
 5. 真机门禁：涉及前端构建或兼容基线的改动，cutover 前必须在 iOS 14.8 Safari 跑全主流程冒烟。
 
-> 当前工作区有大量未提交改动（M7 批 0/1），**改动前先看 `git status`**，不要把它们和自己的修改混在同一次提交。
+> 文档收口后工作区应干净；**改动前仍先看 `git status`**，不要把 docs 与代码改动混在同一次提交。CI `web-verify` 门禁与工具链钉版按 2026-11-11 决策暂缓，别把「方案里写了」当成「CI 已经在跑」。

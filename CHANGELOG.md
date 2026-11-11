@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Added（M7 前端全量重构，批 0~2.5）
+
+- **Vue 3 + Vite 纯 SPA 工程底座**（批 0，`c4ce399`）：`frontend/index.html` + `src/` + `public/` + `dist/`；`build.target: 'es2015'` + `@vitejs/plugin-legacy`（Safari >= 14）+ `es-check` 兼容门禁；`/api` dev proxy；31 端点手写 TS 类型与路由常量。
+- **D-7 会话安全改造**：httpOnly Cookie 优先 / Bearer 兜底、`X-CSRF` 头、CORS 由 `*` 收敛为白名单回显 + `Allow-Credentials`；保留 `LEDGER_AUTH_COOKIE` / `LEDGER_AUTH_EXPOSE_TOKEN` 回退开关。
+- **在线记账幂等 G-04**（批 1，`814627a` / `4feccaf`）：迁移 013 增 `transactions.client_request_id` + 部分唯一索引，冲突矩阵覆盖 201 / 200 / 两类 409；前端类型化 fetch 客户端含 401 single-flight、428 跳改密、`X-Ledger-Id` 强制断言。
+- **账本主体与口径修正**（批 2 `e018cc0` / 批 2.5 `20fd5d8`）：流水 / 详情 / 回收站 / 账户 / 账户详情 / 分类 / 币种 / 改密 / 待邀请共 11 页；`core/Money` 定点金额、日历与筛选 query 化、CSV 导出、期初与关户守门；批 2.5 按 fava / beancount 双审计裁决对齐口径。
+- **`dist/legacy/` 回滚产物**：Flutter 旧版以 `--base-href /legacy/` 重建后复制，配套 `build-legacy.sh` / `check-legacy.sh` 与 `web-*` 命令族。
+
+### Changed（文档口径收口，2026-11-11）
+
+- 方案升 **v2.5**：§1 标为立项基线快照，§9 / §11 / §14.1 / §14.3 / §14.6 / §14.7 对齐代码现状；`AGENTS.md` / `CLAUDE.md` / `README.md` 同步到批 2.5；方案 / 换框架评估 / 进度审查报告已在本地修订，**按老板 2026-11-11 指示 `docs/` 目录暂不提交，保持未跟踪**。
+- **按老板决策暂缓且本次未改动**：CI `web-verify` 门禁、`.nvmrc` / `.npmrc` 钉版、`package-lock.json` 在 Linux/WSL 重生成、`verify-version.sh` 改读 `frontend/package.json`。以上均保持未完成状态，勿当现状。
+
+> 实测（2026-11-11）：Vitest 22 文件 / 202 用例全过，`vue-tsc --noEmit` 零错误，`go vet` + `BEAN_CHECK_STRICT=1 go test ./...` 全绿；`frontend/src` 57 文件 / 14,067 行；迁移至 013。
+
 批 4 / F-10：前端改版收口（PC 增量 + 回归）。改版四批中的最后一批，全部为前端改动，后端与账芯零改动。
 
 ### Added

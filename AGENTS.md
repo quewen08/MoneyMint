@@ -4,7 +4,7 @@
 > 用户：全栈独做（老板），后端 Go / 前端与产品决策均本人拍板。沟通可直接给结论。
 > 提醒：因独做全栈，"分配负责人/邀请角色关注"类提醒不适用，改为提醒其自写验收标准、留档、关键模块自评审。
 
-**文档分工**：AI / 开发者技术上下文 = 本文；用户与部署快速上手 = [`README.md`](README.md)；Claude 系工具的工作约定 = [`CLAUDE.md`](CLAUDE.md)；M7 重构的**方案、决策、验收与风险** = [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（当前 v2.3，D-1~D-7 已锁定）。**本文只记「已实现的现状」，方案里的待办见 §9，勿把计划当现状。**
+**文档分工**：AI / 开发者技术上下文 = 本文；用户与部署快速上手 = [`README.md`](README.md)；Claude 系工具的工作约定 = [`CLAUDE.md`](CLAUDE.md)；M7 重构的**方案、决策、验收与风险** = [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（当前 v2.5，D-1~D-7 已锁定，批 0~2.5 已落地；CI 前端门禁与工具链钉版按 2026-11-11 决策暂缓）。**本文只记「已实现的现状」，方案里的待办见 §9，勿把计划当现状。**
 
 ---
 
@@ -22,7 +22,7 @@
 | 技术 | Flutter Web（PWA） | **Vue 3 + Vite 纯 SPA**（不引入 Nuxt / SSR / Nitro） |
 | 源码 | `frontend/lib/`、`frontend/test/`、`pubspec.*` | `frontend/index.html`、`frontend/src/`、`frontend/public/` |
 | 产物 | `frontend/build/web/`（现在由 `LEDGER_WEB_ROOT` 托管） | `frontend/dist/`（gitignore） |
-| 状态 | **当前仍是默认可用版本**，cutover 后清退 | **批 0/1 骨架阶段**，仅 10 个源文件（App / HomeView / Money / api / router / styles），页面与离线内核未复刻完成 |
+| 状态 | **当前仍是默认可用版本**，cutover 后清退 | **批 0~2.5 进行中**：`frontend/src` 57 个源文件 / 14067 行，核心记账闭环（记一笔 / 流水 / 账户 / 分类 / 币种 / 期初 / 关户 / 回收站 / 改密）已落地并通过 202 测试；M2 向导、设置 / 报表 / 更多页、离线内核未复刻 |
 
 - `frontend/dist/legacy/` 是 Flutter 旧版用 `--base-href /legacy/` **重建后复制**的回滚产物（`scripts/build-legacy.sh` + `check-legacy.sh` 校验），不是简单的目录搬运。
 - **尚未 cutover**：根路径仍指向 Flutter 产物；Vue 版切根路径、清退 Dart、Dockerfile 改 Node 构建都在批 6。
@@ -30,7 +30,7 @@
 
 **核心不变约束**：导出的 `.beancount` 必须能被 `bean-check` 直接校验通过（退出码 0、无报错）。
 
-**当前阶段**：M0 / M1 / M3 / F-1~F-10 前端改版均已完成；M7 推进到**批 0~1**——Vue 脚手架、定点金额 `Money`、D-7 httpOnly Cookie 认证、迁移 013 幂等已落地并实测通过。M2（恢复 + 导入）、迁移 014（库世代）、离线内核重写、Dockerfile / CI 改造**均未开工**。
+**当前阶段**：M0 / M1 / M3 / F-1~F-10 前端改版均已完成；M7 推进到**批 2.5**——批 0（工程底座）/ 批 1（登录·首页·记一笔 + 401·428 + 幂等键）/ 批 2（流水·账户·分类·币种 + 期初·关户 + CSV 导出）/ 批 2.5（口径对齐 fava/beancount 双审计裁决）均已提交，`frontend/src` 57 文件 / 14067 行、Vitest **202/202 通过**（实测 2026-11-11）。M2（恢复 + 导入）、迁移 014（库世代）、离线内核重写、Dockerfile / CI 改造**均未开工**。
 
 ---
 
@@ -39,7 +39,7 @@
 | 工具 | 版本 / 路径 | 说明 |
 |---|---|---|
 | Go | 1.26.5，`/d/Environment/go/bin` | Git Bash 需 `export PATH="$PATH:/d/Environment/go/bin"` |
-| Node.js | `>=20`（`frontend/package.json` `engines`）；方案钉版目标 **22.23.4** | 仅**构建阶段**需要，运行时镜像无 Node。`.nvmrc` / `.npmrc` 尚未入库；`package-lock.json` 目前由 Windows 生成，**镜像内 `npm ci` 前须在 Linux/WSL 重生成** |
+| Node.js | `>=20`（`frontend/package.json` `engines`）；方案钉版目标 **22.23.4**，本机 22.22.2 | 仅**构建阶段**需要，运行时镜像无 Node。`.nvmrc` / `.npmrc` 未入库、`engines` 未收紧、lock 未在 Linux/WSL 重生成，**均按 2026-11-11 决策暂缓**（见 §9 第 6 条）；lock 已复核含 Linux 平台 optional 包，缺平台二进制风险降级 |
 | Flutter | 本地 **3.38.9**（Dart 3.10.8），`/d/Environment/flutter/bin` | **仅旧版**维护与 `dist/legacy/` 重建用；Docker 镜像内固定 3.35.1，版本差会让 `pubspec.lock` 在镜像内重解析（详见 `Dockerfile` 注释） |
 | Python | 项目内 `.venv` | 仅用于 `bean-check`（`beancount` 包），不污染系统 |
 | GOPROXY | `https://goproxy.cn,direct` | `proxy.golang.org` 国内不可达 |
@@ -81,7 +81,7 @@ python3 -m venv .venv
 ├── scripts/              # check-bean / verify-version / smoke / local.sh / build-legacy / check-legacy / copy-legacy.mjs
 ├── export_demo/          # Python/sh 验证参考
 ├── data/                 # 运行时 SQLite（git 忽略）；backups/ 也在其下
-└── docs/                 # 设计规格 / 同步协议 / 原型 / 任务书 / M7 方案（next-phase-frontend-plan.md v2.3）
+└── docs/                 # 设计规格 / 同步协议 / 原型 / 任务书 / M7 方案（next-phase-frontend-plan.md v2.5）/ 进度审查报告
 ```
 
 **旧版前端架构（仍需维护到 cutover）**：MVVM 分层 + 响应式双布局（≥1024 走 PC 侧边栏，<1024 降级移动底栏）。
@@ -89,12 +89,12 @@ python3 -m venv .venv
 - 本地真相源 `core/store/local_store.dart`（sembast+IndexedDB）；同步编排 `core/sync/sync_service.dart`。
 - **坑（务必遵守）**：页面读取 `AppScope.of(context)` 必须放在 `build`/`didChangeDependencies`，**禁止**放 `initState`（会触发 `dependOnInheritedWidgetOfExactType called before initState completed` 红屏）。
 
-**新版前端架构（批 0/1 已落地部分）**：
-- `core/Money.ts`：`decimal.js` 定点金额唯一入口（只收 string 构造、`ROUND_HALF_UP`、`toString()` 固定 `toFixed()`），配套 `Money.test.ts` 8 个用例。
-- `api/{types,routes,errors}.ts`：31 端点手写 TS 类型 / 路由常量 / `ApiError`（`router.go` 是命令式注册，无 OpenAPI 可反射，故**不生成**客户端）。
-- `router/index.ts`、`styles/tokens.css`（取自 `docs/prototype/`）、`views/HomeView.vue`。
+**新版前端架构（批 0~2.5 已落地，实测 2026-11-11）**：
+- `core/Money.ts`：`decimal.js` 定点金额唯一入口（只收 string 构造、`ROUND_HALF_UP`、`toString()` 固定 `toFixed()`），配套 `Money.test.ts` 8 个用例；另有 `core/{accounts,calendar,csv,filters,opening,ordering,record,storage}.ts` 核心领域逻辑（全部带 `.test.ts`）。
+- `api/{types,routes,errors,client}.ts`：31 端点手写 TS 类型 / 路由常量 / `ApiError` / 类型化 fetch 客户端（`client.ts` 含 401 single-flight / 428 / `X-Ledger-Id` 断言 / 并发 / 幂等测试；`router.go` 命令式注册无 OpenAPI，故**不生成**）。
+- `router/index.ts`、`styles/tokens.css`（取自 `docs/prototype/`）；已落地 11 个 view：`Home / Login / Transactions / TransactionDetail / Accounts / AccountDetail / Categories / Commodities / Trash / ChangePassword / AwaitInvite`；components：`AppLayout / AccountForm / RecordSheet / MoneyText`；stores：`session / recordSheet / privacy`。
 - `vite.config.ts`：`base: './'`、`build.target: 'es2015'`、`@vitejs/plugin-legacy`（`targets: Safari >= 14`）、`outDir: 'dist'`（相对 Vite root，即 `frontend/dist`）、`server.proxy['/api'] → 127.0.0.1:8080`、alias `@`。
-- **尚未实现**：20 个页面、Pinia stores、类型化 fetch 客户端、`sync/` 离线内核、`sw.ts` / PWA、CI `web-verify` job。
+- **尚未实现**：报表 / 成员 / 账本 / 设置 / 数据安全 / 会话 / 同步状态等页面（方案 P-11~P-18）、M2 导入 / 恢复向导（P-19/P-20）、`sync/` 离线内核、`sw.ts` / PWA、CI `web-verify` job。
 
 ---
 
@@ -228,17 +228,17 @@ python3 -m venv .venv
 
 ---
 
-## 9. 已知边界 / 当前待办（M7，按方案 v2.3）
+## 9. 已知边界 / 当前待办（M7，按方案 v2.5）
 
-**已落地（批 0~1，实测通过）**：Vue 3 + Vite 脚手架、`core/Money` 定点金额（Vitest 8/8）、`es2015` + plugin-legacy + `es-check`、`/api` dev proxy、31 端点手写 TS 类型、D-7 httpOnly Cookie + CSRF + CORS 白名单、迁移 013 幂等、`dist/legacy/` 回滚产物与校验脚本、`web-*` 命令族。
+**已落地（批 0~2.5，已提交，实测通过 2026-11-11）**：Vue 3 + Vite 脚手架、`core/Money` 定点金额（配套 8 用例）、`es2015` + plugin-legacy + `es-check`、`/api` dev proxy、31 端点手写 TS 类型 + 类型化 fetch 客户端（`api/client.ts`，含 401 single-flight / 428 / `X-Ledger-Id` 断言 / 并发 / 幂等测试）、D-7 httpOnly Cookie + CSRF + CORS 白名单、迁移 013 幂等、`dist/legacy/` 回滚产物与校验脚本、`web-*` 命令族；前端累计 **57 文件 / 14067 行**，Vitest **202/202 通过**（22 测试文件，含 `qa-batch2` / `qa-batch25` 双审计回归）。
 
 **未开工 / 勿当现状**：
-1. Vue 端 20 个页面与 Pinia stores、类型化 fetch 客户端（含 401 single-flight / 428 / `X-Ledger-Id` 断言）、旧版 33 用例迁移（目前仅 8 个 Money 用例）。
+1. Vue 端剩余页面（报表 / 成员 / 账本 / 设置 / 数据安全 / 会话 / 同步状态，方案 P-11~P-18）、M2 导入 / 恢复向导（P-19/P-20）；类型化 fetch 客户端与 stores 已落地（202 用例）；**旧版 33 用例未逐条迁移**，方案 §14.6 已由「映射表」改为「覆盖矩阵」，如实标注等价覆盖与待补项。
 2. 离线同步内核 `sync/`（IndexedDB 原子写 / 租约 / 死信 / `uuid_map` 回放）与契约测试（批 5）。
 3. 迁移 014 库世代 + `instance_id`（批 4，M2 恢复的前置阻塞）。
 4. M2 四个端点与导入 / 恢复向导（批 4）。
 5. PWA：`vite-plugin-pwa` injectManifest + `src/sw.ts`（只缓存应用壳与静态资源，**不缓存 API 响应**）；`sw-kill.js`（批 5/6）。
-6. **CI `web-verify` job 尚未加入**；`verify-version.sh` 尚未改读 `frontend/package.json`；`.nvmrc` / `.npmrc` 未入库；`package-lock.json` 需在 Linux/WSL 重生成，否则镜像 `npm ci` 会缺 rollup/esbuild 平台二进制。
+6. **按 2026-11-11 老板决策暂缓（本次未改动，勿当已完成）**：CI `web-verify` job、`verify-version.sh` 改读 `frontend/package.json`、`.nvmrc` / `.npmrc` 入库、`engines` 收紧、在 Linux/WSL 重生成 `package-lock.json`。已复核 lock 含 42 处 Linux 平台 optional 包条目（`@esbuild/linux-x64`、`@rollup/rollup-linux-x64-gnu` 等），镜像 `npm ci` 缺平台二进制的风险降级；本机 WSL 被安全策略禁用、Docker 不可用，**批 6 切 Node 构建前仍需在 Linux 实机复核**。本机 Node 22.22.2，方案钉版目标 22.23.4。
 7. **`Dockerfile` 仍是 Flutter 三阶段**（Stage 1 未换 `node:22-alpine`），`docker-compose.yml` 未改；批 6 才动。
 8. cutover、真机全主流程冒烟、观察期后删 Dart 与 Flutter 构建链（批 6）。
 9. 下期（M4+）：Beancount 通用语法导入、OFX/CSV 自动导入、规则引擎、商品/价格 CRUD、跨币种 cost 注解、Postgres 横向扩展。
@@ -285,7 +285,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o familyledger ./cmd/server
 ```
 
 > 本机 `bean-check.exe` 直接运行静默返回 1（Windows 包装脚本问题），改用 `.venv/Scripts/python.exe -m beancount.scripts.check` 校验。
-> 实测（2026-11-10）：`bash scripts/local.sh test`（Go 全量 + 严格 bean-check）、`web-test`（Vitest 8/8）、`web-typecheck`、`web-compat` 均通过。
+> 实测（2026-11-11）：`bash scripts/local.sh test`（Go 全量 + 严格 bean-check）、`web-test`（Vitest **202/202**）、`web-typecheck`、`web-compat` 均通过。
 
 ### 10.1 统一命令入口
 

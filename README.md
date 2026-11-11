@@ -8,9 +8,9 @@
 - **标准兼容**：可导出标准 `.beancount` 文本，通过 `bean-check` 校验。
 - **自动备份**：每日一致性快照（WAL 安全），保留策略自动清理，浏览器直接下载。
 
-> **当前状态（2026-11-10）**：项目正在做 **M7 前端全量重构**，处于双前端并存期。
-> **默认可用的生产前端仍是 Flutter Web**；新的 **Vue 3 + Vite 纯 SPA** 正在开发中（目前仅工程底座与定点金额、认证/幂等后端改造完成），
-> **尚未切换**。完整方案、决策与验收见 [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（v2.3）。
+> **当前状态（2026-11-11）**：项目正在做 **M7 前端全量重构**，处于双前端并存期。
+> **默认可用的生产前端仍是 Flutter Web**；新的 **Vue 3 + Vite 纯 SPA** 已落地批 0~2.5（57 个源文件 / 14,067 行 / 11 个页面，核心记账闭环打通，Vitest 202 用例全过），报表 / 设置 / 成员 / 离线内核 / 导入恢复向导待后续批次。
+> **尚未切换**。完整方案、决策与验收见 [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（v2.5）。
 > 想直接跑起来用，按下面「快速开始」即可；想参与重构，看 [`AGENTS.md`](AGENTS.md) §1 与 §9。
 
 ## 特性
@@ -251,7 +251,7 @@ HTTPS / 换端口 / 域名均无需改代码：Vue 产物用相对 `/api` 与 `b
 
 - [`AGENTS.md`](AGENTS.md) — 开发上下文：架构 / 约定 / Schema / 端点清单（面向开发者与 AI 助手）
 - [`CLAUDE.md`](CLAUDE.md) — Claude 系工具的工作约定：命令 / 禁区 / 关键文件索引
-- [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md) — **M7 全量重构方案 v2.3**（决策 / 分批 / 验收 / 风险，权威来源）
+- [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md) — **M7 全量重构方案 v2.5**（决策 / 分批 / 验收 / 风险，权威来源）
 - [`docs/frontend-framework-rewrite-assessment.md`](docs/frontend-framework-rewrite-assessment.md) — 换框架可行性评估
 - [`docs/m2-plan.md`](docs/m2-plan.md) — 备份还原 + Beancount 导入方案（待开工）
 - [`docs/design-spec.md`](docs/design-spec.md) — 产品设计规格
