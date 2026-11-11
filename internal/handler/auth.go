@@ -131,8 +131,16 @@ func (h *Handler) clearSessionCookie(w http.ResponseWriter) {
 }
 
 // HandleHealth 健康检查（公开）。
+//
+// instance_id（迁移 014 库世代）随健康检查透出：客户端可在不登录的情况下
+// 先比对库世代再决定是否全量重拉。该字段是不敏感的库标识（UUID），
+// 且健康检查永不失败——读取失败时降级为不带该字段，status 仍为 ok。
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	body := map[string]string{"status": "ok"}
+	if id, err := h.svc.GetInstanceID(); err == nil {
+		body["instance_id"] = id
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 // HandleRegister 注册新用户（公开）。

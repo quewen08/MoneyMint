@@ -162,6 +162,21 @@ func authMiddleware(h *handler.Handler, svc *service.Service, next http.Handler)
 			return
 		}
 
+		// 导入端点（M2-e）：按当前用户新建账本，与既有账本上下文无关；
+		// 权限即登录态本身。放在 428 闸门之后——导入属于业务写入，
+		// 强制改密期间与其他业务一样被挡。
+		if strings.HasPrefix(reqPath, "/api/import/") || reqPath == "/api/import" {
+			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))
+			return
+		}
+
+		// 库世代（迁移 014）：只读、不敏感的库标识，任何已登录用户可读；
+		// 客户端用它判断「库被 restore」后是否需要清本地全量重拉。
+		if strings.HasPrefix(reqPath, "/api/db/") {
+			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))
+			return
+		}
+
 		// 其余设置写入（B-4）：要求登录态，管理员校验在 handler 内完成。
 		if strings.HasPrefix(reqPath, "/api/settings/") {
 			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), uid)))

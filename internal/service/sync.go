@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"familyledger/internal/db"
 	"familyledger/internal/domain"
 )
 
@@ -22,6 +23,9 @@ type SyncChangeOut struct {
 
 // PullResult 是 pull 响应。
 type PullResult struct {
+	// InstanceID 是当前库世代（迁移 014）。restore 会使该值变化，
+	// 客户端比对本地记录不一致时必须清空该账本实体并全量重新 pull。
+	InstanceID string          `json:"instance_id"`
 	Checkpoint int64           `json:"checkpoint"`
 	Changes    []SyncChangeOut `json:"changes"`
 }
@@ -55,6 +59,8 @@ type PushResult struct {
 
 // PushResultOut 是 push 响应。
 type PushResultOut struct {
+	// InstanceID 语义同 PullResult.InstanceID（迁移 014 库世代）。
+	InstanceID string       `json:"instance_id"`
 	Checkpoint int64        `json:"checkpoint"`
 	Accepted   int          `json:"accepted"`
 	Results    []PushResult `json:"results"`
@@ -101,7 +107,11 @@ func (s *Service) SyncPull(ledgerID, since int64, clientID string) (PullResult, 
 			return PullResult{}, err
 		}
 	}
-	return PullResult{Checkpoint: maxSeq, Changes: changes}, nil
+	instanceID, err := db.GetInstanceID(s.repo.DB())
+	if err != nil {
+		return PullResult{}, err
+	}
+	return PullResult{InstanceID: instanceID, Checkpoint: maxSeq, Changes: changes}, nil
 }
 
 // loadEntity 取出某实体的全量 JSON（引用账户一律用 uuid，便于跨端合并）。
@@ -253,7 +263,11 @@ func (s *Service) SyncPush(ledgerID, userID int64, req PushRequest) (PushResultO
 			return PushResultOut{}, err
 		}
 	}
-	return PushResultOut{Checkpoint: maxSeq, Accepted: accepted, Results: results}, nil
+	instanceID, err := db.GetInstanceID(s.repo.DB())
+	if err != nil {
+		return PushResultOut{}, err
+	}
+	return PushResultOut{InstanceID: instanceID, Checkpoint: maxSeq, Accepted: accepted, Results: results}, nil
 }
 
 // applyPushEntity 按 op 应用一条推送：create 幂等写入（账户/币种按自然键合并），

@@ -108,6 +108,11 @@ func newRouter(h *handler.Handler, svc *service.Service, webRoot string, corsCfg
 		http.MethodPost: h.HandleResetMemberPassword,
 	}))
 
+	// 数据库世代（库标识）：已登录用户可读；restore 成功后由业务层重写。
+	mux.HandleFunc("/api/db/instance", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodGet: h.HandleDBInstance,
+	}))
+
 	// 导出与同步
 	mux.HandleFunc("/api/export", h.HandleExport)
 	mux.HandleFunc("/api/export/archive", h.HandleExportArchive)
@@ -123,6 +128,23 @@ func newRouter(h *handler.Handler, svc *service.Service, webRoot string, corsCfg
 	}))
 	mux.HandleFunc("/api/backup/run", methodSwitch(map[string]http.HandlerFunc{
 		http.MethodPost: h.HandleBackupRun,
+	}))
+	// 还原（全库级，仅系统管理员）：预检（只读）+ 执行（需二次确认词）
+	mux.HandleFunc("/api/backup/restore/preview", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodPost: h.HandleBackupRestorePreview,
+	}))
+	mux.HandleFunc("/api/backup/restore", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodPost: h.HandleBackupRestore,
+	}))
+
+	// 导入（Beancount → 新账本）：登录即可，按当前用户维度新建账本。
+	// 预检（只读）+ 执行；支持 JSON {"text"} 或 multipart file 两种提交形态。
+	// 路径与 docs/m2-plan.md §4.3 保持一致。
+	mux.HandleFunc("/api/import/beancount/preview", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodPost: h.HandleImportPreview,
+	}))
+	mux.HandleFunc("/api/import/beancount", methodSwitch(map[string]http.HandlerFunc{
+		http.MethodPost: h.HandleImport,
 	}))
 
 	// 注册开关（B-4）：GET 公开 / POST 仅系统管理员

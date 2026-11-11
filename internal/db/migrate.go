@@ -3,6 +3,8 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -26,6 +28,7 @@ var migrations = []struct {
 	{"011_session_meta", migrate011},
 	{"012_opening_balance", migrate012},
 	{"013_txn_idempotency", migrate013},
+	{"014_db_instance_id", migrate014},
 }
 
 // migrate011：sessions 增加设备信息（M3 会话列表与吊销）。
@@ -123,6 +126,49 @@ func ApplyMigrations(conn *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// MaxMigrationVersion 返回当前代码内置的迁移最高版本号（数字前缀），
+// 供「恢复」等功能判断备份是否来自更新版本（降级还原会丢列）。
+func MaxMigrationVersion() int {
+	max := 0
+	for _, m := range migrations {
+		if n := parseMigrationNumber(m.name); n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+// MaxMigrationVersionDB 读取任意数据库连接上 schema_migrations 的最高迁移版本号，
+// 供「恢复」功能探测备份文件（非当前库）的 schema 版本。
+func MaxMigrationVersionDB(conn *sql.DB) (int, error) {
+	rows, err := conn.Query(`SELECT name FROM schema_migrations`)
+	if err != nil {
+		return 0, fmt.Errorf("读取 schema_migrations: %w", err)
+	}
+	defer rows.Close()
+	max := 0
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return 0, err
+		}
+		if n := parseMigrationNumber(name); n > max {
+			max = n
+		}
+	}
+	return max, rows.Err()
+}
+
+// parseMigrationNumber 从 "014_db_instance_id" 这类名称中提取前导数字版本号。
+func parseMigrationNumber(name string) int {
+	parts := strings.SplitN(name, "_", 2)
+	n, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // columnExists 判断表是否存在某列（用于向后兼容旧库）。
