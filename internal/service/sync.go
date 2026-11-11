@@ -426,12 +426,24 @@ func (s *Service) applyPushEntity(ledgerID, userID int64, typ, op string, raw js
 		txn := domain.Transaction{UUID: e.UUID, Date: date, Flag: flag, Description: e.Description,
 			Tags: e.Tags, ReversalOf: e.ReversedOf, CreatedBy: userID}
 		for _, p := range e.Postings {
-			accID, err := s.repo.AccountIDByUUID(ledgerID, p.AccountUUID)
+			// push 裁决（§6.6.1 #1/#5）：分录引用的账户必须存在且未关闭。
+			// account_not_found → 客户端全量 pull 后按自然键重映射重试一次；
+			// account_closed → 客户端直接转 dead（Beancount close 语义禁止 close 后记账，
+			// 旧实现缺此校验会把离线补录静默落库，导出可能 bean-check 报错）。
+			acc, err := s.repo.AccountByUUID(ledgerID, p.AccountUUID)
 			if err != nil {
-				return pushApplyResult{}, fmt.Errorf("推送交易引用的账户 %s 不存在: %w", p.AccountUUID, err)
+				if errors.Is(err, domain.ErrNotFound) {
+					return pushApplyResult{}, domain.Codedf(domain.ErrNotFound, domain.CodeAccountNotFound,
+						"推送交易引用的账户 %s 不存在", p.AccountUUID)
+				}
+				return pushApplyResult{}, fmt.Errorf("推送交易引用的账户 %s: %w", p.AccountUUID, err)
+			}
+			if acc.CloseDate != "" {
+				return pushApplyResult{}, domain.Codedf(domain.ErrInvalid, domain.CodeAccountClosed,
+					"推送交易引用的账户 %s 已关闭，不能记账", p.AccountUUID)
 			}
 			txn.Postings = append(txn.Postings, domain.Posting{
-				AccountID: accID,
+				AccountID: acc.ID,
 				Commodity: p.Commodity,
 				Amount:    p.Amount,
 			})

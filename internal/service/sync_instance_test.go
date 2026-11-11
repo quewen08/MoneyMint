@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"familyledger/internal/db"
+	"familyledger/internal/domain"
 )
 
 // TestSyncResponsesCarryInstanceID 验证迁移 014 库世代在同步三通道透出
@@ -59,4 +60,81 @@ func TestPullJSONShapeHasInstanceID(t *testing.T) {
 	if !strings.Contains(string(raw), `"instance_id"`) {
 		t.Fatalf("pull 响应 JSON 缺少 instance_id 字段: %s", raw)
 	}
+}
+
+// TestPushAdjudicationCodes 验证 push 裁决的稳定错误码（§6.6.1 #1/#5，
+// 客户端死信分类依赖这张码表）：
+//   - 分录引用账户不存在 → code=account_not_found（客户端 pull 后重映射重试）
+//   - 分录引用已关闭账户 → code=account_closed（Beancount close 语义，转 dead）
+func TestPushAdjudicationCodes(t *testing.T) {
+	svc := newTestService(t)
+	res := registerOwner(t, svc)
+
+	accounts, err := svc.ListAccounts(lid, false)
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	if len(accounts) < 1 {
+		t.Fatalf("默认账户未种子化")
+	}
+	cash := accounts[0]
+
+	// ① 引用不存在的账户 → account_not_found
+	push, err := svc.SyncPush(lid, res.User.ID, PushRequest{
+		ClientID: "adjudication",
+		Changes: []PushChange{{
+			EntityType: "transaction",
+			Entity: mustJSON(t, map[string]any{
+				"uuid": "txn-missing-acc", "date": "2026-01-01", "flag": "*",
+				"postings": []map[string]any{
+					{"account_uuid": "no-such-uuid", "commodity": "CNY", "amount": "1.00"},
+					{"account_uuid": cash.UUID, "commodity": "CNY", "amount": "-1.00"},
+				},
+			}),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SyncPush(不存在账户): %v", err)
+	}
+	if push.Results[0].Status != "error" || push.Results[0].Code != domain.CodeAccountNotFound {
+		t.Fatalf("应返回 account_not_found，实际 %+v", push.Results[0])
+	}
+
+	// ② 关闭现金账户（余额 0 可关）后记账 → account_closed
+	_, err = svc.SyncPush(lid, res.User.ID, PushRequest{
+		ClientID: "adjudication",
+		Changes: []PushChange{{EntityType: "account", Op: "close", Entity: mustJSON(t, map[string]any{"uuid": cash.UUID})}},
+	})
+	if err != nil {
+		t.Fatalf("SyncPush(close): %v", err)
+	}
+	push2, err := svc.SyncPush(lid, res.User.ID, PushRequest{
+		ClientID: "adjudication",
+		Changes: []PushChange{{
+			EntityType: "transaction",
+			Entity: mustJSON(t, map[string]any{
+				"uuid": "txn-closed-acc", "date": "2026-01-01", "flag": "*",
+				"postings": []map[string]any{
+					{"account_uuid": cash.UUID, "commodity": "CNY", "amount": "1.00"},
+					{"account_uuid": accounts[1].UUID, "commodity": "CNY", "amount": "-1.00"},
+				},
+			}),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SyncPush(已关闭账户): %v", err)
+	}
+	if push2.Results[0].Status != "error" || push2.Results[0].Code != domain.CodeAccountClosed {
+		t.Fatalf("应返回 account_closed，实际 %+v", push2.Results[0])
+	}
+}
+
+// mustJSON 序列化测试实体；失败直接 Fatal。
+func mustJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return raw
 }
