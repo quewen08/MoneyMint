@@ -51,6 +51,9 @@ import type {
   SessionsResponse,
   SetOpeningRequest,
   SetRegistrationRequest,
+  SyncPullResponse,
+  PushChange,
+  SyncPushResponse,
   TransactionCreated,
   TransactionListResponse,
   TrashListResponse,
@@ -721,10 +724,26 @@ export const identityApi = {
  * ⚠️ **刻意不提供 `pull` 探测水位**：服务端 `SyncPull` 的 `checkpoint` 是
  * 「本次返回变更的最大 seq」，且会按 `client_id` 写回 `sync_checkpoints`。
  * 用 since=0 探测既会拉全量数据、又会篡改该设备的服务端水位（静默副作用）。
- * 服务端水位的可视化随批 4 迁移 014 的 `instance_id` / 批 5 离线内核一并落地。
+ * 真实的 pull/push 只由 SyncEngine（core/sync）发起。
  */
 export const syncStatusApi = {
   health(): Promise<HealthResponse> {
     return api.get<HealthResponse>(API_ROUTES.health, { skipRefresh: true })
+  },
+}
+
+/** 同步端点（业务端点，需 X-Ledger-Id；仅供 core/sync 引擎调用）。 */
+export const syncApi = {
+  pull(since: number, clientId: string): Promise<SyncPullResponse> {
+    return api.get<SyncPullResponse>(API_ROUTES.syncPull, {
+      query: { since, client_id: clientId },
+    })
+  },
+  push(clientId: string, since: number, changes: PushChange[]): Promise<SyncPushResponse> {
+    return api.post<SyncPushResponse>(API_ROUTES.syncPush, {
+      client_id: clientId,
+      since,
+      changes,
+    })
   },
 }

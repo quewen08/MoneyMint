@@ -43,6 +43,7 @@ import {
 import { usePrivacyStore } from '@/stores/privacy'
 import { useRecordSheetStore } from '@/stores/recordSheet'
 import { useSessionStore } from '@/stores/session'
+import { useSyncStore } from '@/stores/sync'
 
 const props = withDefaults(
   defineProps<{
@@ -709,6 +710,19 @@ async function submit(continueAfter: boolean): Promise<void> {
       showSuccess.value = true
     }
   } catch (err) {
+    // 离线兜底（批 5 / AC-04）：网络不通时本地落库并入待推队列，
+    // 联网后由 SyncEngine 自动补推；服务端错误仍走原失败路径。
+    if (err instanceof ApiError && err.code === 'network_error') {
+      const saved = await saveOffline(payload)
+      if (saved) {
+        clearDraftIfPossible()
+        resetIdempotencyKey()
+        rememberDefaults()
+        notice.value = '当前离线，已保存在本机，联网后自动同步'
+        showSuccess.value = true
+        return
+      }
+    }
     submitError.value =
       err instanceof ApiError ? err.message : '保存失败，请检查网络后重试'
     if (
@@ -721,6 +735,40 @@ async function submit(continueAfter: boolean): Promise<void> {
   } finally {
     submitting.value = false
   }
+}
+
+/**
+ * 离线保存：生成 `loc-*` 本地 uuid，postings 的 account_id 映射为
+ * account_uuid（push 契约按 uuid 引用），本地落库并入待推队列。
+ * 映射失败（账户列表缺失）返回 false，走常规错误提示。
+ */
+async function saveOffline(payload: CreateTransactionRequest): Promise<boolean> {
+  // 离线路径才取 sync store（普通挂载/测试无 Pinia 时不触碰）。
+  const syncStore = useSyncStore()
+  const uuidPostings: Array<{ account_uuid: string; commodity: string; amount: string }> = []
+  for (const posting of payload.postings) {
+    const account = accounts.value.find((item) => item.id === posting.account_id)
+    if (account === undefined || account.uuid === '') return false
+    uuidPostings.push({
+      account_uuid: account.uuid,
+      commodity: posting.commodity,
+      amount: posting.amount,
+    })
+  }
+  const txn = {
+    uuid: `loc-${newIdempotencyKey()}`,
+    date: payload.date,
+    flag: payload.flag ?? '*',
+    description: payload.description,
+    tags: payload.tags ?? [],
+    postings: uuidPostings,
+  }
+  await syncStore.recordTxnOffline(txn, {
+    entity_type: 'transaction',
+    key: txn.uuid,
+    entity: { ...txn },
+  })
+  return true
 }
 
 function resetForm(): void {

@@ -1,0 +1,1 @@
+{"instance_id":"73ba0e6e-a86f-4c1d-abd5-d9b43ff599c0","checkpoint":41,"accepted":0,"results":[{"index":0,"entity_type":"transaction","uuid":"txn-on-closed","status":"error","accepted":false,"error":"推送交易引用的账户 loc-acc-3 已关闭，不能记账","code":"account_closed"}]}

@@ -7,13 +7,16 @@
  * 布局 token 与 IA，不重画信息架构。批 3 起 P-11~P-18 全部接入，导航项
  * 无占位死链；`ready` 保留用于将来临时下线某入口。
  */
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { registerServiceWorker } from '@/core/pwa'
 import { useSessionStore } from '@/stores/session'
+import { useSyncStore } from '@/stores/sync'
 import { usePrivacyStore } from '@/stores/privacy'
 import { useRecordSheetStore } from '@/stores/recordSheet'
 import RecordSheet from './RecordSheet.vue'
+import SyncBadge from './SyncBadge.vue'
 
 interface NavItem {
   key: string
@@ -28,7 +31,26 @@ const router = useRouter()
 const session = useSessionStore()
 const privacy = usePrivacyStore()
 const sheet = useRecordSheetStore()
+const sync = useSyncStore()
 const notice = ref('')
+
+// 批 5：同步内核随登录布局启动（自动同步 + 状态订阅）；
+// PWA 更新提示：新版本就绪时出横幅，用户确认才刷新（不得打断录入，AC-35）。
+const updateReady = ref(false)
+let pwaHandle: { confirmUpdate: () => void } | null = null
+
+onMounted(() => {
+  void sync.bootstrap()
+  pwaHandle = registerServiceWorker(() => {
+    updateReady.value = true
+  })
+})
+
+function applyUpdate(): void {
+  if (pwaHandle !== null) {
+    pwaHandle.confirmUpdate()
+  }
+}
 
 // 批 3：P-11~P-18 全部接入，不再有「后续批次开放」的占位项。
 // 顺序即 PC 侧栏分组顺序；移动底栏只取 4 项（含中央 ＋）。
@@ -139,6 +161,10 @@ function goChangePassword(): void {
 
     <!-- 主区 -->
     <div class="layout__main">
+      <div v-if="updateReady" class="layout__update" role="status">
+        <span>有新版本可用</span>
+        <button class="fb-btn-primary layout__update-btn" type="button" @click="applyUpdate">立即更新</button>
+      </div>
       <header class="layout__top">
         <div class="layout__title">
           <strong>{{ session.ledgerName }}</strong>
@@ -147,6 +173,7 @@ function goChangePassword(): void {
           </span>
         </div>
         <div class="layout__tools">
+          <SyncBadge />
           <button
             type="button"
             class="layout__tool"
@@ -317,6 +344,22 @@ function goChangePassword(): void {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.layout__update {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 16px 0;
+  padding: 10px 14px;
+  border-radius: var(--fb-radius-input);
+  background: var(--fb-warn-soft);
+  color: var(--fb-warn);
+  font-size: 12px;
+}
+.layout__update-btn {
+  padding: 4px 12px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 
