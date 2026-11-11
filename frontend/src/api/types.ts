@@ -53,6 +53,8 @@ export type JsonRecord = Record<string, unknown>
 /** GET /api/health */
 export interface HealthResponse {
   status: string
+  /** 库世代（迁移 014）：restore 后变化，客户端据此判断需全量重拉。 */
+  instance_id?: string
 }
 
 // ---------- 认证 ----------
@@ -439,6 +441,8 @@ export interface SyncPullQuery {
 
 /** GET /api/sync/pull 响应。 */
 export interface SyncPullResponse {
+  /** 库世代（迁移 014）：与本地记录不一致时清空该账本实体并全量 pull。 */
+  instance_id?: string
   checkpoint: number
   changes: SyncChange[]
 }
@@ -472,6 +476,8 @@ export interface PushResult {
 
 /** POST /api/sync/push 响应。 */
 export interface SyncPushResponse {
+  /** 库世代（迁移 014）：语义同 SyncPullResponse.instance_id。 */
+  instance_id?: string
   checkpoint: number
   accepted: number
   results: PushResult[]
@@ -520,4 +526,68 @@ export interface RegistrationSettings {
 /** POST /api/settings/registration 请求体。 */
 export interface SetRegistrationRequest {
   enabled: boolean
+}
+
+// ---------- M2：恢复与导入（批 4，与 docs/m2-plan.md §4/§5 对齐） ----------
+
+/** 恢复预检 / 执行结果里的核心表行数统计。 */
+export interface RestoreStats {
+  users: number
+  ledgers: number
+  accounts: number
+  transactions: number
+}
+
+/** POST /api/backup/restore/preview（只读预检；Valid=false 时看 reason / error）。 */
+export interface RestorePreviewResult {
+  source: string
+  valid: boolean
+  backup: RestoreStats
+  current: RestoreStats
+  schema_version: number
+  current_version: number
+  warnings: string[]
+  /** 预检未通过的概括原因（人类可读）。 */
+  error?: string
+  /** 机器可读拒绝原因码：not_sqlite / integrity_failed / not_our_backup / future_version / file_too_large。 */
+  reason?: string
+}
+
+/** POST /api/backup/restore（执行结果；snapshot 可再还原回去）。 */
+export interface RestoreResult {
+  source: string
+  replaced: RestoreStats
+  snapshot?: string
+  new_instance_id: string
+  warnings: string[]
+}
+
+/** Beancount 解析错误（行号 + 原因，一次收集全部）。 */
+export interface BeancountParseError {
+  line: number
+  msg: string
+}
+
+/** POST /api/import/beancount/preview（只读解析预览）。 */
+export interface ImportPreviewResult {
+  valid: boolean
+  title: string
+  /** 实际将使用的账本名（同名自动加序号）。 */
+  ledger_name: string
+  accounts: number
+  transactions: number
+  prices: number
+  commodities: number
+  /** 疑似重复导入（同名账本 + 相同交易数）：仅提示，不阻断。 */
+  duplicate: boolean
+  errors?: BeancountParseError[]
+  error?: string
+}
+
+/** POST /api/import/beancount（执行结果）。 */
+export interface ImportResult {
+  ledger_id: number
+  ledger_name: string
+  accounts: number
+  transactions: number
 }

@@ -30,6 +30,8 @@ import type {
   CreateTransactionRequest,
   HealthResponse,
   IdentityCheckResult,
+  ImportPreviewResult,
+  ImportResult,
   LedgerListResponse,
   LedgerView,
   LoginRequest,
@@ -42,6 +44,8 @@ import type {
   RegisterRequest,
   RegistrationSettings,
   ResetMemberPasswordRequest,
+  RestorePreviewResult,
+  RestoreResult,
   RevokeOtherSessionsResponse,
   RevokeSessionResponse,
   SessionsResponse,
@@ -202,7 +206,9 @@ function buildHeaders(
   options: ApiRequestOptions,
 ): Record<string, string> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  if (options.body !== undefined) {
+  // FormData（M2 恢复的 multipart 上传）交给浏览器自动生成带 boundary 的
+  // Content-Type；JSON 体仍显式声明。
+  if (options.body !== undefined && !(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
   }
   // D-7：Cookie 会话的非 GET/HEAD/OPTIONS 写操作必须带 X-CSRF。
@@ -364,7 +370,7 @@ export async function requestWithMeta<T>(
     headers,
   }
   if (options.body !== undefined) {
-    init.body = JSON.stringify(options.body)
+    init.body = options.body instanceof FormData ? options.body : JSON.stringify(options.body)
   }
   if (options.signal !== undefined) {
     init.signal = options.signal
@@ -628,6 +634,48 @@ export const backupApi = {
       responseType: 'blob',
     })
     return res.data
+  },
+}
+
+/**
+ * M2-b 恢复（全库级，仅系统管理员；不带账本上下文）。
+ *
+ * preview 只读预检不改动数据；execute 需要二次确认词 `RESTORE`，
+ * 服务端会自动生成 pre-restore 快照并重写库世代（instance_id）。
+ * 文件走 multipart/form-data（服务端限制 512MB，落临时文件用完即删）。
+ */
+export const restoreApi = {
+  preview(file: File): Promise<RestorePreviewResult> {
+    const form = new FormData()
+    form.append('file', file)
+    return request<RestorePreviewResult>(API_ROUTES.backupRestorePreview, {
+      method: 'POST',
+      body: form,
+    })
+  },
+  execute(file: File, confirm: string): Promise<RestoreResult> {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('confirm', confirm)
+    return request<RestoreResult>(API_ROUTES.backupRestore, {
+      method: 'POST',
+      body: form,
+    })
+  },
+}
+
+/**
+ * M2-e 导入（Beancount → 新账本；登录即可，按当前用户维度新建）。
+ *
+ * preview 只读解析不写库；execute 在服务端单一大事务内建新账本，
+ * 同名账本自动加序号、绝不覆盖既有数据。
+ */
+export const importApi = {
+  preview(text: string): Promise<ImportPreviewResult> {
+    return api.post<ImportPreviewResult>(API_ROUTES.importBeancountPreview, { text })
+  },
+  execute(text: string): Promise<ImportResult> {
+    return api.post<ImportResult>(API_ROUTES.importBeancount, { text })
   },
 }
 

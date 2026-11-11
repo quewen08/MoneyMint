@@ -13,6 +13,7 @@
  * 导出成功后仍读 `X-Ledger-*` 响应头做二次提示（双保险）。
  */
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import { accountApi, backupApi, exportApi, identityApi, transactionApi } from '@/api/client'
 import { ApiError } from '@/api/errors'
@@ -31,6 +32,7 @@ import { buildCsvRowsFromTransactions, buildTransactionsCsv } from '@/core/csv'
 import { useSessionStore } from '@/stores/session'
 
 const session = useSessionStore()
+const router = useRouter()
 
 const items = ref<BackupItem[]>([])
 const backupLoading = ref(false)
@@ -56,6 +58,14 @@ const totalSize = computed(() => {
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : '操作失败，请稍后重试'
+}
+
+/** M2（P-19 / P-20）：导入 / 恢复向导页入口。 */
+function goImport(): void {
+  void router.push({ name: 'import' })
+}
+function goRestore(): void {
+  void router.push({ name: 'restore' })
 }
 
 async function loadBackups(): Promise<void> {
@@ -205,8 +215,12 @@ onMounted(() => { void loadBackups() })
     <div class="fb-card ds__card">
       <h2>导入</h2>
       <p class="ds__desc">
-        Beancount 导入与备份还原向导属于 M2（批 4），本期尚未开放。导出文件可被 bean-check 直接校验。
+        Beancount 导入为独立新账本（不覆盖既有数据）；还原备份会替换全库并需要确认词解锁。
       </p>
+      <div class="ds__buttons">
+        <button class="fb-btn-primary ds__btn" type="button" @click="goImport">导入 Beancount</button>
+        <button v-if="isAdmin" class="fb-btn-ghost ds__btn" type="button" @click="goRestore">还原备份</button>
+      </div>
     </div>
 
     <!-- 备份：仅系统管理员渲染 -->

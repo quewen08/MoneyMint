@@ -232,6 +232,7 @@ function concretePath(template: string): string {
  *  - L153 ledgers / ledgers/*
  *  - L160 backup/*
  *  - L166 settings/*
+ *  - L172 import/*（M2-e：按当前用户新建账本）与 db/*（M2 库世代，只读）
  * 其余 /api/* 一律走 L172 ledgerIDFromRequest（业务端点，必须带 X-Ledger-Id）。
  */
 const MIDDLEWARE_EXEMPT: readonly string[] = [
@@ -250,14 +251,19 @@ const MIDDLEWARE_EXEMPT: readonly string[] = [
   'backupList',
   'backupDownload',
   'backupRun',
+  'backupRestorePreview',
+  'backupRestore',
+  'importBeancountPreview',
+  'importBeancount',
+  'dbInstance',
   'settingsRegistration',
 ]
 
 describe('契约 B：X-Ledger-Id 断言与 middleware 豁免端点矩阵（AC-25 / E-08）', () => {
-  it('31 条端点逐路径与 middleware 豁免集合完全一致', () => {
+  it('36 条端点逐路径与 middleware 豁免集合完全一致', () => {
     const routeNames = Object.keys(API_ROUTES) as Array<keyof typeof API_ROUTES>
     // 覆盖完整性自检：路由常量确实全部纳入判定。
-    expect(routeNames.length).toBe(31)
+    expect(routeNames.length).toBe(36)
 
     for (const name of routeNames) {
       const expected = MIDDLEWARE_EXEMPT.indexOf(name) >= 0

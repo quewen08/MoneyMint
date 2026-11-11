@@ -129,6 +129,19 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/DataSafetyView.vue'),
     meta: { requiresAuth: true },
   },
+  // M2（批 4）：导入向导（登录即可）/ 恢复向导（全库级，仅系统管理员）。
+  {
+    path: '/import',
+    name: 'import',
+    component: () => import('@/views/ImportView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/restore',
+    name: 'restore',
+    component: () => import('@/views/RestoreView.vue'),
+    meta: { requiresAuth: true, adminOnly: true },
+  },
   {
     path: '/sync',
     name: 'sync',
@@ -197,6 +210,10 @@ router.beforeEach(async (to) => {
     }
     if (session.needsInvite && to.name !== 'await-invite') {
       return { name: 'await-invite' }
+    }
+    // M2 恢复向导：全库级操作，非系统管理员一律挡回首页（视图内还有二次断言）。
+    if (to.meta.adminOnly === true && session.user?.is_admin !== true) {
+      return { name: 'home' }
     }
   }
   return true
