@@ -1,5 +1,11 @@
 /**
- * 兼容门禁（P1 修复）：用当前源码产物做 es2015 语法扫描。
+ * 兼容门禁（P1 修复）：用当前源码产物做语法扫描 + API/CSS 特性扫描。
+ *
+ * v2.6（2026-11-11）：语法扫描目标由 es2015 抬到 **es2020**，只为放行
+ * Vite 路由懒加载生成的动态 `import()`（ES2020 语法，Safari 14.1 真机支持）。
+ * **产物基线不变**：`build.target: 'es2015'` 与 plugin-legacy 的
+ * Safari >= 14 polyfills 一个字未动。语法门禁放宽后，用 §14.7 承诺过的
+ * API / CSS 特性扫描补位，避免「语法门禁变松、API 层裸奔」。
  *
  * 背景：旧 `npm run compat` 直接扫 `dist/assets/*.js`，那是批 0 陈旧产物，
  * 对批 1 代码零证明力；而 `vite build` 的 `emptyOutDir:true` 会清空
@@ -34,6 +40,96 @@ const BATCH1_MARKERS = [
   'fambean.record_draft',
   'idempotency_key_deleted',
 ]
+
+/**
+ * §14.7 禁用清单：Safari 14.1 缺失或 15.4+ 才有的 API / 语法特性。
+ * 语法门禁抬到 es2020 后由这层兜底，命中即失败（AC-19）。
+ */
+const FORBIDDEN_JS = [
+  { name: 'structuredClone', re: /\bstructuredClone\s*\(/ },
+  { name: 'crypto.randomUUID', re: /\bcrypto\.randomUUID\s*\(/ },
+  { name: '.at()', re: /\.at\s*\(/ },
+  { name: 'findLast / findLastIndex', re: /\.findLast(?:Index)?\s*\(/ },
+  { name: 'Object.hasOwn', re: /\bObject\.hasOwn\s*\(/ },
+  { name: 'showModal', re: /\.showModal\s*\(/ },
+  { name: 'BroadcastChannel', re: /\bBroadcastChannel\b/ },
+  { name: 'navigator.locks', re: /\bnavigator\.locks\b/ },
+  { name: 'OffscreenCanvas', re: /\bOffscreenCanvas\b/ },
+  {
+    name: 'WASM / WebGL / CanvasKit',
+    re: /\bWebAssembly\b|\bCanvasKit\b|WebGLRenderingContext|\bWebGL2?\b/,
+  },
+]
+
+const FORBIDDEN_CSS = [
+  { name: 'aspect-ratio', re: /aspect-ratio\s*:/ },
+  { name: ':has()', re: /:has\s*\(/ },
+  { name: 'dvh', re: /\bdvh\b/ },
+  { name: 'inset', re: /(^|[^\w-])inset\s*:/ },
+]
+
+/** 返回命中的禁用特性名（去重）。 */
+function scanForbidden(content, rules) {
+  const hits = []
+  for (const rule of rules) {
+    if (rule.re.test(content)) {
+      hits.push(rule.name)
+    }
+  }
+  return hits
+}
+
+/** 自检：扫描器必须能命中样本，防止规则写错变成「永远通过」的假绿灯。 */
+function selfCheckScanner() {
+  const jsSample = 'structuredClone(x); const last = arr.at(-1); new BroadcastChannel("a");'
+  const cssSample = '.card { aspect-ratio: 1; inset: 0; }'
+  return (
+    scanForbidden(jsSample, FORBIDDEN_JS).length >= 3 &&
+    scanForbidden(cssSample, FORBIDDEN_CSS).length >= 2
+  )
+}
+
+/** §14.7：扫描临时产物是否命中禁用 API / CSS 特性；命中即门禁失败（AC-19）。 */
+function scanFeatures(assetsDir) {
+  // 自检：扫描器必须能命中样本，否则规则写错会变成「永远通过」的假绿灯。
+  if (!selfCheckScanner()) {
+    fail('禁用特性扫描器自检失败：规则未能命中样本，疑似失效')
+    return false
+  }
+  const files = existsSync(assetsDir)
+    ? readdirSync(assetsDir)
+        .filter((name) => name.endsWith('.js') || name.endsWith('.css'))
+        .sort()
+    : []
+  let bad = 0
+  let skipped = 0
+  for (const name of files) {
+    // 跳过 @vitejs/plugin-legacy 按 target 自动产出的 polyfills / legacy 垫片 chunk：
+    // 它们不是业务源码，只做能力探测与补缺，会引用 "WebAssembly" 等字符串做特性检测，
+    // 扫描会误伤；AC-19 约束的是「我们的应用代码」，不约束插件垫片。
+    if (/^(polyfills|legacy)[-.]/.test(name)) {
+      skipped += 1
+      continue
+    }
+    const content = readFileSync(join(assetsDir, name), 'utf8')
+    const jsHits = name.endsWith('.js') ? scanForbidden(content, FORBIDDEN_JS) : []
+    const cssHits = name.endsWith('.css') ? scanForbidden(content, FORBIDDEN_CSS) : []
+    const hits = [...new Set([...jsHits, ...cssHits])]
+    if (hits.length > 0) {
+      bad += 1
+      console.error(`  [compat] 命中禁用特性 ${name}: ${hits.join(', ')}`)
+    }
+  }
+  if (bad > 0) {
+    fail(`共 ${bad} 个产物文件命中 §14.7 禁用 API/CSS 特性（Safari 14.1 不支持），门禁失败`)
+    return false
+  }
+  console.log(
+    `[compat] §14.7 API/CSS 特性扫描：当前源码产物未命中禁用清单` +
+      `${skipped > 0 ? `（已跳过 ${skipped} 个插件垫片 chunk）` : ''}`,
+  )
+  return true
+}
 
 function fail(message) {
   console.error(`[compat] FAIL: ${message}`)
@@ -160,15 +256,23 @@ function main() {
       return
     }
 
-    // 步骤 4：对临时产物执行原有 es2015 门禁。
+    // 步骤 4：对临时产物执行语法门禁（v2.6 由 es2015 抬到 **es2020**，
+    // 只为放行路由懒加载生成的动态 import()；产物基线仍是 es2015，
+    // Safari 14 polyfills 一个字未动）。
     if (
-      !run('es2015 语法扫描（临时产物）', [
+      !run('es2020 语法扫描（临时产物）', [
         esCheckBin,
-        'es2015',
+        'es2020',
         '.compat-tmp/assets/*.js',
         '--module',
       ])
     ) {
+      return
+    }
+
+    // 步骤 4.5：§14.7 API/CSS 特性扫描，放行动态 import 后由这层兜底
+    // Safari 14.1 缺失的 API / CSS 特性（AC-19）。
+    if (!scanFeatures(tmpAssetsDir)) {
       return
     }
 

@@ -11,29 +11,48 @@
  *
  * 所有请求都用相对 `/api` 路径，禁止硬编码后端地址（E-06）。
  */
+import { parseIdentityHeader, type DiffItem } from '@/core/batch3'
 import { clearLegacyToken } from '@/core/storage'
 import { ApiError } from './errors'
 import { API_ROUTES, isNoLedgerPath } from './routes'
 import type {
   AccountCreated,
   AccountListResponse,
+  AddMemberRequest,
+  AddMemberResponse,
   AuthResult,
+  BackupItem,
+  BackupListResponse,
   ChangePasswordRequest,
   ChangePasswordResponse,
   CreateAccountRequest,
+  CreateLedgerRequest,
   CreateTransactionRequest,
+  HealthResponse,
+  IdentityCheckResult,
   LedgerListResponse,
+  LedgerView,
   LoginRequest,
   LogoutResponse,
   MeResponse,
+  MemberListResponse,
   OkResponse,
   OpeningResult,
   OpeningView,
   RegisterRequest,
+  RegistrationSettings,
+  ResetMemberPasswordRequest,
+  RevokeOtherSessionsResponse,
+  RevokeSessionResponse,
+  SessionsResponse,
   SetOpeningRequest,
+  SetRegistrationRequest,
   TransactionCreated,
   TransactionListResponse,
   TrashListResponse,
+  UpdateLedgerRequest,
+  UpdateMemberRequest,
+  UpdateMemberResponse,
 } from './types'
 
 // 启动时清理旧版 localStorage token（§13 D-7 实施清单 #7）。
@@ -60,6 +79,17 @@ export interface ApiRequestOptions {
   refreshed?: boolean
   /** 内部标记：5xx 已重试次数。 */
   retryCount?: number
+  /**
+   * 响应体解析方式：`json`（默认，文本 → JSON.parse）或 `blob`（二进制下载）。
+   * 批 3 的导出 / 备份下载用 blob；错误响应仍按 JSON 解析以保留文案。
+   */
+  responseType?: 'json' | 'blob'
+}
+
+/** 带响应头的请求结果（导出不平告警需要读 `X-Ledger-Balanced` / `X-Ledger-Diffs`）。 */
+export interface ApiResponseMeta<T> {
+  data: T
+  headers: Headers
 }
 
 /** 客户端回调（由 router 注入，避免 api 层反向依赖路由 / store）。 */
@@ -202,7 +232,19 @@ function buildHeaders(
   return headers
 }
 
-async function readBody(res: Response): Promise<unknown> {
+async function readBody(
+  res: Response,
+  responseType: 'json' | 'blob',
+  ok: boolean,
+): Promise<unknown> {
+  // 错误响应即使声明 blob 也按 JSON 文本解析，保证 ApiError.fromBody 拿得到文案。
+  if (responseType === 'blob' && ok) {
+    try {
+      return await res.blob()
+    } catch {
+      return undefined
+    }
+  }
   let text = ''
   try {
     text = await res.text()
@@ -302,14 +344,17 @@ export function newIdempotencyKey(): string {
 }
 
 /**
- * 发起一次 API 请求。
+ * 发起一次 API 请求并返回响应头。
+ *
+ * 批 3 新增：导出 / 备份下载既要二进制体，也要 `X-Ledger-*` 响应头做不平告警。
+ * 401 刷新、428、4xx 不重试 / 5xx 最多 3 次等边界与 `request` 完全共用。
  *
  * @throws ApiError 4xx / 5xx / 网络失败 / 缺少账本上下文。
  */
-export async function request<T>(
+export async function requestWithMeta<T>(
   path: string,
   options: ApiRequestOptions = {},
-): Promise<T> {
+): Promise<ApiResponseMeta<T>> {
   const method = (options.method === undefined ? 'GET' : options.method).toUpperCase()
   // buildHeaders 会同步断言 X-Ledger-Id；缺失时不发出任何请求。
   const headers = buildHeaders(path, method, options)
@@ -335,7 +380,8 @@ export async function request<T>(
     })
   }
 
-  const body = await readBody(res)
+  const responseType = options.responseType === 'blob' ? 'blob' : 'json'
+  const body = await readBody(res, responseType, res.ok)
 
   if (res.status === 401) {
     if (options.skipRefresh === true || options.refreshed === true) {
@@ -350,7 +396,7 @@ export async function request<T>(
       throw ApiError.fromBody(401, body)
     }
     // Cookie 轮换后旧 token 立即失效，重试会自动携带新 Cookie。
-    return request<T>(path, { ...options, refreshed: true })
+    return requestWithMeta<T>(path, { ...options, refreshed: true })
   }
 
   if (res.status === 428) {
@@ -361,15 +407,23 @@ export async function request<T>(
   if (!res.ok) {
     const retryCount = options.retryCount === undefined ? 0 : options.retryCount
     if (res.status >= 500 && retryCount < 3) {
-      return request<T>(path, { ...options, retryCount: retryCount + 1 })
+      return requestWithMeta<T>(path, { ...options, retryCount: retryCount + 1 })
     }
     throw ApiError.fromBody(res.status, body)
   }
 
   if (res.status === 204 || body === undefined) {
-    return undefined as T
+    return { data: undefined as T, headers: res.headers }
   }
-  return body as T
+  return { data: body as T, headers: res.headers }
+}
+
+/** 发起一次 API 请求（只取响应体，批 0~2.5 的既有调用零改动）。 */
+export async function request<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<T> {
+  return (await requestWithMeta<T>(path, options)).data
 }
 
 /** 常用方法的薄封装。 */
@@ -491,5 +545,138 @@ export const transactionApi = {
     return api.post<OkResponse>(
       formatApiPath(API_ROUTES.transactionRestore, { uuid: transactionUuid }),
     )
+  },
+}
+
+// ---------- 批 3：管理与设置页端点（全部复用既有 31 端点，无新增后端接口） ----------
+
+/** 成员管理（仅 owner；路径在 X-Ledger-Id 作用域内，客户端自动注入）。 */
+export const memberApi = {
+  list(): Promise<MemberListResponse> {
+    return api.get<MemberListResponse>(API_ROUTES.ledgerMembers)
+  },
+  add(body: AddMemberRequest): Promise<AddMemberResponse> {
+    return api.post<AddMemberResponse>(API_ROUTES.ledgerMembers, body)
+  },
+  updateRole(userID: number, body: UpdateMemberRequest): Promise<UpdateMemberResponse> {
+    return api.post<UpdateMemberResponse>(
+      formatApiPath(API_ROUTES.ledgerMember, { userID: String(userID) }),
+      body,
+    )
+  },
+  remove(userID: number): Promise<OkResponse> {
+    return api.delete<OkResponse>(
+      formatApiPath(API_ROUTES.ledgerMember, { userID: String(userID) }),
+    )
+  },
+  resetPassword(userID: number, body: ResetMemberPasswordRequest): Promise<OkResponse> {
+    return api.post<OkResponse>(
+      formatApiPath(API_ROUTES.ledgerMemberResetPassword, { userID: String(userID) }),
+      body,
+    )
+  },
+}
+
+/** 账本管理（例外清单，不带 X-Ledger-Id）。 */
+export const ledgerManageApi = {
+  create(body: CreateLedgerRequest): Promise<LedgerView> {
+    return api.post<LedgerView>(API_ROUTES.ledgers, body)
+  },
+  update(id: number, body: UpdateLedgerRequest): Promise<LedgerView> {
+    return api.patch<LedgerView>(formatApiPath(API_ROUTES.ledgerById, { id: String(id) }), body)
+  },
+}
+
+/** 注册开关（GET 公开 / POST 仅系统管理员）。 */
+export const settingsApi = {
+  registration(): Promise<RegistrationSettings> {
+    // 登录页也会调用；skipRefresh 避免未登录时触发无意义的 401 刷新。
+    return api.get<RegistrationSettings>(API_ROUTES.settingsRegistration, { skipRefresh: true })
+  },
+  setRegistration(body: SetRegistrationRequest): Promise<RegistrationSettings> {
+    return api.post<RegistrationSettings>(API_ROUTES.settingsRegistration, body)
+  },
+}
+
+/** 登录设备（自服务端点）。 */
+export const sessionApi = {
+  list(): Promise<SessionsResponse> {
+    return api.get<SessionsResponse>(API_ROUTES.sessions)
+  },
+  revoke(sid: string): Promise<RevokeSessionResponse> {
+    return api.delete<RevokeSessionResponse>(
+      formatApiPath(API_ROUTES.sessionBySid, { sid }),
+    )
+  },
+  revokeOthers(): Promise<RevokeOtherSessionsResponse> {
+    return api.post<RevokeOtherSessionsResponse>(API_ROUTES.sessionsRevokeOthers)
+  },
+}
+
+/** 备份（全库级，仅系统管理员；不带账本上下文）。 */
+export const backupApi = {
+  list(): Promise<BackupListResponse> {
+    return api.get<BackupListResponse>(API_ROUTES.backupList)
+  },
+  run(): Promise<BackupItem> {
+    return api.post<BackupItem>(API_ROUTES.backupRun)
+  },
+  async download(name: string): Promise<Blob> {
+    const res = await requestWithMeta<Blob>(API_ROUTES.backupDownload, {
+      method: 'GET',
+      query: { name },
+      responseType: 'blob',
+    })
+    return res.data
+  },
+}
+
+/** 导出结果（含服务端响应头里的恒等式告警）。 */
+export interface ExportFileResult {
+  blob: Blob
+  /** 缺头按 true 处理，兼容旧服务端。 */
+  balanced: boolean
+  diffs: DiffItem[]
+}
+
+async function fetchExport(path: string): Promise<ExportFileResult> {
+  const res = await requestWithMeta<Blob>(path, { method: 'GET', responseType: 'blob' })
+  const balancedHeader = res.headers.get('X-Ledger-Balanced')
+  const diffsHeader = res.headers.get('X-Ledger-Diffs')
+  return {
+    blob: res.data,
+    balanced: balancedHeader !== 'false',
+    diffs: parseIdentityHeader(diffsHeader === null ? '' : diffsHeader),
+  }
+}
+
+/** 导出（业务端点，需 X-Ledger-Id）。 */
+export const exportApi = {
+  beancount(): Promise<ExportFileResult> {
+    return fetchExport(API_ROUTES.export)
+  },
+  archive(): Promise<ExportFileResult> {
+    return fetchExport(API_ROUTES.exportArchive)
+  },
+}
+
+/** 恒等式检查（导出前的前置校验，§14.5 #3 要求不平即阻断）。 */
+export const identityApi = {
+  check(): Promise<IdentityCheckResult> {
+    return api.get<IdentityCheckResult>(API_ROUTES.identityCheck)
+  },
+}
+
+/**
+ * 同步状态页：只读连通性。
+ *
+ * ⚠️ **刻意不提供 `pull` 探测水位**：服务端 `SyncPull` 的 `checkpoint` 是
+ * 「本次返回变更的最大 seq」，且会按 `client_id` 写回 `sync_checkpoints`。
+ * 用 since=0 探测既会拉全量数据、又会篡改该设备的服务端水位（静默副作用）。
+ * 服务端水位的可视化随批 4 迁移 014 的 `instance_id` / 批 5 离线内核一并落地。
+ */
+export const syncStatusApi = {
+  health(): Promise<HealthResponse> {
+    return api.get<HealthResponse>(API_ROUTES.health, { skipRefresh: true })
   },
 }

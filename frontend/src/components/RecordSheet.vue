@@ -32,7 +32,14 @@ import {
 } from '@/core/record'
 import { recordFundAccounts } from '@/core/accounts'
 import { balanceDiffByCommodity } from '@/core/record'
-import { clearDraft, readDraft, writeDraft } from '@/core/storage'
+import {
+  clearDraft,
+  readDefaultAccounts,
+  readDraft,
+  setDefaultAccount,
+  writeDraft,
+  type DefaultAccountKind,
+} from '@/core/storage'
 import { usePrivacyStore } from '@/stores/privacy'
 import { useRecordSheetStore } from '@/stores/recordSheet'
 import { useSessionStore } from '@/stores/session'
@@ -248,12 +255,91 @@ function restoreDraft(): void {
   notice.value = '已恢复上次未提交的表单草稿'
 }
 
+// ---------- §14.5 #5：默认账户预选 / 回写（批 3） ----------
+
+/** 按 uuid 反查可用账户 id；已删除 / 已关户返回 null，由调用方回退首个可用账户。 */
+function defaultAccountId(uuid: string | undefined): number | null {
+  if (uuid === undefined || uuid === '') {
+    return null
+  }
+  for (const account of accounts.value) {
+    if (account.uuid === uuid && (account.close_date === undefined || account.close_date === '')) {
+      return account.id
+    }
+  }
+  return null
+}
+
+/** 账户 id → uuid（旧测试固件的账户可能没有 uuid，容错为空串）。 */
+function uuidOf(accountId: number | null): string {
+  if (accountId === null) {
+    return ''
+  }
+  for (const account of accounts.value) {
+    if (account.id === accountId && typeof account.uuid === 'string') {
+      return account.uuid
+    }
+  }
+  return ''
+}
+
+/** 读取默认账户；草稿已指定的字段优先，失效记忆回退首个可用账户并提示。 */
+function applyDefaultAccounts(): void {
+  const id = session.ledgerId
+  if (id === null) {
+    return
+  }
+  const defaults = readDefaultAccounts(id)
+  const categoryIds: number[] = categoryOptions.value.map((account) => account.id)
+  const fundIds: number[] = fundAccounts.value.map((account) => account.id)
+  let invalid = false
+
+  const applyField = (
+    field: 'categoryAccountId' | 'transferFromAccountId' | 'transferToAccountId',
+    uuid: string | undefined,
+    allowed: number[],
+  ): void => {
+    if (form[field] !== null || uuid === undefined || uuid === '') {
+      return
+    }
+    const found = defaultAccountId(uuid)
+    if (found !== null && allowed.indexOf(found) >= 0) {
+      form[field] = found
+    } else if (found === null) {
+      invalid = true
+    }
+  }
+
+  applyField('categoryAccountId', form.kind === 'income' ? defaults.income : defaults.expense, categoryIds)
+  applyField('transferFromAccountId', defaults.transferOut, fundIds)
+  applyField('transferToAccountId', defaults.transferIn, fundIds)
+  if (invalid) {
+    notice.value = '默认账户已失效，已回退为首个可用账户'
+  }
+}
+
+/** 提交成功后记住本次选择（按账本命名空间，不写后端、不含凭据）。 */
+function rememberDefaults(): void {
+  const id = session.ledgerId
+  if (id === null) {
+    return
+  }
+  if (form.kind === 'transfer') {
+    setDefaultAccount(id, 'transferOut', uuidOf(form.transferFromAccountId))
+    setDefaultAccount(id, 'transferIn', uuidOf(form.transferToAccountId))
+  } else {
+    const kind: DefaultAccountKind = form.kind
+    setDefaultAccount(id, kind, uuidOf(form.categoryAccountId))
+  }
+}
+
 async function loadAccounts(): Promise<void> {
   loading.value = true
   loadError.value = ''
   try {
     const res = await accountApi.list()
     accounts.value = Array.isArray(res.accounts) ? res.accounts : []
+    applyDefaultAccounts()
     if (form.fundAccountId === null && fundAccounts.value.length > 0) {
       form.fundAccountId = fundAccounts.value[0].id
     }
@@ -322,12 +408,19 @@ function selectCategory(id: number): void {
 
 function switchKind(kind: RecordKind): void {
   form.kind = kind
-  if (kind === 'income') {
+  if (kind === 'income' || kind === 'expense') {
+    // §14.5 #5：切 Tab 时也读取对应类型的默认分类，失效则回退首个可用。
+    const defaults =
+      session.ledgerId === null ? {} : readDefaultAccounts(session.ledgerId)
+    const preferred = defaultAccountId(kind === 'income' ? defaults.income : defaults.expense)
+    const options = kind === 'income' ? incomeAccounts.value : expenseAccounts.value
+    const allowed = preferred !== null && options.some((account) => account.id === preferred)
     form.categoryAccountId =
-      incomeAccounts.value.length > 0 ? incomeAccounts.value[0].id : null
-  } else if (kind === 'expense') {
-    form.categoryAccountId =
-      expenseAccounts.value.length > 0 ? expenseAccounts.value[0].id : null
+      allowed && preferred !== null
+        ? preferred
+        : options.length > 0
+          ? options[0].id
+          : null
   }
   submitError.value = ''
   notice.value = ''
@@ -606,6 +699,7 @@ async function submit(continueAfter: boolean): Promise<void> {
     clearDraftIfPossible()
     resetIdempotencyKey()
     lastResult.value = result
+    rememberDefaults()
     sheet.notifySaved(result)
     emit('saved', result)
     if (continueAfter) {

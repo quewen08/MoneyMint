@@ -179,3 +179,78 @@ export function writeCategoryOrder(
 ): void {
   writeString(categoryOrderKey(ledgerId), JSON.stringify(order))
 }
+
+// ---------- 默认账户记忆（§14.5 #5，批 3） ----------
+
+/** 记一笔的四类「上次选择」，与旧版 local_store.dart 的 kind 完全一致。 */
+export type DefaultAccountKind = 'expense' | 'income' | 'transferOut' | 'transferIn'
+
+export const DEFAULT_ACCOUNT_KINDS: readonly DefaultAccountKind[] = [
+  'expense',
+  'income',
+  'transferOut',
+  'transferIn',
+]
+
+export const DEFAULT_ACCOUNT_LABELS: Record<DefaultAccountKind, string> = {
+  expense: '默认支出分类',
+  income: '默认收入分类',
+  transferOut: '默认转账来源',
+  transferIn: '默认转账目标',
+}
+
+const DEFAULT_ACCOUNT_KEY_PREFIX = 'fambean.default_accounts.'
+
+export function defaultAccountKey(ledgerId: number): string {
+  return `${DEFAULT_ACCOUNT_KEY_PREFIX}${ledgerId}`
+}
+
+export type DefaultAccountMap = Partial<Record<DefaultAccountKind, string>>
+
+/**
+ * 读取默认账户；只接受白名单 kind 与非空字符串 uuid。
+ * 损坏 JSON / 非法形状一律容错为空对象，绝不抛错。
+ */
+export function readDefaultAccounts(ledgerId: number): DefaultAccountMap {
+  const raw = readString(defaultAccountKey(ledgerId))
+  if (raw === null || raw === '') {
+    return {}
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return {}
+    }
+    const record = parsed as Record<string, unknown>
+    const out: DefaultAccountMap = {}
+    for (const kind of DEFAULT_ACCOUNT_KINDS) {
+      const value = record[kind]
+      if (typeof value === 'string' && value !== '') {
+        out[kind] = value
+      }
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+/** 覆盖写入默认账户映射。 */
+export function writeDefaultAccounts(ledgerId: number, map: DefaultAccountMap): void {
+  writeString(defaultAccountKey(ledgerId), JSON.stringify(map))
+}
+
+/** 记一笔成功后回写某一类的「上次选择」。 */
+export function setDefaultAccount(ledgerId: number, kind: DefaultAccountKind, uuid: string): void {
+  if (uuid === '') {
+    return
+  }
+  const map = readDefaultAccounts(ledgerId)
+  map[kind] = uuid
+  writeDefaultAccounts(ledgerId, map)
+}
+
+/** 设置页「清除全部默认」。 */
+export function clearDefaultAccounts(ledgerId: number): void {
+  removeKey(defaultAccountKey(ledgerId))
+}

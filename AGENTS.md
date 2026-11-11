@@ -304,7 +304,7 @@ bash scripts/local.sh web-build     # Vite 构建 → frontend/dist
 bash scripts/local.sh web-dev       # Vite dev server（/api → 127.0.0.1:8080）
 bash scripts/local.sh web-test      # Vitest
 bash scripts/local.sh web-typecheck # vue-tsc --noEmit
-bash scripts/local.sh web-compat    # es-check es2015 扫描 dist/assets
+bash scripts/local.sh web-compat    # es-check es2020 语法门禁 + §14.7 API/CSS 扫描（scripts/compat.mjs，构建到 .compat-tmp 不碰 dist）
 bash scripts/local.sh web-legacy    # 重建 Flutter 旧版 → dist/legacy 并校验基路径
 
 # 旧版 Flutter

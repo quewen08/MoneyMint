@@ -25,6 +25,12 @@ import TrashView from '@/views/TrashView.vue'
 import TransactionDetailView from '@/views/TransactionDetailView.vue'
 import TransactionsView from '@/views/TransactionsView.vue'
 
+// 批 3 的 7 个管理与设置页（reports / members / ledgers / sessions /
+// data-safety / sync / settings）改为路由懒加载以压首屏体积。动态
+// import() 是 ES2020 语法，v2.6 起 es-check 门禁已抬到 es2020 放行；
+// Safari 14.1 真机支持动态导入，真机冒烟待老板验证。其余核心页保持
+// 静态导入（首屏即需渲染，懒加载无意义）。
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -90,6 +96,49 @@ const routes: RouteRecordRaw[] = [
     path: '/commodities',
     name: 'commodities',
     component: CommoditiesView,
+    meta: { requiresAuth: true },
+  },
+  // 批 3：管理与设置页（P-11~P-15 / P-17 / P-18；P-16 改密已存在）。
+  {
+    path: '/reports',
+    name: 'reports',
+    component: () => import('@/views/ReportsView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/members',
+    name: 'members',
+    component: () => import('@/views/MembersView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/ledgers',
+    name: 'ledgers',
+    component: () => import('@/views/LedgersView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/sessions',
+    name: 'sessions',
+    component: () => import('@/views/SessionsView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/data-safety',
+    name: 'data-safety',
+    component: () => import('@/views/DataSafetyView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/sync',
+    name: 'sync',
+    component: () => import('@/views/SyncStatusView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/settings',
+    name: 'settings',
+    component: () => import('@/views/SettingsView.vue'),
     meta: { requiresAuth: true },
   },
   {

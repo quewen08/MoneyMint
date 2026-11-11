@@ -49,6 +49,9 @@ vi.mock('@/core/storage', () => ({
   readDraft: () => null,
   writeDraft: () => undefined,
   clearDraft: () => undefined,
+  // 批 3 §14.5 #5：默认账户预选 / 回写；本文件返回空映射，保持原有用例语义。
+  readDefaultAccounts: () => ({}),
+  setDefaultAccount: () => undefined,
 }))
 
 const ACCOUNTS = [

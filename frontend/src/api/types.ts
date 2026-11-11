@@ -298,6 +298,8 @@ export interface TransactionView {
   flag: TxnFlag
   description: string
   created_by_name: string
+  /** 标签（迁移 005 起后端已持久化；报表 #tag 下钻用，旧响应可能缺失）。 */
+  tags?: string[]
   postings: PostingView[]
 }
 

@@ -12,7 +12,7 @@
 #   web-dev       启动 Vite 开发服务器（/api 代理到 127.0.0.1:8080）
 #   web-test      Vue 单元测试（Vitest）
 #   web-typecheck Vue 类型检查（vue-tsc）
-#   web-compat    扫描构建产物 ES2015 语法兼容性（es-check）
+#   web-compat    扫描构建产物 es2020 语法兼容性 + §14.7 API/CSS 特性（es-check + compat.mjs）
 #   web-legacy    重建 Flutter 旧版到 frontend/dist/legacy 并校验
 #   test          后端 vet + 全部测试（严格 bean-check）
 #   test-web      前端静态分析 + 单元测试

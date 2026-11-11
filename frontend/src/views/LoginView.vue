@@ -1,13 +1,18 @@
 <script setup lang="ts">
 /**
- * P-01 登录（沿用 mobile-redesign-v2.html ⑦ 登录屏）
+ * P-01 登录 / 注册（沿用 mobile-redesign-v2.html ⑦ 登录屏）
  *
  * D-7：登录成功由后端下发 httpOnly Cookie，前端不保存 token；
  * 登录后按「强制改密 / 等待邀请 / 正常」三态分流。
+ *
+ * 批 3 补齐 §14.5 #4：登录页消费 `GET /api/settings/registration`（公开端点）。
+ * 关闭注册时不切到注册态并给出说明；查询失败按「开放」处理，避免服务端抖动
+ * 误锁注册入口。首个注册用户自动创建默认账本并成为 owner。
  */
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { authApi, settingsApi } from '@/api/client'
 import { ApiError } from '@/api/errors'
 import { useSessionStore } from '@/stores/session'
 
@@ -17,8 +22,35 @@ const route = useRoute()
 
 const username = ref('')
 const password = ref('')
+const displayName = ref('')
 const busy = ref(false)
 const error = ref('')
+const mode = ref<'login' | 'register'>('login')
+/** null = 尚未查询完成，按开放处理。 */
+const registrationAllowed = ref<boolean | null>(null)
+
+async function loadRegistration(): Promise<void> {
+  try {
+    const res = await settingsApi.registration()
+    registrationAllowed.value = res.enabled === true
+  } catch {
+    // 公开端点查询失败按开放处理，与旧版 ledger_api.dart 一致。
+    registrationAllowed.value = true
+  }
+}
+
+function switchMode(): void {
+  error.value = ''
+  if (mode.value === 'login') {
+    if (registrationAllowed.value === false) {
+      error.value = '注册已关闭，请联系管理员在设置中开放，或由 owner 邀请加入'
+      return
+    }
+    mode.value = 'register'
+  } else {
+    mode.value = 'login'
+  }
+}
 
 async function redirectAfterLogin(): Promise<void> {
   if (session.mustChangePassword) {
@@ -39,21 +71,38 @@ async function submit(): Promise<void> {
     return
   }
   error.value = ''
-  if (username.value.trim() === '' || password.value === '') {
+  const name = username.value.trim()
+  if (name === '' || password.value === '') {
     error.value = '请输入用户名和密码'
+    return
+  }
+  if (mode.value === 'register' && password.value.length < 6) {
+    error.value = '注册密码至少 6 位'
     return
   }
   busy.value = true
   try {
-    await session.login(username.value.trim(), password.value)
+    if (mode.value === 'register') {
+      await authApi.register({
+        username: name,
+        password: password.value,
+        display_name: displayName.value.trim(),
+      })
+      // 注册接口已下发 Cookie，用 bootstrap 恢复登录态与账本清单。
+      await session.bootstrap()
+    } else {
+      await session.login(name, password.value)
+    }
     password.value = ''
     await redirectAfterLogin()
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : '登录失败，请稍后重试'
+    error.value = err instanceof ApiError ? err.message : '操作失败，请稍后重试'
   } finally {
     busy.value = false
   }
 }
+
+onMounted(() => { void loadRegistration() })
 </script>
 
 <template>
@@ -75,21 +124,38 @@ async function submit(): Promise<void> {
           placeholder="用户名"
         />
       </label>
+      <label v-if="mode === 'register'" class="auth__field">
+        <span>显示名（可选）</span>
+        <input class="fb-input" v-model="displayName" type="text" placeholder="如 阿文" />
+      </label>
       <label class="auth__field">
         <span>密码</span>
         <input
           class="fb-input"
           v-model="password"
           type="password"
-          autocomplete="current-password"
+          :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
           placeholder="••••••••"
         />
       </label>
 
+      <p v-if="mode === 'register'" class="auth__hint" :class="{ 'auth__hint--warn': registrationAllowed === false }">
+        <template v-if="registrationAllowed === false">
+          注册已关闭：请由管理员在「设置 → 开放注册」中开启，或由账本 owner 通过成员管理邀请你加入。
+        </template>
+        <template v-else>
+          首个注册的账号自动成为系统管理员并创建默认账本；之后的账号需管理员开放注册或由 owner 邀请加入账本。
+        </template>
+      </p>
+
       <p v-if="error" class="auth__error" role="alert">{{ error }}</p>
 
       <button class="fb-btn-primary auth__submit" type="submit" :disabled="busy">
-        {{ busy ? '登录中…' : '登 录' }}
+        {{ busy ? '处理中…' : mode === 'register' ? '注 册' : '登 录' }}
+      </button>
+
+      <button class="auth__switch" type="button" @click="switchMode">
+        {{ mode === 'login' ? '没有账号？注册' : '已有账号？返回登录' }}
       </button>
 
       <p class="auth__note">
@@ -162,6 +228,33 @@ async function submit(): Promise<void> {
   background: var(--fb-danger-soft);
   color: var(--fb-danger);
   font-size: 13px;
+}
+
+.auth__hint {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--fb-radius-input);
+  background: var(--fb-blue-soft);
+  color: var(--fb-blue);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.auth__hint--warn {
+  background: var(--fb-danger-soft);
+  color: var(--fb-danger);
+}
+
+.auth__switch {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  border: none;
+  background: transparent;
+  color: var(--fb-blue);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .auth__note {

@@ -4,8 +4,8 @@
  *
  * 一套模板 + CSS 断点（1024）：≥1024 显示 PC 侧边栏，<1024 显示移动底栏
  * （4 Tab + 中央 ＋）。沿用 pc-redesign.html / mobile-redesign-v2.html 的
- * 布局 token 与 IA，不重画信息架构；未落地的页面显式提示「后续批次开放」，
- * 不产生死链。
+ * 布局 token 与 IA，不重画信息架构。批 3 起 P-11~P-18 全部接入，导航项
+ * 无占位死链；`ready` 保留用于将来临时下线某入口。
  */
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -30,6 +30,8 @@ const privacy = usePrivacyStore()
 const sheet = useRecordSheetStore()
 const notice = ref('')
 
+// 批 3：P-11~P-18 全部接入，不再有「后续批次开放」的占位项。
+// 顺序即 PC 侧栏分组顺序；移动底栏只取 4 项（含中央 ＋）。
 const navItems: NavItem[] = [
   { key: 'home', label: '总览', icon: '▦', to: '/', ready: true },
   { key: 'transactions', label: '交易流水', icon: '≣', to: '/transactions', ready: true },
@@ -37,16 +39,20 @@ const navItems: NavItem[] = [
   { key: 'accounts', label: '账户管理', icon: '▤', to: '/accounts', ready: true },
   { key: 'categories', label: '分类管理', icon: '▥', to: '/categories', ready: true },
   { key: 'commodities', label: '币种管理', icon: '💱', to: '/commodities', ready: true },
-  { key: 'reports', label: '报表分析', icon: '📈', ready: false },
-  { key: 'members', label: '成员管理', icon: '◯', ready: false },
-  { key: 'settings', label: '设置', icon: '⚙', ready: false },
+  { key: 'reports', label: '报表分析', icon: '📈', to: '/reports', ready: true },
+  { key: 'members', label: '成员管理', icon: '◯', to: '/members', ready: true },
+  { key: 'ledgers', label: '账本管理', icon: '▣', to: '/ledgers', ready: true },
+  { key: 'sessions', label: '登录设备', icon: '▢', to: '/sessions', ready: true },
+  { key: 'data-safety', label: '数据安全', icon: '⛁', to: '/data-safety', ready: true },
+  { key: 'sync', label: '同步状态', icon: '↻', to: '/sync', ready: true },
+  { key: 'settings', label: '设置', icon: '⚙', to: '/settings', ready: true },
 ]
 
 const desktopGroups: Array<{ title: string; items: NavItem[] }> = [
   { title: '概览', items: [navItems[0], navItems[1]] },
-  { title: '管理', items: [navItems[3], navItems[4], navItems[5], navItems[7]] },
-  { title: '工具', items: [navItems[2], navItems[6]] },
-  { title: '系统', items: [navItems[8]] },
+  { title: '管理', items: [navItems[3], navItems[4], navItems[5], navItems[7], navItems[8]] },
+  { title: '工具', items: [navItems[2], navItems[6], navItems[10]] },
+  { title: '系统', items: [navItems[9], navItems[11], navItems[12]] },
 ]
 
 const mobileNav = computed<NavItem[]>(() => [
@@ -54,7 +60,7 @@ const mobileNav = computed<NavItem[]>(() => [
   navItems[1],
   navItems[3],
   // 原型第 4 个 Tab 是「更多」；PC 侧栏对应项叫「设置」，IA 保持一致。
-  { key: 'more', label: '更多', icon: '👤', ready: false },
+  { ...navItems[12], label: '更多' },
 ])
 
 function isActive(item: NavItem): boolean {
@@ -183,6 +189,7 @@ function goChangePassword(): void {
         :key="item.key"
         type="button"
         class="layout__tab"
+        :class="{ on: isActive(item) }"
         @click="navigate(item)"
       >
         <span class="layout__tab-icon">{{ item.icon }}</span>
