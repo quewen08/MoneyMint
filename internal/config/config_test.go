@@ -80,7 +80,7 @@ func TestAuthEnvDefaults(t *testing.T) {
 	if cfg.CORSOrigins != "" {
 		t.Fatalf("LEDGER_CORS_ORIGINS 默认应为空（仅同源）")
 	}
-	if !cfg.AuthExposeToken {
-		t.Fatalf("LEDGER_AUTH_EXPOSE_TOKEN 默认应为 true（兼容旧版）")
+	if cfg.AuthExposeToken {
+		t.Fatalf("LEDGER_AUTH_EXPOSE_TOKEN 默认应为 false（cutover 后 Vue 版只靠 Cookie，不向 JS 暴露 token）")
 	}
 }

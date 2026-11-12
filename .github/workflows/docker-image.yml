@@ -91,13 +91,51 @@ jobs:
       - name: bean-check self check
         run: bash scripts/check-bean.sh
 
-  # ---------- 第二道门：双架构构建并推送 ----------
+  # ---------- 第二道门：前端门禁（web-verify，批 6 补齐） ----------
+  # RK-10：门禁必须覆盖 vitest + build，且用例数有下限防「文件加载失败只剩 3 个用例」的假绿。
+  # Node 版本经 node-version-file 读 frontend/.nvmrc（22.23.4），与 Dockerfile / engines 三处一致。
+  web-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci（engine-strict 校验 Node 版本）
+        working-directory: frontend
+        run: npm ci
+
+      - name: Vitest 全量 + 用例数下限（防假绿）
+        working-directory: frontend
+        env:
+          TEST_FLOOR: '280'
+        run: |
+          npx vitest run --reporter=default --reporter=json --outputFile=vitest-report.json
+          node ../scripts/check-test-floor.mjs vitest-report.json "$TEST_FLOOR"
+
+      - name: 类型检查（vue-tsc）
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: 构建（vue-tsc + vite build，es2015 产物）
+        working-directory: frontend
+        run: npm run build
+
+      - name: 兼容门禁（es2020 语法 + §14.7 API/CSS 特性扫描）
+        working-directory: frontend
+        run: npm run compat
+
+  # ---------- 第三道门：双架构构建并推送 ----------
   # 仅两种情况产镜像：
   #   1) 推 tag v*（正式发布）
   #   2) 手动 workflow_dispatch 且勾选了 push_image
-  # 普通分支 push 只跑上面的校验，不会动 Docker Hub。
+  # 普通分支 push 只跑前面的校验，不会动 Docker Hub。
   build:
-    needs: verify
+    needs: [verify, web-verify]
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.push_image == 'true')
     runs-on: ubuntu-latest
     steps:
@@ -149,7 +187,7 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ needs.verify.outputs.version }}
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-          # Flutter 构建很重，缓存是让 CI 可用的关键（首次 8-15 分钟，缓存后 2-4 分钟）
+          # Node/Vite 构建较 Flutter 轻量，但 gha 缓存仍能省掉 npm ci 与重复编译
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

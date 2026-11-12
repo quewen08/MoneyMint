@@ -1,10 +1,14 @@
-# FamBean 单镜像构建：Flutter Web 产物 + Go 静态二进制 + 最小运行时。
+# FamBean 单镜像构建：Vue Web 产物（Node/Vite）+ Go 静态二进制 + 最小运行时。
 #
 # 设计要点：
-#   - 三阶段构建，Flutter SDK（约 2GB）只存在于 builder 阶段，不进最终镜像
+#   - 三阶段构建，Node 构建环境只存在于 builder 阶段，不进最终镜像
+#   - Node 版本与 frontend/.nvmrc、CI web-verify job 三处一致（§14.7 钉版）
 #   - Go 用 CGO_ENABLED=0 静态编译（modernc.org/sqlite 纯 Go，无需 C 工具链）
 #   - 运行时用 alpine + 非 root 用户，仅含二进制、前端产物与 schema
 #   - 单容器单端口：Go 进程同时提供 API 与前端静态资源（见 internal/server/static.go）
+#
+# 历史：批 6 cutover 前为 Flutter 三阶段构建（ghcr.io/cirruslabs/flutter:3.35.1）；
+#   Dart 源码清退后改为 Node 构建，镜像体积与构建时长显著下降。
 #
 # 构建：
 #   docker build -t famben:dev .
@@ -16,43 +20,26 @@
 # syntax=docker/dockerfile:1
 
 # 镜像版本集中在此，便于升级时只改一处。
-#
-# 注意 Flutter 版本差异：
-#   此处 3.35.1 已验证可拉取；但开发机本地 Flutter 可能是别的版本（当前为 3.38.9）。
-#   两者不一致会导致 pubspec.lock 在镜像内被重新解析（下方 pub get 步骤会告警）。
-#   若要彻底消除差异，把 FLUTTER_IMAGE 改成开发机 `flutter --version` 的版本，
-#   并确认 ghcr.io/cirruslabs/flutter 存在对应 tag。
-ARG FLUTTER_IMAGE=ghcr.io/cirruslabs/flutter:3.35.1
+# Node 版本策略：与 frontend/.nvmrc（22.23.4）及 package.json engines（>=22.22 <23）对齐；
+# 升级须同步改 .nvmrc、engines、CI setup-node 三处（verify-version / web-verify 均会卡不一致）。
+ARG NODE_IMAGE=node:22-alpine
 ARG GO_IMAGE=golang:1.25-alpine
 ARG RUNTIME_IMAGE=alpine:3.20
 
-# ---------- Stage 1：构建 Flutter Web ----------
-FROM ${FLUTTER_IMAGE} AS web-builder
+# ---------- Stage 1：构建 Vue Web ----------
+FROM ${NODE_IMAGE} AS web-builder
 
 WORKDIR /src/frontend
 
-# 先只拷依赖清单，让 pub get 层可缓存（源码变动不必重装依赖）
-COPY frontend/pubspec.yaml frontend/pubspec.lock ./
-
-# 不使用 --enforce-lockfile（曾被它卡死过一次构建，exit 65）：
-#   pubspec.lock 是开发机 Flutter SDK 生成的，其中 meta / vm_service / test_api / crypto
-#   属于「随 SDK 捆绑」的包，版本由 SDK 决定而非 pub 解析。镜像内 SDK 与生成 lockfile
-#   的 SDK 版本不同时，pub 必然要求改动这些包，--enforce-lockfile 会直接判失败。
-# 改成「正常解析 + 漂移告警」：不因 SDK 微差阻断整个镜像构建，但绝不静默——
-#   一旦 lockfile 真的被重新解析，构建日志会明确打出来，便于判断是否需要对齐版本。
-RUN cp pubspec.lock /tmp/pubspec.lock.orig \
-    && flutter pub get \
-    && if ! cmp -s /tmp/pubspec.lock.orig pubspec.lock; then \
-         echo "⚠️  警告：pubspec.lock 在镜像内被重新解析了"; \
-         echo "    原因：镜像的 Flutter SDK 与生成该 lockfile 的版本不同（SDK 捆绑包 meta/vm_service/test_api 等被调整）。"; \
-         echo "    影响：本次构建使用镜像内解析结果，可能与开发机依赖版本有细微差异。"; \
-         echo "    如需完全复现：把上方 FLUTTER_IMAGE 钉到与开发机一致的 Flutter 版本。"; \
-       fi
+# 先只拷依赖清单，让 npm ci 层可缓存（源码变动不必重装依赖）。
+# package-lock.json 含全平台 optional 二进制（@esbuild/*、@rollup/*），
+# 在 linux/alpine 内 npm ci 可直接命中平台包，无需重新解析。
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 
 COPY frontend/ ./
-# 说明：本项目以 emoji 作账户图标，不走 Material Icons 字体子集化，
-# 故不启用 --tree-shake-icons（启用后反而可能误删图标字体）。
-RUN flutter build web --release
+RUN npm run build
+# 产物在 /src/frontend/dist（Vite outDir），由 Stage 3 拷贝。
 
 # ---------- Stage 2：构建 Go 二进制 ----------
 FROM ${GO_IMAGE} AS go-builder
@@ -88,7 +75,7 @@ RUN apk add --no-cache ca-certificates tzdata su-exec \
 WORKDIR /app
 
 COPY --from=go-builder /out/server /app/server
-COPY --from=web-builder /src/frontend/build/web /app/web
+COPY --from=web-builder /src/frontend/dist /app/web
 COPY schema.sql /app/schema.sql
 COPY docker-entrypoint.sh /entrypoint.sh
 
