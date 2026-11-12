@@ -1,87 +1,52 @@
-# frontend — 家庭记账 Flutter Web 前端
+# frontend — 家庭记账 Web 前端（Vue 3 SPA，cutover 后唯一前端）
 
 类 Beancount 的 NAS 个人云记账应用的 Web 前端（PWA）。与 Go 后端通过 REST 通信，
-支持离线记账 + 增量同步，对齐 `../docs/prototype/index.html` 设计稿。
+支持离线记账 + 增量同步（`src/core/sync/` 离线内核），对齐 `../docs/prototype/index.html` 设计稿。
 
-## 架构（MVVM 分层 + 响应式双布局）
+## 技术栈
 
-```
-lib/
-├── main.dart                 # 入口：AppScope 注入 + MaterialApp + AuthGate（登录门禁）
-├── app/
-│   ├── theme.dart            # 设计系统：AppColors / AppTheme.light / cardDecoration
-│   ├── scope.dart            # AppScope(InheritedWidget)：根部提供 api/store/auth/ledger 单例
-│   └── navigation.dart       # AppRoute 枚举 + isWide 断点(≥1024 PC / <1024 移动) + 导航分组
-├── core/                     # 与 UI 无关的领域层（可单测）
-│   ├── models/               # 本地数据模型：account / posting / transaction / pending_change / sync_models
-│   ├── api/ledger_api.dart   # 认证 + 同步 + 导出 REST 客户端（token 存 localStorage）
-│   ├── store/local_store.dart# sembast_web / IndexedDB 本地真相源 + Decimal 余额计算
-│   └── sync/sync_service.dart# pull/push 编排 + 建账户/记账/冲正命令
-├── viewmodels/               # ChangeNotifier 状态持有者
-│   ├── auth_controller.dart  # 登录/注册/退出/初始化
-│   └── ledger_controller.dart# 账户/交易/余额/净值/同步状态(SyncState) + 全部业务命令
-├── widgets/                  # 可复用组件：common / sync_badge / balance_meter / pc(PC 端卡·图表·按钮)
-├── utils/money.dart          # 金额格式化 / 币种符号 / isBalanced 借贷校验
-└── screens/                  # 哑视图页面
-    ├── auth / shell(响应路由+移动底栏+PC侧边栏) / dashboard / accounts / transactions / record / settings
-    └── members / commodities / import_export / reports   # PC 专属模块（后 4 个为占位/可计算）
-```
+- Vue 3.5 + Vue Router 4.5 + Pinia 2.3（全量重写，M7；原 Flutter 版已于批 6 cutover 清退）
+- Vite 5（`build.target: 'es2015'` + `@vitejs/plugin-legacy`，Safari 14.1 / iOS 14.8 兼容基线）
+- TypeScript ~5.6 + vue-tsc；Vitest 2.1（289+ 用例）
+- 金额运算统一走 `decimal.js` 封装（`src/core/Money`），禁止裸浮点加减
 
-分层职责：Models 纯数据 → Core 网络/存储/同步 → ViewModels 状态与命令 → Views/Widgets 仅渲染。
-视图通过 `ListenableBuilder`（`material.dart` 提供）订阅 controller。
-
-**响应式**：`app_shell` 按 `isWide(context)`（断点 1024）在 `mobile_shell`（3 Tab 底栏 + FAB 记一笔）
-与 `desktop_shell`（深色侧边栏 9 模块 + 顶栏）间切换；页面内部用 `isWide` 决定是否并排/限宽。
-PC 专属模块落地策略：报表、导入导出为真实功能；成员管理、商品与价格为 `ComingSoon` 占位。
-
-## 本地开发
+## 命令
 
 ```bash
-export PATH="$PATH:/d/Environment/flutter/bin"   # 若 shell 未识别 flutter
-flutter pub get
-flutter analyze lib        # 编译级 0 error（dart:html / 弃用 API 的 info 提示属 Web 端预期）
-flutter run -d chrome       # 本地调试；拉动浏览器宽度可切换 PC/移动布局
-                          # 默认连 http://localhost:8080 后端，见 ledger_api.dart 的 kDefaultApiBase
+npm ci            # 安装依赖（lock 已含 Linux 平台 optional 二进制）
+npm run dev       # 开发服务器（/api 代理到 127.0.0.1:8080）
+npm run build     # vue-tsc + vite build → dist/
+npm run test      # Vitest 全量
+npm run typecheck # vue-tsc --noEmit
+npm run compat    # es2020 语法门禁 + §14.7 API/CSS 特性扫描（扫描 dist/）
 ```
 
-构建 PWA 产物：`flutter build web --release`（产物在 `build/web/`，含自动生成的 Service Worker）。
+或经仓库根 `bash scripts/local.sh web-dev|web-build|web-test|web-typecheck|web-compat`。
 
-## 约定
-
-- 金额一律走 `decimal` 包，**禁止浮点参与金额运算**。
-- 交易不可变：改账 = 新增冲正交易（`LocalTxn.reversedOf`），绝不覆盖。
-- 在线记账 posting 用服务端 `account_id`；离线 push 交易 posting 用 `account_uuid`（见 `../AGENTS.md` §6.1）。
-- 后端地址默认 `http://localhost:8080`，部署 NAS 时改 `core/api/ledger_api.dart` 的 `kDefaultApiBase` 或注入覆盖。
-
-## M7 新前端（Vue 3 + Vite，批 0 起）
-
-新前端与 Flutter 旧版**并存于同一目录**，但源码零重叠：`lib/` / `test/` / `pubspec.*` 不动，
-新代码在 `index.html` + `src/` + `public/`，产物在 `dist/`。
+## 目录结构
 
 ```
 frontend/
-├── index.html            # Vite 入口（PWA meta 搬运自 web/index.html）
-├── package.json          # npm scripts（dev/build/test/typecheck/compat）
-├── vite.config.ts        # base './'、outDir ../dist、es2015、/api 代理
-├── public/               # manifest.json + icons/ + favicon.png（从 web/ 复制）
+├── index.html            # 入口（Vite root = frontend/）
+├── public/               # SW（sw.js）、manifest、图标：原样拷入 dist/
 ├── src/
-│   ├── main.ts / App.vue / router/
-│   ├── styles/tokens.css # 设计 token（取 docs/prototype）
-│   ├── core/Money.ts     # 定点金额（decimal.js 封装，禁止裸浮点）
-│   └── api/              # 31 端点类型 / 路由常量 / ApiError
-└── dist/                 # 构建产物（gitignore），含 legacy/ 旧版回滚目录
+│   ├── api/              # client.ts（X-Ledger-Id 注入/断言、401/428、FormData）、routes、types
+│   ├── core/             # Money / batch3 / m2 纯逻辑 + sync/（离线内核：models/localStore/idbStore/engine）
+│   ├── stores/           # Pinia：session / privacy / recordSheet / sync
+│   ├── views/            # 20 页（登录、流水、账户、报表、恢复/导入向导、同步队列管理等）
+│   ├── components/       # AppLayout / RecordSheet / SyncBadge 等
+│   └── router/           # 懒加载路由 + adminOnly 守卫
+└── dist/                 # 构建产物（不入库）；dist/legacy/ 为冻结的旧版回滚基准（不再重建）
 ```
 
-常用命令（仓库根目录）：
+## 兼容基线（硬约束，CI 门禁）
 
-```bash
-bash scripts/local.sh web-build      # Vite 构建 → frontend/dist
-bash scripts/local.sh web-dev        # Vite dev server，/api 代理到 127.0.0.1:8080
-bash scripts/local.sh web-test       # Vitest
-bash scripts/local.sh web-typecheck  # vue-tsc
-bash scripts/local.sh web-compat     # es-check es2015 扫描 dist/assets
-bash scripts/local.sh web-legacy     # 重建 Flutter 旧版 → dist/legacy 并校验
-```
+- 语法门禁 es2020（放行路由懒加载动态 `import()`）；API/CSS 特性扫描见 `scripts/compat.mjs`
+- 禁用 `.at()` / `structuredClone` / `crypto.randomUUID` / `BroadcastChannel` / `navigator.locks` 等
+  Safari 14.1 缺失 API；禁装 ECharts / Vuetify / moment 等（§14.7 清单）
+- Service Worker 只缓存应用壳与静态资源，`/api/*` 与 `/legacy/*` 绝不拦截
 
-> `web-build` 的 `emptyOutDir` 会清空 `frontend/dist`，**每次构建后需再跑一次 `web-legacy`**，
-> 否则 `/legacy/` 回滚目录缺失。
+## 版本号
+
+`package.json` 的 `version` 与根 `CHANGELOG.md` 顶部版本、git tag 三处一致
+（`bash scripts/verify-version.sh` 校验），并经 `__APP_VERSION__` 注入前端展示。

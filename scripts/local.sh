@@ -5,21 +5,24 @@
 #   bash scripts/local.sh <command>
 #
 # 命令：
-#   dev           启动后端（托管 frontend/build/web，端口 8080）
+#   dev           启动后端（托管 frontend/dist，端口 8080）
 #   build         编译后端二进制到 dist/
-#   web           构建 Flutter 产物
 #   web-build     构建 Vue 前端（Vite → frontend/dist）
 #   web-dev       启动 Vite 开发服务器（/api 代理到 127.0.0.1:8080）
 #   web-test      Vue 单元测试（Vitest）
 #   web-typecheck Vue 类型检查（vue-tsc）
 #   web-compat    扫描构建产物 es2020 语法兼容性 + §14.7 API/CSS 特性（es-check + compat.mjs）
-#   web-legacy    重建 Flutter 旧版到 frontend/dist/legacy 并校验
+#   check-legacy  校验冻结的 /legacy/ 回滚基准产物（dist/legacy/，不再重建）
 #   test          后端 vet + 全部测试（严格 bean-check）
-#   test-web      前端静态分析 + 单元测试
+#   test-web      前端 Vitest（与 web-test 同义，历史命令名保留）
 #   check         test + 版本校验 + bean-check 自检（CI 同款）
 #   version       版本号三处一致性校验
 #   smoke         端到端冒烟
 #   rehearse      迁移 012 副本库预演（VACUUM INTO 快照 + 两次迁移 + bean-check）
+#
+# cutover（批 6）后仓库只有一套前端；Flutter 源码与构建链已清退（git 历史可查）。
+# dist/legacy/ 为冻结的旧版回滚基准，只读不改，损坏时从 git 历史（batch ≤5 tag/commit）
+# 找回 frontend/dist/legacy 或旧源码重建。
 #
 # 存在原因：本机 Windows 无 make，Makefile 无法直接使用。
 
@@ -28,19 +31,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# Go 与 Flutter 可能不在 PATH（AGENTS.md 记录的本机路径作为兜底）
+# Go 可能不在 PATH（AGENTS.md 记录的本机路径作为兜底）
 if ! command -v go >/dev/null 2>&1 && [[ -x /d/Environment/go/bin/go ]]; then
   export PATH="$PATH:/d/Environment/go/bin"
 fi
-if ! command -v flutter >/dev/null 2>&1 && [[ -x /d/Environment/flutter/bin/flutter ]]; then
-  export PATH="$PATH:/d/Environment/flutter/bin"
-fi
 
-# Flutter 的 flutter_tester 通过 127.0.0.1 上的 WebSocket 与测试驱动通信。
-# 若环境设了全局 HTTP 代理却没放行回环地址，代理会劫持这个本地连接，
-# 表现为所有测试文件在「加载阶段」报：
-#   Unable to connect to flutter_tester process: WebSocketException: Invalid WebSocket upgrade request
-# 这里始终放行本地回环（保留已有 NO_PROXY 值），不影响外网依赖下载。
+# 始终放行本地回环（保留已有 NO_PROXY 值），避免全局代理劫持 127.0.0.1 的
+# Vite→后端 /api 代理与本地冒烟请求。
 export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1,::1"
 export no_proxy="${no_proxy:+$no_proxy,}localhost,127.0.0.1,::1"
 
@@ -48,8 +45,8 @@ cmd="${1:-help}"
 
 case "$cmd" in
   dev)
-    echo "启动后端（web=frontend/build/web）…"
-    LEDGER_WEB_ROOT="${LEDGER_WEB_ROOT:-frontend/build/web}" go run ./cmd/server
+    echo "启动后端（web=frontend/dist）…"
+    LEDGER_WEB_ROOT="${LEDGER_WEB_ROOT:-frontend/dist}" go run ./cmd/server
     ;;
 
   build)
@@ -58,13 +55,10 @@ case "$cmd" in
     echo "✅ dist/server"
     ;;
 
-  web)
-    ( cd frontend && flutter build web --release )
-    echo "✅ frontend/build/web"
-    ;;
-
   web-build)
     ( cd frontend && npm run build )
+    # 注意：emptyOutDir 会清空 dist/，若本地还有冻结的 dist/legacy/ 会一并被清掉。
+    # cutover 后 legacy 仅作回滚基准，需要时从 git 历史找回（见文件头说明）。
     echo "✅ frontend/dist"
     ;;
 
@@ -84,8 +78,8 @@ case "$cmd" in
     ( cd frontend && npm run compat )
     ;;
 
-  web-legacy)
-    bash scripts/build-legacy.sh
+  check-legacy)
+    bash scripts/check-legacy.sh
     ;;
 
   test)
@@ -94,7 +88,7 @@ case "$cmd" in
     ;;
 
   test-web)
-    ( cd frontend && flutter analyze lib && flutter test )
+    ( cd frontend && npm run test )
     ;;
 
   version)
@@ -119,6 +113,6 @@ case "$cmd" in
     ;;
 
   help|*)
-    sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
 esac

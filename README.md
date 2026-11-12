@@ -8,10 +8,11 @@
 - **标准兼容**：可导出标准 `.beancount` 文本，通过 `bean-check` 校验。
 - **自动备份**：每日一致性快照（WAL 安全），保留策略自动清理，浏览器直接下载。
 
-> **当前状态（2026-11-11）**：项目正在做 **M7 前端全量重构**，处于双前端并存期。
-> **默认可用的生产前端仍是 Flutter Web**；新的 **Vue 3 + Vite 纯 SPA** 已落地批 0~2.5（57 个源文件 / 14,067 行 / 11 个页面，核心记账闭环打通，Vitest 202 用例全过），报表 / 设置 / 成员 / 离线内核 / 导入恢复向导待后续批次。
-> **尚未切换**。完整方案、决策与验收见 [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（v2.5）。
-> 想直接跑起来用，按下面「快速开始」即可；想参与重构，看 [`AGENTS.md`](AGENTS.md) §1 与 §9。
+> **当前状态（2026-11-12，批 6 cutover 完成）**：M7 前端全量重构批 0~6 全部落地，
+> **Vue 3 + Vite 纯 SPA 已是唯一前端**；Flutter 版源码与构建链已清退（git 历史可查），
+> `frontend/dist/legacy/` 为冻结的旧版回滚基准（仅本机留存，不再重建）。
+> 完整方案、决策与验收见 [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（v2.6）。
+> 想直接跑起来用，按下面「快速开始」即可；架构与约定看 [`AGENTS.md`](AGENTS.md)。
 
 ## 特性
 
@@ -30,8 +31,7 @@
 | 层 | 技术 |
 |---|---|
 | 后端 | Go 1.26 + 标准库 + [`modernc.org/sqlite`](https://gitlab.com/cznic/sqlite)（纯 Go，免 CGO） |
-| 前端（当前生产） | Flutter Web 3.35+（MVVM 分层）+ sembast_web（IndexedDB） |
-| 前端（M7 开发中） | **Vue 3 + Vite 纯 SPA** + Pinia + Vue Router + `decimal.js`；`es2015` + plugin-legacy，目标 iOS 14.8 / Safari 14.1 |
+| 前端 | **Vue 3 + Vite 纯 SPA** + Pinia + Vue Router + `decimal.js`；`es2015` + plugin-legacy，目标 iOS 14.8 / Safari 14.1 |
 | 导出校验 | 项目内 Python venv + `beancount` |
 | 部署 | Docker 多阶段构建（amd64 / arm64），单容器单端口 |
 
@@ -63,25 +63,24 @@ docker run -d --name famben -p 8080:8080 \
 > 空库 + 未设置 `LEDGER_OWNER_USER` 时，**首个注册的账号自动成为系统管理员**；
 > 设置了则跳过注册直接用预设账号登录（见下文「账号与权限」）。
 >
-> **注意**：`Dockerfile` 目前仍以 Flutter SDK 构建前端产物（M7 批 6 才换成 Node 构建），
-> 所以此命令现在产出的是 Flutter 版；Vue 版需用 `bash scripts/local.sh web-build` 本地构建后自行托管 `frontend/dist/`。
+> **注意**：`Dockerfile` 已改为 Node 构建 Vue 产物（批 6 cutover），镜像产出的即是 Vue 版；
+> 本地开发用 `bash scripts/local.sh web-build` 构建后 `LEDGER_WEB_ROOT=frontend/dist` 托管。
 
 ## 从源码运行
 
 ### 环境要求
 
 - Go 1.26+
-- Node.js 20+（**M7 新版前端**；方案钉版目标 22.23.4）
-- Flutter 3.35+（**当前生产前端**与 `/legacy/` 回滚产物）
+- Node.js 22.x（前端唯一构建链；钉版口径见 `frontend/.nvmrc` / `engines` / Dockerfile 三处一致）
 - Python 3.x（仅用于导出校验，装进项目 `.venv`，不污染系统）
 
 ```bash
-# 后端（当前默认托管 Flutter 旧版产物）
-(cd frontend && flutter build web --release)
-LEDGER_DB=data/ledger.db LEDGER_WEB_ROOT=frontend/build/web go run ./cmd/server
+# 后端（托管 frontend/dist，Vue 版）
+(cd frontend && npm ci && npm run build)
+LEDGER_DB=data/ledger.db LEDGER_WEB_ROOT=frontend/dist go run ./cmd/server
 
-# 新版 Vue 前端开发模式（另开终端先跑后端）
-(cd frontend && npm ci && npm run dev)     # Vite 已把 /api 代理到 127.0.0.1:8080
+# 前端开发模式（另开终端先跑后端）
+(cd frontend && npm run dev)     # Vite 已把 /api 代理到 127.0.0.1:8080
 # 等价：bash scripts/local.sh web-dev / web-build / web-test / web-typecheck / web-compat
 ```
 
@@ -107,7 +106,7 @@ LEDGER_DB=data/ledger.db LEDGER_WEB_ROOT=frontend/build/web go run ./cmd/server
 | `LEDGER_AUTH_COOKIE` | `true` | 会话用 httpOnly Cookie 承载；`false` 完全退回 Bearer（不校验 CSRF） |
 | `LEDGER_COOKIE_SECURE` | `false` | `Set-Cookie` 的 `Secure`；HTTPS 部署置 `true` |
 | `LEDGER_CORS_ORIGINS` | 空 | 跨域来源白名单（逗号分隔）；空=仅同源，`*`=通配但不带凭证 |
-| `LEDGER_AUTH_EXPOSE_TOKEN` | `true` | 登录/刷新响应体是否仍返回 `token`；兼容期保留，cutover 后置 `false` |
+| `LEDGER_AUTH_EXPOSE_TOKEN` | `false` | 登录/刷新响应体是否返回 `token`；cutover 后默认关闭（Vue 版只靠 Cookie）。需临时回滚 `/legacy/` 旧版时设 `true` |
 | `TZ` | `Asia/Shanghai` | 时区（交易日与备份时间依赖它） |
 
 > 全部配置在启动时由 `config.Validate()` 集中校验，非法值立即失败而非静默回退。
@@ -127,8 +126,8 @@ LEDGER_DB=data/ledger.db LEDGER_WEB_ROOT=frontend/build/web go run ./cmd/server
 
 登录 / 刷新 / 改密会下发 `fambean_session` httpOnly Cookie（`SameSite=Lax`、`Path=/`、30 天）。
 **Cookie 会话的非 GET 请求必须带 `X-CSRF` 自定义头**，缺失返回 403 `csrf_required`；
-显式 `Authorization: Bearer` 的请求豁免。旧版客户端在兼容期仍可用 Bearer，
-`LEDGER_AUTH_EXPOSE_TOKEN=false` 后响应体不再返回 token。
+显式 `Authorization: Bearer` 的请求豁免。cutover 后 `LEDGER_AUTH_EXPOSE_TOKEN`
+默认 `false`，响应体不再向 JS 暴露 token（防 XSS 偷凭据）；仅回滚 `/legacy/` 旧版时设回 `true`。
 
 ### 注册开关
 
@@ -217,14 +216,13 @@ curl -s $B/api/export -H "$AUTH" -o data/family.beancount
 │   ├── auth/             # 认证纯函数（bcrypt/token/context）
 │   ├── backup/           # 一致性快照 + 定时调度 + 保留清理
 │   └── export/           # DB → .beancount 导出器（单文件 + 多文件目录）
-├── frontend/             # 双版并存（M7 过渡期）
-│   ├── lib/ test/ pubspec.* web/ build/   # 旧版 Flutter Web
+├── frontend/             # Vue 3 SPA（cutover 后唯一前端；Flutter 版已于批 6 清退，git 历史可查）
 │   ├── index.html / package.json / vite.config.ts / tsconfig*.json
-│   ├── public/           # manifest.json + icons/（新版静态资源）
-│   ├── src/              # 新版 Vue 源码（api/ core/ router/ styles/ views/）
-│   └── dist/             # 新版产物（gitignore），含 legacy/ 回滚目录
-├── scripts/              # local.sh / check-bean / verify-version / smoke / build-legacy / check-legacy
-├── Dockerfile            # 当前三阶段（Flutter → Go → alpine），批 6 改 Node
+│   ├── public/           # sw.js + manifest.json + icons/（PWA 静态资源）
+│   ├── src/              # 源码（api/ core/ router/ stores/ views/ components/）
+│   └── dist/             # 构建产物（gitignore）；dist/legacy/ 为冻结的旧版回滚基准（仅本机留存）
+├── scripts/              # local.sh / check-bean / verify-version / smoke / check-legacy / check-test-floor
+├── Dockerfile            # 三阶段（Node 构建 Vue → Go → alpine 运行时）
 ├── docker-compose.yml    # 家用部署示例
 ├── data/                 # 运行时 SQLite 与 backups/（git 忽略）
 └── docs/                 # 设计规格 / 同步协议 / 原型 / 任务书 / M7 方案
