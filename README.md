@@ -208,13 +208,15 @@ curl -s $B/api/export -H "$AUTH" -o data/family.beancount
 ├── internal/             # 后端分层
 │   ├── config/           # 集中配置（环境变量 + 启动校验）
 │   ├── domain/           # 领域模型 + 哨兵错误
-│   ├── db/               # 开库 + 增量迁移（当前至 013）
+│   ├── db/               # 开库 + 增量迁移（当前至 014 库世代）
 │   ├── repository/       # 数据访问层（SQL 集中于此）
-│   ├── service/          # 业务逻辑层（校验/事务/同步/权限/备份调度）
+│   ├── service/          # 业务逻辑层（校验/事务/同步/权限/备份调度/恢复/导入）
 │   ├── handler/          # HTTP 适配层
 │   ├── server/           # 路由 + CORS/CSRF/鉴权中间件 + 前端静态托管
 │   ├── auth/             # 认证纯函数（bcrypt/token/context）
 │   ├── backup/           # 一致性快照 + 定时调度 + 保留清理
+│   ├── restore/          # M2-a 恢复核心（预检/快照/逐表替换/库世代轮换）
+│   ├── beancount/        # M2-d Beancount 严格子集解析器
 │   └── export/           # DB → .beancount 导出器（单文件 + 多文件目录）
 ├── frontend/             # Vue 3 SPA（cutover 后唯一前端；Flutter 版已于批 6 清退，git 历史可查）
 │   ├── index.html / package.json / vite.config.ts / tsconfig*.json
@@ -249,9 +251,9 @@ HTTPS / 换端口 / 域名均无需改代码：Vue 产物用相对 `/api` 与 `b
 
 - [`AGENTS.md`](AGENTS.md) — 开发上下文：架构 / 约定 / Schema / 端点清单（面向开发者与 AI 助手）
 - [`CLAUDE.md`](CLAUDE.md) — Claude 系工具的工作约定：命令 / 禁区 / 关键文件索引
-- [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md) — **M7 全量重构方案 v2.5**（决策 / 分批 / 验收 / 风险，权威来源）
+- [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md) — **M7 全量重构方案 v2.6**（决策 / 分批 / 验收 / 风险，权威来源；批 0~6 已全部落地）
 - [`docs/frontend-framework-rewrite-assessment.md`](docs/frontend-framework-rewrite-assessment.md) — 换框架可行性评估
-- [`docs/m2-plan.md`](docs/m2-plan.md) — 备份还原 + Beancount 导入方案（待开工）
+- [`docs/m2-plan.md`](docs/m2-plan.md) — 备份还原 + Beancount 导入方案（**已完工**；验收记录见 `docs/m2-g-acceptance-2026-11-11.md`）
 - [`docs/design-spec.md`](docs/design-spec.md) — 产品设计规格
 - [`docs/sync-design.md`](docs/sync-design.md) — 离线同步协议设计
 - [`docs/frontend-revamp-tasks.md`](docs/frontend-revamp-tasks.md) — 旧版前端改版任务清单

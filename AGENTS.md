@@ -4,7 +4,7 @@
 > 用户：全栈独做（老板），后端 Go / 前端与产品决策均本人拍板。沟通可直接给结论。
 > 提醒：因独做全栈，"分配负责人/邀请角色关注"类提醒不适用，改为提醒其自写验收标准、留档、关键模块自评审。
 
-**文档分工**：AI / 开发者技术上下文 = 本文；用户与部署快速上手 = [`README.md`](README.md)；Claude 系工具的工作约定 = [`CLAUDE.md`](CLAUDE.md)；M7 重构的**方案、决策、验收与风险** = [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（当前 v2.5，D-1~D-7 已锁定，批 0~2.5 已落地；CI 前端门禁与工具链钉版按 2026-11-11 决策暂缓）。**本文只记「已实现的现状」，方案里的待办见 §9，勿把计划当现状。**
+**文档分工**：AI / 开发者技术上下文 = 本文；用户与部署快速上手 = [`README.md`](README.md)；Claude 系工具的工作约定 = [`CLAUDE.md`](CLAUDE.md)；M7 重构的**方案、决策、验收与风险** = [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（当前 **v2.6**，D-1~D-7 已锁定，**批 0~6 全部落地，cutover 完成**）。**本文只记「已实现的现状」，方案里的待办见 §9，勿把计划当现状。**
 
 ---
 
@@ -111,13 +111,13 @@ python3 -m venv .venv
 - `transactions`(id, ledger_id, uuid UNIQUE, date, flag[*|!], description, version, created_by, deleted_at, **client_request_id**)
 - `postings`(id, transaction_id, account_id, commodity, amount 有符号, position)
 
-**迁移（`internal/db/migrate.go`，追加式、幂等、记录 `schema_migrations`；当前至 013）**：
+**迁移（`internal/db/migrate.go`，追加式、幂等、记录 `schema_migrations`；当前至 **014**）**：
 - 001_sync：补 `accounts/commodities/prices` 的 `uuid`+`updated_at`；建 `sync_log`(id 自增即全局水位)；重建 `sync_checkpoints`；建 `sessions`。
 - 002_delete_semantics：交易/账户加 `deleted_at`（软删）；账户重建部分唯一索引 `(ledger_id,name) WHERE deleted_at IS NULL`；旧库 owner 密码置为初始默认值。
 - 003~009：账户显示名 / 视觉与层级字段、交易 `tags`、关户语义、账户排序、`users.is_admin`、`app_settings`。
 - 010~012：强制改密、会话设备信息、期初余额（`opening_key` 等）。
-- **013_txn_idempotency（M7 批 1，已实现）**：`transactions.client_request_id TEXT` + 部分唯一索引 `UNIQUE(ledger_id, client_request_id) WHERE client_request_id IS NOT NULL`；配套 `migrate013_test.go` 与 `server/idempotency_test.go`。
-- **014（库世代 `db_instance_id`）尚未开工**，属 M7 批 4，见 §9。
+- **013_txn_idempotency（M7 批 1）**：`transactions.client_request_id TEXT` + 部分唯一索引 `UNIQUE(ledger_id, client_request_id) WHERE client_request_id IS NOT NULL`；配套 `migrate013_test.go` 与 `server/idempotency_test.go`。
+- **014_db_instance_id（M7 批 4，已实现）**：`db_instance` 单例表存库世代 UUID；`GetInstanceID` / `RotateInstanceID`；`GET /api/db/instance` 供登录用户读取；`health` / `sync/pull` / `sync/push` 响应追加 `instance_id`（additive）。恢复成功后轮换世代，客户端据此清本地实体并全量重拉。
 
 > **修改 schema 必须走迁移脚本**，不要直接改 `schema.sql` 后手动 ALTER 线上库。
 > **幂等实现边界**：落库用 `INSERT ... ON CONFLICT(ledger_id, client_request_id) WHERE client_request_id IS NOT NULL DO NOTHING`（conflict target 必须重复部分索引谓词，否则 SQLite 报 no matching unique index）；业务行与 `sync_log` 必须同事务。当前并发安全还隐式依赖 `MaxOpenConns=1`，放开连接数或切 Postgres 前必须补齐。
@@ -164,10 +164,12 @@ python3 -m venv .venv
 
 ## 7. API 端点清单
 
+> 共 **36 条 `/api/` 端点**（下表 36 行 + 末尾 1 行静态回退），与 `internal/server/router.go` 的 `mux.HandleFunc` 及 `frontend/src/api/routes.ts` 的常量一一对应；新增端点须三处同步。
+
 | 端点 | 方法 | 鉴权 | 说明 |
 |---|---|---|---|
-| `/api/health` | GET | 公开 | `{"status":"ok"}` |
-| `/api/auth/register` | POST | 公开 | 首个用户建默认账本成 owner，后续仅建账号待邀请；下发 Cookie（兼容期响应体仍含 token） |
+| `/api/health` | GET | 公开 | `{"status":"ok","instance_id":"..."}`（库世代；读取失败时降级为不带该字段，公开端点永不失败） |
+| `/api/auth/register` | POST | 公开 | 首个用户建默认账本成 owner，后续仅建账号待邀请；下发 httpOnly Cookie（**默认响应体不含 token**，回滚 `/legacy/` 需 `LEDGER_AUTH_EXPOSE_TOKEN=true`） |
 | `/api/auth/login` | POST | 公开 | 登录，下发 Cookie |
 | `/api/auth/logout` | POST | 登录 | 注销当前会话并清 Cookie |
 | `/api/auth/me` | GET | 登录 | 当前用户（role 恒空串） |
@@ -191,17 +193,22 @@ python3 -m venv .venv
 | `/api/ledger/members/{userID}/reset-password` | POST | 登录+**owner** | 重置密码并使该用户全部会话失效 |
 | `/api/export` | GET | 登录+成员 | 导出单文件 `.beancount` |
 | `/api/export/archive` | GET | 登录+成员 | 导出多文件目录 zip |
-| `/api/sync/pull` | GET | 登录+成员 | 增量拉取（since + client_id） |
-| `/api/sync/push` | POST | 登录+成员 | 逐条幂等提交离线变更 |
+| `/api/sync/pull` | GET | 登录+成员 | 增量拉取（since + client_id）；响应含 `instance_id`（空增量返回 `checkpoint:0`，**客户端不得拿 0 回写水位**） |
+| `/api/sync/push` | POST | 登录+成员 | 逐条幂等提交离线变更，响应含 `instance_id`；稳定错误码 `account_not_found`（重映射重试）/ `account_closed`（死信）等 |
+| `/api/db/instance` | GET | 登录 | 读取库世代 `instance_id`（迁移 014）；恢复成功后轮换，客户端据此清本地 + 全量重拉 |
 | `/api/backup/list` | GET | 登录+**系统管理员** | 备份清单 |
 | `/api/backup/download?name=` | GET | 登录+**系统管理员** | 下载备份；文件名白名单 + 四层穿越防护 |
 | `/api/backup/run` | POST | 登录+**系统管理员** | 手动触发一次备份（进行中 409） |
+| `/api/backup/restore/preview` | POST | 登录+**系统管理员** | **只读预检**：multipart `file`；备份 vs 当前四行覆盖量对比 + schema 版本 + 拒绝原因（如 `future_version` / `not_sqlite`），绝不改数据 |
+| `/api/backup/restore` | POST | 登录+**系统管理员** | 执行还原：multipart `file` + `confirm=RESTORE` 确认词；pre-restore 快照、事务内逐表替换、迁移重跑、成功后轮换 `instance_id` |
+| `/api/import/beancount/preview` | POST | 登录 | **只读解析预检**：JSON `{"text"}` 或 multipart `file`；全量错误行号 / 账户·交易·价格·币种计数 / 疑似重复提示，不落库 |
+| `/api/import/beancount` | POST | 登录 | 执行导入：单一大事务新建账本（含 `sync_log`），同名自动加序号；引用未声明账户整体拒绝 |
 | `/api/settings/registration` | GET/POST | **GET 公开** / POST 登录+**系统管理员** | 读取 / 修改注册开关（GET 供登录页判断是否显示注册入口） |
 | `/*`（非 `/api/`） | GET/HEAD | 公开 | 前端静态资源 + SPA 回退（`LEDGER_WEB_ROOT`） |
 
 > **在线记账幂等冲突矩阵（迁移 013，已实现）**：新建 → `201 {uuid, idempotent:false}`；同 key 命中未删 → `200 {uuid, idempotent:true}`；命中已软删 → `409 idempotency_key_deleted`（换新 key 重提）；同 key 不同 payload → `409 idempotency_payload_mismatch`。旧客户端不传 `client_request_id` 时保持原行为。冲正沿 `opening_key`，**禁止复用** `client_request_id`。
-> **M2 四个端点**（`/api/backup/restore/preview`、`/api/backup/restore`、`/api/import/beancount/preview`、`/api/import/beancount`）**尚未实现**，见 `docs/m2-plan.md`；届时用 `Idempotency-Key` 头 + 通用 `idempotency_keys` 表。
-> 多账本上下文：业务端点需带 `X-Ledger-Id` 头；缺失回退默认账本 id=1。`viewer` 只读（非 GET 一律 403）、`editor` 可写、`owner` 可管理。**新前端 API 客户端必须强制注入并断言该头，缺失直接抛错，绝不静默回退**（否则交易会记进错误账本）。
+> **M2 端点（批 4，已实现）**：`/api/backup/restore/preview`、`/api/backup/restore`、`/api/import/beancount/preview`、`/api/import/beancount`。防误操作靠 **只读预检 + `RESTORE` 确认词 + pre-restore 快照 + 单一大事务**（**未**采用方案早期设想的 `Idempotency-Key` 头 + 通用 `idempotency_keys` 表）；恢复仅系统管理员、导入登录即可，两者均豁免账本上下文。验收记录见 `docs/m2-g-acceptance-2026-11-11.md`。
+> 多账本上下文：业务端点需带 `X-Ledger-Id` 头，服务端缺失回退默认账本 id=1；`/api/import/*`、`/api/db/*`、`/api/backup/*` 为 middleware 豁免路径。`viewer` 只读（非 GET 一律 403）、`editor` 可写、`owner` 可管理。**新前端 API 客户端必须强制注入并断言该头，缺失直接抛错，绝不静默回退**（否则交易会记进错误账本）。
 > 备份端点例外：备份是全库级产物，**不解析 `X-Ledger-Id`、不校验账本成员**，只要求登录态 + `users.is_admin`。账本级 owner ≠ 系统管理员，勿混用。
 > 鉴权范围按 `/api/` 前缀划分：非 `/api/` 一律放行交由静态托管，新增前端路由无需改白名单。
 > CORS：`LEDGER_CORS_ORIGINS` 未设 = 仅同源（不输出 CORS 头）；设为逗号白名单 = 命中回显 `Origin` + `Allow-Credentials: true` + `Vary: Origin`；设为 `*` = 旧行为但不带凭证。Headers 含 `Content-Type, Authorization, X-Ledger-Id, X-CSRF`，Methods 含 `GET,POST,DELETE,PATCH,OPTIONS`，`OPTIONS` 预检 204 不鉴权。
@@ -231,10 +238,10 @@ python3 -m venv .venv
 **已落地（批 0~6，实测通过 2026-11-12）**：Vue 3 + Vite 脚手架与全部 20 页、`core/Money` 定点金额、`es2015` + plugin-legacy + es2020 语法门禁 + `compat.mjs` API/CSS 扫描、36 端点手写 TS 类型 + 类型化 fetch 客户端（401 single-flight / 428 / `X-Ledger-Id` 断言 / FormData）、D-7 httpOnly Cookie + CSRF + CORS 白名单、迁移 013/014、恢复/导入全链路（M2-a~g）、离线同步内核（`core/sync/`，8 份真实契约样本 + 14 引擎用例）、PWA（`public/sw.js` + 更新提示）、CI `web-verify` job（含用例数下限防假绿）、Dockerfile Node 构建、工具链钉版（`.nvmrc` 22.23.4 / `engines >=22.22 <23` / `engine-strict`）、`LEDGER_AUTH_EXPOSE_TOKEN` 默认 `false`。Vitest **289/289**（34 文件）；`go test`（严格 bean-check）全绿。
 
 **遗留 / 注意**：
-1. AGENTS §7 端点表为 31 条旧口径，实际已 36 条（+restore×2 / import×2 / db/instance）；待复核补齐。
-2. `docs/` 4 份（m2-plan / next-phase-frontend-plan / m2-g 验收记录等）按老板口径不入库，clone 后断链。
+1. `package-lock.json` 在 Linux 实机（CI ubuntu）上的 `npm ci` 与 Dockerfile Node 构建尚未首跑验证（本地领先 `origin/develop` 11 个提交，push 后由 `web-verify` / 镜像构建观察）；若失败按 lock 缺平台二进制处理（重新在 Linux 生成）。
+2. `docs/` **5 份**（m2-plan / next-phase-frontend-plan / m2-g 验收记录 / 批 3 交付 / 框架评估与进度审查等）按老板口径不入库，clone 后断链。
 3. `frontend/dist/legacy/` 为**冻结回滚基准**（仅本机留存，不入库、不再重建）；`web-build` 的 `emptyOutDir` 会清掉它——需要回滚能力时先备份该目录或从 git 历史找回。回滚旧版须同时设 `LEDGER_AUTH_EXPOSE_TOKEN=true`。
-4. `package-lock.json` 在 Linux 实机（CI ubuntu）上 `npm ci` 已由 `web-verify` job 首跑验证；若失败按 lock 缺平台二进制处理（重新在 Linux 生成）。
+4. `CHANGELOG.md` 顶部仍为 `[0.5.0] - 2026-11-03`，M7 批 0~6（11-09~11-12）无变更条目；是否补 `Unreleased` 段或发 `0.6.0`（牵动 tag / `frontend/package.json` / 镜像 tag 三处一致）待老板拍板，勿擅自改版本号。
 5. 真机双端联调（浏览器 A/B 同时在线、离线多设备端到端）与批 5 离线链路真机冒烟尚未完整确认。
 6. 下期（M4+）：Beancount 通用语法导入、OFX/CSV 自动导入、规则引擎、商品/价格 CRUD、跨币种 cost 注解、Postgres 横向扩展。
 
