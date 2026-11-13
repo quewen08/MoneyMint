@@ -31,8 +31,16 @@ export const useSessionStore = defineStore('session', () => {
   const mustChangePassword = computed(
     () => user.value !== null && user.value.must_change_password === true,
   )
+  // 「等待邀请」= 已登录、且确实不属于任何账本。强改密态下 GET /api/ledgers
+  // 会被 428 拦截，refreshLedgers 的 catch 把 ledgers 清成空数组只是 428 的
+  // 副作用，并非真的没有账本；此时必须恒为 false，否则守卫 / 待邀请页 /
+  // 首页与布局的提示都会误判，把用户从改密页拽走。标记仍派生自 user 与
+  // ledgers 这两个既有真相源，不引入新的状态来源。
   const needsInvite = computed(
-    () => isAuthenticated.value && ledgers.value.length === 0,
+    () =>
+      isAuthenticated.value &&
+      !mustChangePassword.value &&
+      ledgers.value.length === 0,
   )
   const isViewer = computed(() => user.value !== null && user.value.role === 'viewer')
   const ledgerName = computed(() => {

@@ -205,7 +205,16 @@ router.beforeEach(async (to) => {
         return { name: 'login', query: { redirect: to.fullPath } }
       }
     }
-    if (session.mustChangePassword && to.name !== 'change-password') {
+    // 428 强制改密态优先级最高：目标已是改密页就直接放行，绝不能再往下
+    // 走到 needsInvite 判断。强改密态下 GET /api/ledgers 会被后端 428 拦截，
+    // refreshLedgers 的 catch 把账本清单清空，needsInvite 会误判为 true；
+    // 若此处不短路，change-password 会被改道 await-invite、await-invite 又被
+    // mustChangePassword 改道回 change-password，形成无限重定向（导航 abort，
+    // 页面卡在登录态，看起来就像「根本没实现 428 跳转」）。
+    if (session.mustChangePassword) {
+      if (to.name === 'change-password') {
+        return true
+      }
       return { name: 'change-password' }
     }
     if (session.needsInvite && to.name !== 'await-invite') {
