@@ -41,7 +41,7 @@
 
 ```bash
 # 1. 构建（或使用 CI 发布的镜像）
-docker build -t yourname/money-mint:0.5.0 .
+docker build -t yourname/money-mint:0.5.1 .
 
 # 2. 准备数据目录
 mkdir -p ./data
@@ -52,7 +52,7 @@ docker run -d --name famben -p 8080:8080 \
   -e LEDGER_OWNER_USER=awen \
   -e LEDGER_OWNER_PASSWORD=你的密码 \
   -v $(pwd)/data:/app/data \
-  yourname/money-mint:0.5.0
+  yourname/money-mint:0.5.1
 
 # 4. 浏览器打开 http://<主机IP>:8080 ，用预设的 owner 账号登录
 ```

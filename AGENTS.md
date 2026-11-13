@@ -238,10 +238,10 @@ python3 -m venv .venv
 **已落地（批 0~6，实测通过 2026-11-12）**：Vue 3 + Vite 脚手架与全部 20 页、`core/Money` 定点金额、`es2015` + plugin-legacy + es2020 语法门禁 + `compat.mjs` API/CSS 扫描、36 端点手写 TS 类型 + 类型化 fetch 客户端（401 single-flight / 428 / `X-Ledger-Id` 断言 / FormData）、D-7 httpOnly Cookie + CSRF + CORS 白名单、迁移 013/014、恢复/导入全链路（M2-a~g）、离线同步内核（`core/sync/`，8 份真实契约样本 + 14 引擎用例）、PWA（`public/sw.js` + 更新提示）、CI `web-verify` job（含用例数下限防假绿）、Dockerfile Node 构建、工具链钉版（`.nvmrc` 22.23.4 / `engines >=22.22 <23` / `engine-strict`）、`LEDGER_AUTH_EXPOSE_TOKEN` 默认 `false`。Vitest **289/289**（34 文件）；`go test`（严格 bean-check）全绿。
 
 **遗留 / 注意**：
-1. `package-lock.json` 在 Linux 实机（CI ubuntu）上的 `npm ci` 与 Dockerfile Node 构建尚未首跑验证（本地领先 `origin/develop` 11 个提交，push 后由 `web-verify` / 镜像构建观察）；若失败按 lock 缺平台二进制处理（重新在 Linux 生成）。
+1. `package-lock.json` 在 Linux 实机（CI ubuntu）上的 `npm ci` 与 Dockerfile Node 构建尚未首跑验证（本地领先 `origin/develop` 14 个提交，push 后由 `web-verify` / 镜像构建观察）；若失败按 lock 缺平台二进制处理（重新在 Linux 生成）。
 2. `docs/` **5 份**（m2-plan / next-phase-frontend-plan / m2-g 验收记录 / 批 3 交付 / 框架评估与进度审查等）按老板口径不入库，clone 后断链。
-3. `frontend/dist/legacy/` 为**冻结回滚基准**（仅本机留存，不入库、不再重建）；`web-build` 的 `emptyOutDir` 会清掉它——需要回滚能力时先备份该目录或从 git 历史找回。回滚旧版须同时设 `LEDGER_AUTH_EXPOSE_TOKEN=true`。
-4. `CHANGELOG.md` 顶部仍为 `[0.5.0] - 2026-11-03`，M7 批 0~6（11-09~11-12）无变更条目；是否补 `Unreleased` 段或发 `0.6.0`（牵动 tag / `frontend/package.json` / 镜像 tag 三处一致）待老板拍板，勿擅自改版本号。
+3. `frontend/dist/legacy/` 为**冻结回滚基准**（本机基准已被构建清空，需从 git 历史重建）；`web-build` 的 `emptyOutDir` 会清掉它——需要回滚能力时从 `d297318` 之前的 git 历史重建。回滚旧版须同时设 `LEDGER_AUTH_EXPOSE_TOKEN=true`。
+4. `CHANGELOG.md` 顶部已为 `[0.5.1] - 2026-11-13`，M7 批 0~6 与图标/密码补丁已记入该版本；tag / `frontend/package.json` / 镜像示例已同步为 0.5.1，**tag 尚未 push**。
 5. 真机双端联调（浏览器 A/B 同时在线、离线多设备端到端）与批 5 离线链路真机冒烟尚未完整确认。
 6. 下期（M4+）：Beancount 通用语法导入、OFX/CSV 自动导入、规则引擎、商品/价格 CRUD、跨币种 cost 注解、Postgres 横向扩展。
 

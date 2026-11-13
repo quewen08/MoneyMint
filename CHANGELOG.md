@@ -4,9 +4,19 @@
 版本号语义化（[SemVer](https://semver.org/lang/zh-CN/)）。
 
 > 版本号单一事实源：git tag（`vX.Y.Z`）。发布前 `scripts/verify-version.sh` 会校验
-> tag / 本文件顶部版本 / `frontend/pubspec.yaml` 三处一致，不一致则构建失败。
+> tag / 本文件顶部版本 / `frontend/package.json` 三处一致，不一致则构建失败。
 
-## [Unreleased]
+## [0.5.1] - 2026-11-13
+
+M7 前端全量重构收官后的首个补丁版本：Vue 3 SPA 取代 Flutter Web，旧功能不降级，账芯与后端协议不变。
+
+### Added（M7 批 3~6 与 UI 补丁，2026-11-12~13）
+
+- **管理与设置全量页面**（批 3，`ffd55fa`）：报表 / 成员 / 账本 / 设置 / 数据安全 / 会话 / 同步状态 / 导入 / 恢复共 9 页；注册开关、账本改名、成员角色、会话吊销全部接入。
+- **M2 并入与库世代**（批 4，`bf17cdd` / `8ddb8bb`）：导入与恢复向导（只读预检 → 确认 → 执行）；迁移 014 `db_instance_id`，恢复成功后轮换世代，客户端据此清本地并全量重拉。
+- **离线同步内核与 PWA**（批 5，`2516cfe` / `d7a2970`）：IndexedDB 原子写、死信分类、多标签页租约、指数退避；`public/sw.js` 只缓存应用壳，`/api/*` 与 `/legacy/*` 不拦截。
+- **cutover 收口**（批 6，`d297318` / `c04588b` / `6b09b94`）：清退 Flutter 源码与构建链，Dockerfile 改 Node 构建，CI 增 `web-verify`，`LEDGER_AUTH_EXPOSE_TOKEN` 默认 `false`。
+- **品牌图标与密码可见**（`30dd122`）：全站 PWA 图标 / favicon / 登录页换成豆子图标，`theme_color` 对齐 `#3459A5`；新增 `PasswordInput` 组件，登录、改密、成员重置共 5 处密码框支持眼睛切换。
 
 ### Added（M7 前端全量重构，批 0~2.5）
 

@@ -12,7 +12,7 @@
 #
 # 构建：
 #   docker build -t famben:dev .
-#   docker build --build-arg GIT_VERSION=0.5.0 --build-arg BUILD_HASH=$(git rev-parse --short HEAD) -t famben:0.5.0 .
+#   docker build --build-arg GIT_VERSION=0.5.1 --build-arg BUILD_HASH=$(git rev-parse --short HEAD) -t famben:0.5.1 .
 #
 # 运行：
 #   docker run -d -p 8080:8080 -v $(pwd)/data:/app/data famben:dev
