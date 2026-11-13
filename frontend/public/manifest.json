@@ -4,7 +4,7 @@
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
-    "theme_color": "#00897B",
+    "theme_color": "#3459A5",
     "description": "家庭协作复式记账（类 Beancount），支持离线多端记账与增量同步。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,

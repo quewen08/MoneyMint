@@ -10,8 +10,10 @@
  *   AC-35 / S-A02），postMessage 通知页面出「有新版本」提示，用户确认后才
  *   skipWaiting + 刷新。
  */
-const SHELL_CACHE = 'fambean-shell-v1'
-const ASSET_CACHE = 'fambean-assets-v1'
+// v2（2026-11-13）：全站图标由 Flutter 默认图换成豆子图，文件名未变但内容变了；
+// cache-first 下老客户端会一直命中旧图标，故整体升版让 activate 清掉旧缓存。
+const SHELL_CACHE = 'fambean-shell-v2'
+const ASSET_CACHE = 'fambean-assets-v2'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(['/'])))

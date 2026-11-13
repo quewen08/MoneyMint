@@ -14,11 +14,15 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { authApi, settingsApi } from '@/api/client'
 import { ApiError } from '@/api/errors'
+import PasswordInput from '@/components/PasswordInput.vue'
 import { useSessionStore } from '@/stores/session'
 
 const session = useSessionStore()
 const router = useRouter()
 const route = useRoute()
+
+// 项目 base 为 './'，反代到子路径时必须用 BASE_URL 拼图标地址，不能用绝对 /icons。
+const baseUrl = import.meta.env.BASE_URL
 
 const username = ref('')
 const password = ref('')
@@ -108,7 +112,14 @@ onMounted(() => { void loadRegistration() })
 <template>
   <div class="auth">
     <div class="auth__hero fb-hero">
-      <div class="auth__logo">🫘</div>
+      <img
+        class="auth__logo"
+        :src="`${baseUrl}icons/Icon-192.png`"
+        alt="FamBean"
+        width="56"
+        height="56"
+        loading="eager"
+      />
       <h1>FamBean</h1>
       <p>家庭记账 · 每一笔都清清楚楚</p>
     </div>
@@ -130,12 +141,10 @@ onMounted(() => { void loadRegistration() })
       </label>
       <label class="auth__field">
         <span>密码</span>
-        <input
-          class="fb-input"
+        <PasswordInput
           v-model="password"
-          type="password"
           :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
-          placeholder="••••••••"
+          placeholder="密码"
         />
       </label>
 
@@ -179,9 +188,15 @@ onMounted(() => { void loadRegistration() })
   border-radius: 0 0 30px 30px;
 }
 
+/* 豆子图标：56x56 圆角块，极淡投影让 hero 上的品牌标识有轻微浮起感 */
 .auth__logo {
-  font-size: 46px;
-  line-height: 1;
+  width: 56px;
+  height: 56px;
+  display: block;
+  margin: 0 auto;
+  border-radius: 14px;
+  object-fit: cover;
+  box-shadow: 0 2px 10px rgba(13, 22, 48, 0.18);
 }
 
 .auth__hero h1 {

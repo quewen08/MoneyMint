@@ -13,6 +13,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { memberApi } from '@/api/client'
 import { ApiError } from '@/api/errors'
 import type { LedgerRole, MemberView } from '@/api/types'
+import PasswordInput from '@/components/PasswordInput.vue'
 import { roleLabel } from '@/core/batch3'
 import { useSessionStore } from '@/stores/session'
 
@@ -191,7 +192,7 @@ onMounted(() => { void load() })
         <p class="fb-muted">成功后该成员的全部登录会话立即失效，需重新登录。</p>
         <label class="mem__field">
           <span>新密码（至少 6 位）</span>
-          <input v-model="resetPassword" class="fb-input" type="password" placeholder="至少 6 位" />
+          <PasswordInput v-model="resetPassword" placeholder="至少 6 位" />
         </label>
         <div class="mem__actions">
           <button class="fb-btn-ghost" type="button" @click="resetTarget = null">取消</button>

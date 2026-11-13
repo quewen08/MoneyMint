@@ -9,6 +9,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { ApiError } from '@/api/errors'
+import PasswordInput from '@/components/PasswordInput.vue'
 import { useSessionStore } from '@/stores/session'
 
 const session = useSessionStore()
@@ -71,30 +72,24 @@ async function logout(): Promise<void> {
 
       <label class="pwd__field">
         <span>当前密码</span>
-        <input
-          class="fb-input"
+        <PasswordInput
           v-model="oldPassword"
-          type="password"
           autocomplete="current-password"
           placeholder="••••••••"
         />
       </label>
       <label class="pwd__field">
         <span>新密码（至少 6 位）</span>
-        <input
-          class="fb-input"
+        <PasswordInput
           v-model="newPassword"
-          type="password"
           autocomplete="new-password"
           placeholder="••••••••"
         />
       </label>
       <label class="pwd__field">
         <span>确认新密码</span>
-        <input
-          class="fb-input"
+        <PasswordInput
           v-model="confirmPassword"
-          type="password"
           autocomplete="new-password"
           placeholder="再输一遍"
         />
