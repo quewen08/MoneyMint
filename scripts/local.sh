@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 本地命令入口（Windows Git Bash / macOS / Linux 通用）。
+# 统一命令入口（各平台通用）。
 #
 # 用法：
 #   bash scripts/local.sh <command>
@@ -24,14 +24,14 @@
 # dist/legacy/ 为冻结的旧版回滚基准，只读不改，损坏时从 git 历史（batch ≤5 tag/commit）
 # 找回 frontend/dist/legacy 或旧源码重建。
 #
-# 存在原因：本机 Windows 无 make，Makefile 无法直接使用。
+# 与 Makefile 一一对应；不依赖 make，可直接调用本脚本。
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# Go 可能不在 PATH（AGENTS.md 记录的本机路径作为兜底）
+# Go 不在 PATH 时尝试备用安装位置（按需调整）
 if ! command -v go >/dev/null 2>&1 && [[ -x /d/Environment/go/bin/go ]]; then
   export PATH="$PATH:/d/Environment/go/bin"
 fi

@@ -56,7 +56,7 @@ ARG BUILD_DATE=unknown
 ARG BUILD_HASH=unknown
 ARG GIT_VERSION=unknown
 
-# -trimpath 去掉本机路径（构建可复现）；-s -w 去掉符号表与调试信息（减体积）
+# -trimpath 去掉构建机路径（构建可复现）；-s -w 去掉符号表与调试信息（减体积）
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
       -ldflags "-s -w \
         -X main.buildDate=${BUILD_DATE} \

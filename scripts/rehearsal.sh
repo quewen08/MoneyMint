@@ -11,7 +11,7 @@
 # 用法：
 #   bash scripts/rehearsal.sh
 #   REHEARSAL_SOURCE_DB=/path/to/copy.db bash scripts/rehearsal.sh
-#   REHEARSAL_SKIP_BEAN_CHECK=1 bash scripts/rehearsal.sh   # 仅限本机无校验器时
+#   REHEARSAL_SKIP_BEAN_CHECK=1 bash scripts/rehearsal.sh   # 未安装校验器时
 #
 # 退出码：0 全部断言通过；非 0 任一断言失败。
 

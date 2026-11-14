@@ -193,7 +193,7 @@ func TestImportExportRoundTrip(t *testing.T) {
 	}
 
 	// 4) 可选：bean-check 校验再导出文本（环境未安装则跳过）。
-	//    本项目 venv 的 bean-check.exe 包装器在本机无法输出，故改用
+	//    部分环境下 venv 的 bean-check.exe 包装器无法输出，故改用
 	//    `python -m beancount.scripts.check`（同为 3.2.3，与导出器契约同版本）。
 	cmd := beanCheckCmd(t, writeTemp(t, "roundtrip-*.beancount", outText))
 	if cmd == nil {
@@ -315,8 +315,8 @@ func writeTemp(t *testing.T, pattern, content string) string {
 }
 
 // beanCheckCmd 构造一个运行 bean-check 的命令；环境无 bean-check 时返回 nil。
-// 优先用项目 venv 的 `python -m beancount.scripts.check`（其 bean-check.exe 包装器
-// 在本机不输出，而 python 模块可正常工作），其次回退 PATH 上的 bean-check。
+// 优先用项目 venv 的 `python -m beancount.scripts.check`（部分环境的 bean-check.exe
+// 包装器无法输出，而 python 模块可正常工作），其次回退 PATH 上的 bean-check。
 func beanCheckCmd(t *testing.T, file string) *exec.Cmd {
 	t.Helper()
 	if wd, err := os.Getwd(); err == nil {

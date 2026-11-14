@@ -7,7 +7,7 @@
 
 - Vue 3.5 + Vue Router 4.5 + Pinia 2.3（全量重写，M7；原 Flutter 版已于批 6 cutover 清退）
 - Vite 5（`build.target: 'es2015'` + `@vitejs/plugin-legacy`，Safari 14.1 / iOS 14.8 兼容基线）
-- TypeScript ~5.6 + vue-tsc；Vitest 2.1（289+ 用例）
+- TypeScript ~5.6 + vue-tsc；Vitest 2.1（301 用例 / 37 文件）
 - 金额运算统一走 `decimal.js` 封装（`src/core/Money`），禁止裸浮点加减
 
 ## 命令

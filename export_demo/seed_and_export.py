@@ -2,7 +2,7 @@
 """
 家庭协作记账 - Beancount 导出器 (验证参考实现)
 读取 schema.sql 定义的 SQLite 库，导出合法 .beancount 文本。
-逻辑与 internal/export/beancount.go 完全一致，仅用于在本机用 bean-check 验证格式。
+逻辑与 internal/export/beancount.go 完全一致，仅用于独立验证导出格式。
 """
 import sqlite3, os, sys
 from decimal import Decimal, ROUND_HALF_UP, getcontext

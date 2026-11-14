@@ -38,7 +38,7 @@ func RepoRoot(t *testing.T) string {
 
 // BeanCheckCandidates 返回 bean-check 的候选调用方式，按优先级排列。
 //
-// 优先项目内 .venv（Windows / POSIX 两种布局），其次系统 python 与 PATH 上的 bean-check。
+// 优先项目内 .venv（两种平台布局），其次系统 python 与 PATH 上的 bean-check。
 // .venv 路径一律用绝对路径：调用方可能设置 cmd.Dir（导出根目录用于解析 include），
 // 相对路径会在切换工作目录后失效。
 func BeanCheckCandidates(repoRoot string) [][]string {
@@ -113,7 +113,7 @@ func runBeanCheckWithCandidates(t *testing.T, beanArg, workDir string, cands [][
 
 	var tried []string
 	for _, cand := range cands {
-		// 带路径的候选先确认存在，跳过本机平台不匹配的 venv 布局（如 Linux 上的 Scripts/python.exe）。
+		// 带路径的候选先确认存在，跳过与当前平台不匹配的 venv 布局。
 		if strings.ContainsAny(cand[0], `/\`) {
 			if _, err := os.Stat(cand[0]); err != nil {
 				tried = append(tried, cand[0]+"（不存在）")
@@ -154,7 +154,7 @@ func runBeanCheckWithCandidates(t *testing.T, beanArg, workDir string, cands [][
 
 	if StrictBeanCheck() {
 		t.Fatalf("严格模式：未找到可用的 bean-check，导出兼容性未经校验。\n"+
-			"安装方式：python -m venv .venv && .venv/Scripts/python.exe -m pip install beancount\n"+
+			"安装方式：python -m venv .venv && python -m pip install beancount（激活 .venv 后）\n"+
 			"已尝试：%v", tried)
 	}
 	t.Logf("⚠️ bean-check 不可用，跳过导出兼容性校验（非严格模式）。已尝试：%v", tried)

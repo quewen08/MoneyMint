@@ -41,7 +41,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // 开发期跨域：前端始终请求相对 /api，由 Vite 转发到本机后端。
+      // 开发期跨域：前端始终请求相对 /api，由 Vite 转发到后端。
       '/api': {
         target: 'http://127.0.0.1:8080',
         changeOrigin: true,
@@ -51,7 +51,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    // Windows 下多 worker 并发写 vite-node 的 SSR 临时缓存会触发 EPERM，
+    // 部分平台下多 worker 并发写 vite-node 的 SSR 临时缓存会触发 EPERM，
     // 导致部分测试文件加载失败；顺序执行测试文件即可稳定全绿。
     fileParallelism: false,
   },

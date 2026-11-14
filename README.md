@@ -10,7 +10,7 @@
 
 > **当前状态（2026-11-12，批 6 cutover 完成）**：M7 前端全量重构批 0~6 全部落地，
 > **Vue 3 + Vite 纯 SPA 已是唯一前端**；Flutter 版源码与构建链已清退（git 历史可查），
-> `frontend/dist/legacy/` 为冻结的旧版回滚基准（仅本机留存，不再重建）。
+> `frontend/dist/legacy/` 为冻结的旧版回滚基准（不入库、不再重建）。
 > 想直接跑起来用，按下面「快速开始」即可；架构与约定看 [`AGENTS.md`](AGENTS.md)。
 
 ## 特性
@@ -85,7 +85,7 @@ LEDGER_DB=data/ledger.db LEDGER_WEB_ROOT=frontend/dist go run ./cmd/server
 
 健康检查：`curl http://127.0.0.1:8080/api/health` → `{"status":"ok"}`
 
-常用命令统一走 `bash scripts/local.sh <command>`（Windows 无 make；Linux/CI 用 `Makefile`），
+常用命令统一走 `bash scripts/local.sh <command>`（Linux/CI 可用等价的 `Makefile`），
 完整清单见 [`AGENTS.md`](AGENTS.md) §10.1。
 
 ## 环境变量
@@ -192,7 +192,7 @@ curl -s -X POST $B/api/transactions -H "$AUTH" -H 'Content-Type: application/jso
 
 # 导出并校验
 curl -s $B/api/export -H "$AUTH" -o data/family.beancount
-.venv/Scripts/python.exe -m beancount.scripts.check data/family.beancount
+python -m beancount.scripts.check data/family.beancount   # 激活项目 .venv 后执行
 ```
 
 > 字段提醒：在线 `POST /api/transactions` 的 posting 用 `account_id`（整数）；离线 `POST /api/sync/push` 的交易 posting 用 `account_uuid`（字符串），两者勿混。
@@ -221,7 +221,7 @@ curl -s $B/api/export -H "$AUTH" -o data/family.beancount
 │   ├── index.html / package.json / vite.config.ts / tsconfig*.json
 │   ├── public/           # sw.js + manifest.json + icons/（PWA 静态资源）
 │   ├── src/              # 源码（api/ core/ router/ stores/ views/ components/）
-│   └── dist/             # 构建产物（gitignore）；dist/legacy/ 为冻结的旧版回滚基准（仅本机留存）
+│   └── dist/             # 构建产物（gitignore）；dist/legacy/ 为冻结的旧版回滚基准（不入库）
 ├── scripts/              # local.sh / check-bean / verify-version / smoke / check-legacy / check-test-floor
 ├── Dockerfile            # 三阶段（Node 构建 Vue → Go → alpine 运行时）
 ├── docker-compose.yml    # 家用部署示例

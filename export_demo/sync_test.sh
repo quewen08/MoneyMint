@@ -5,8 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$PATH:/d/Environment/go/bin"
 
-# 选一个空闲端口，避免与本机残留服务/孤儿进程撞车。
-# 注意：Windows 上 Go 的 TCP 监听默认 SO_REUSEADDR，多个进程可能共用同一端口，
+# 选一个空闲端口，避免与已有服务/孤儿进程撞车。
+# 注意：部分平台上 Go 的 TCP 监听默认 SO_REUSEADDR，多个进程可能共用同一端口，
 # 导致连接被分摊到不同（旧）实例而偶发 401，因此这里每次用随机空闲端口最稳妥。
 PORT=$(python3 -c "import socket;s=socket.socket();s.bind(('127.0.0.1',0));print(s.getsockname()[1]);s.close()")
 B="http://127.0.0.1:$PORT"

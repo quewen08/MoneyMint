@@ -36,7 +36,7 @@ func TestLaunchFailureIsNotLedgerError(t *testing.T) {
 // 而不是把测试打成失败。
 //
 // 开启严格模式，只有第二个候选真的执行成功才不会 Fatal —— 这就同时证明了「跳过」与「继续」。
-// 占位命令会忽略自动追加的账本路径参数，只验证控制流，不依赖本机是否安装 beancount。
+// 占位命令会忽略自动追加的账本路径参数，只验证控制流，不依赖运行环境是否安装 beancount。
 func TestRunBeanCheckSkipsMissingCandidate(t *testing.T) {
 	t.Setenv("BEAN_CHECK_STRICT", "1")
 	okCmd := []string{"sh", "-c", "true"}

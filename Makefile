@@ -1,6 +1,6 @@
-# FamBean 常用命令（Linux / macOS / CI 用；Windows 请用 scripts/local.sh）
+# FamBean 常用命令（make 环境 / CI 用）
 #
-# 说明：本机（Windows Git Bash）通常没有 make，直接用：
+# 等价入口（不依赖 make）：
 #   bash scripts/local.sh <command>
 #
 # cutover（批 6）后仓库只有一套前端（Vue 3 SPA），Flutter 构建链已清退。

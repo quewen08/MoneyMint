@@ -4,13 +4,13 @@
 
 ## 先读这三件事
 
-1. **M7 全量重构已 cutover 收官（批 0~6，2026-11-12）**：**Vue 3 + Vite SPA 是唯一前端**（`frontend/src/` → `frontend/dist`，由 `LEDGER_WEB_ROOT` 托管）。Flutter Web 源码与构建链已 `git rm`（commit `d297318`，需时从 git 历史找回），`frontend/dist/legacy/` 是**冻结的回滚基准**（仅本机留存、不入库、不再重建）。
+1. **M7 全量重构已 cutover 收官（批 0~6，2026-11-12）**：**Vue 3 + Vite SPA 是唯一前端**（`frontend/src/` → `frontend/dist`，由 `LEDGER_WEB_ROOT` 托管）。Flutter Web 源码与构建链已 `git rm`（commit `d297318`，需时从 git 历史找回），`frontend/dist/legacy/` 是**冻结的回滚基准**（不入库、不再重建）。
 2. **别把方案当现状，也别把旧文档当现状**：批 0~6 均已实现——20 页全量覆盖、36 端点、`core/Money`、离线同步内核 `core/sync/`、迁移 013/014、M2 恢复/导入四端点、PWA `public/sw.js`、CI `web-verify` job、Dockerfile Node 构建、工具链钉版。判断「有没有」**以代码为准**。
 3. **账芯不可动**：复式借贷平衡、append-only 不可变交易、导出必须过 `bean-check`、定点十进制金额。改的是前端，不是全栈。
 
 ## 命令速查
 
-统一入口 `bash scripts/local.sh <cmd>`（Windows 无 make；Linux/CI 等价目标在 `Makefile`）。
+统一入口 `bash scripts/local.sh <cmd>`；Linux/CI 等价目标在 `Makefile`。
 
 | 目的 | 命令 |
 |---|---|
@@ -23,9 +23,9 @@
 | 校验冻结的 `/legacy/` 回滚基准 | `bash scripts/local.sh check-legacy` |
 
 - `web-dev` 的 `/api` 已由 `vite.config.ts` 代理到 `127.0.0.1:8080`，**前端代码一律用相对 `/api`**。
-- **`web-build` 会清空 `frontend/dist`（含本机留存的 `dist/legacy/`）**。需要保留回滚基准时**先备份该目录**；构建源 `frontend/build/legacy-web` 仍在盘上，可直接拷回，无需 Flutter。
-- 本机 Git Bash 可能需 `export PATH="$PATH:/d/Environment/go/bin"`。Node 需 22.x（`engines >=22.22 <23`，`engine-strict=true`）。
-- Python 只用于 `bean-check`，**一律用项目内 `.venv`**：`.venv/Scripts/python.exe -m beancount.scripts.check <file>`。不在项目外创建 venv / 装包 / 跑脚本。
+- **`web-build` 会清空 `frontend/dist`（含 `dist/legacy/`）**。需要保留回滚基准时**先备份该目录**，或从 git 历史（批 ≤5）重建。
+- Node 需 22.x（`engines >=22.22 <23`，`engine-strict=true`），仅构建阶段需要。
+- Python 只用于 `bean-check`，**一律用项目内 `.venv` 的 Python 以模块方式调用**（`-m beancount.scripts.check <file>`）。不在项目外创建 venv / 装包 / 跑脚本。
 
 ## 关键文件索引
 
@@ -43,7 +43,7 @@
 | 导出器 | `internal/export/{beancount,files}.go` |
 | Vue 定点金额 | `frontend/src/core/Money.ts` + `Money.test.ts` |
 | Vue 端点契约 | `frontend/src/api/{types,routes,errors,client}.ts` |
-| 离线同步内核 | `frontend/src/core/sync/{models,localStore,idbStore,engine}.ts` + `fixtures/`（8 份真实契约样本） |
+| 离线同步内核 | `frontend/src/core/sync/{models,localStore,idbStore,engine}.ts` + `fixtures/`（9 份真实契约样本，其中 6 份被引擎用例引用） |
 | 构建与兼容基线 | `frontend/vite.config.ts`、`frontend/package.json`、`frontend/.nvmrc` |
 | CI 前端门禁 | `.github/workflows/docker-image.yml` 的 `web-verify` job、`scripts/check-test-floor.mjs` |
 | 旧版回滚（冻结基准） | `scripts/check-legacy.sh`、`frontend/dist/legacy/` |
@@ -81,4 +81,4 @@
 5. 涉及前端构建或兼容基线 → iOS 14.8 Safari 真机全主流程冒烟（AC-19）。
 6. 版本号三处一致：`git tag` / `CHANGELOG.md` / `frontend/package.json`（`bash scripts/verify-version.sh`）。
 
-> 文档收口后工作区应干净；**改动前仍先看 `git status`**，不要把 docs 与代码改动混在同一次提交。CI `web-verify` 与 Dockerfile Node 构建的 Linux 实机首跑需 push 后观察，别把「配置写了」当成「已经跑过」。
+> 文档收口后工作区应干净；**改动前仍先看 `git status`**，不要把 docs 与代码改动混在同一次提交。`v0.5.1` tag 已推送，CI `web-verify` 与 Dockerfile Node 构建的 Linux 实机结果以 GitHub Actions 运行记录为准，别把「配置写了」当成「已经跑过」。

@@ -15,7 +15,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# 候选校验器：项目内 venv（Windows/POSIX）→ 系统 python → PATH 上的 bean-check
+# 候选校验器：项目内 venv（两种平台布局）→ 系统 python → PATH 上的 bean-check
 find_checker() {
   local cands=(
     "$ROOT_DIR/.venv/Scripts/python.exe|-m|beancount.scripts.check"
@@ -56,8 +56,7 @@ if ! checker="$(find_checker)"; then
   echo "❌ 未找到可用的 bean-check（beancount 未安装）" >&2
   echo "   安装方式：" >&2
   echo "     python -m venv .venv" >&2
-  echo "     .venv/Scripts/python.exe -m pip install beancount   # Windows" >&2
-  echo "     .venv/bin/python -m pip install beancount           # macOS / Linux" >&2
+  echo "     激活 .venv 后：python -m pip install beancount" >&2
   exit 1
 fi
 

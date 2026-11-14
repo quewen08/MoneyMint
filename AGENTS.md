@@ -21,37 +21,37 @@
 |---|---|---|
 | 技术 | **Vue 3 + Vite 纯 SPA**（不引入 Nuxt / SSR / Nitro）+ Pinia + Vue Router + 离线同步内核 | Flutter Web（PWA），MVVM |
 | 源码 | `frontend/index.html`、`frontend/src/`、`frontend/public/` | ~~`frontend/lib/`、`frontend/test/`、`pubspec.*`~~ 已 `git rm`（批 6），需要时从 git 历史找回 |
-| 产物 | `frontend/dist/`（gitignore），由 `LEDGER_WEB_ROOT` 托管；Docker 镜像内 `/app/web` | `frontend/dist/legacy/` 为**冻结的回滚基准**（仅本机留存，不再重建；`check-legacy.sh` 仍可校验） |
+| 产物 | `frontend/dist/`（gitignore），由 `LEDGER_WEB_ROOT` 托管；Docker 镜像内 `/app/web` | `frontend/dist/legacy/` 为**冻结的回滚基准**（不入库、不再重建；`check-legacy.sh` 仍可校验） |
 
-- **批 0~6 全部落地**（实测 2026-11-12）：36 端点、迁移 014 库世代、恢复/导入向导（P-19/P-20）、离线同步内核（`src/core/sync/`，契约测试 8 份真实录制）、PWA（`public/sw.js`）、CI `web-verify` job、Dockerfile Node 构建、工具链钉版（`.nvmrc` 22.23.4 / `engines >=22.22 <23` / `engine-strict`）。
-- Vitest **289/289 通过**（34 文件）；`go test`（BEAN_CHECK_STRICT=1）全绿。
+- **批 0~6 全部落地**（2026-11-12 交付）：36 端点、迁移 014 库世代、恢复/导入向导（P-19/P-20）、离线同步内核（`src/core/sync/`，9 份真实契约样本 + 14 引擎用例）、PWA（`public/sw.js`）、CI `web-verify` job、Dockerfile Node 构建、工具链钉版（`.nvmrc` 22.23.4 / `engines >=22.22 <23` / `engine-strict`）。
+- Vitest **301/301 通过**（37 文件）；`go build` / `go vet` / `go test ./...` 全绿。
 - `LEDGER_AUTH_EXPOSE_TOKEN` 默认已改 `false`（Vue 版只靠 httpOnly Cookie，D-7）；回滚 `/legacy/` 时显式设 `true`。
 - 后端与账芯**不变**：复式借贷平衡、append-only 不可变交易、`bean-check` 导出校验、离线同步协议全部保留。
 
 **核心不变约束**：导出的 `.beancount` 必须能被 `bean-check` 直接校验通过（退出码 0、无报错）。
 
-**当前阶段**：M7 六批全部完成，仓库只剩一套前端。遗留小尾巴：AGENTS §7 端点表 36 条口径复核。
+**当前阶段**：M7 六批全部完成，仓库只剩一套前端；§7 端点表 36 条已与 `internal/server/router.go`、`frontend/src/api/routes.ts` 逐条核对一致。剩余边界见 §9。
 
 ---
 
-## 2. 技术栈与本机环境
+## 2. 技术栈与环境基线
 
 | 工具 | 版本 / 路径 | 说明 |
 |---|---|---|
-| Go | 1.26.5，`/d/Environment/go/bin` | Git Bash 需 `export PATH="$PATH:/d/Environment/go/bin"` |
-| Node.js | **22.x 区间**（`engines: ">=22.22 <23"` + `engine-strict=true`）；`.nvmrc` 钉 **22.23.4**（CI/镜像同版），本机 22.22.2 | 仅**构建阶段**需要，运行时镜像无 Node。三处（.nvmrc / engines / Dockerfile ARG）升级须同步改 |
+| Go | 工程基线 `go.mod` 1.25.0（CI `go-version: '1.25'` / 镜像 `golang:1.25-alpine`） | 纯 Go 免 CGO，可交叉编译到 NAS arm64 |
+| Node.js | **22.x 区间**（`engines: ">=22.22 <23"` + `engine-strict=true`）；`.nvmrc` 钉 **22.23.4**（CI/镜像同版） | 仅**构建阶段**需要，运行时镜像无 Node。三处（.nvmrc / engines / Dockerfile ARG）升级须同步改 |
 | Python | 项目内 `.venv` | 仅用于 `bean-check`（`beancount` 包），不污染系统 |
-| GOPROXY | `https://goproxy.cn,direct` | `proxy.golang.org` 国内不可达 |
+| Go 依赖代理 | 国内网络可用 `https://goproxy.cn,direct` | `proxy.golang.org` 国内不可达；仅影响构建机，按各自网络环境配置，不写入仓库 |
 | 前端依赖 | 见 `frontend/package.json` | 版本按方案 §14.7 钉版；**禁装** ECharts / Vuetify / Framework7 / moment / monaco / leaflet / swiper |
 
-~~Flutter~~：批 6 已清退，本机 Flutter SDK 与 `PUB_HOSTED_URL` 镜像不再被本项目使用；旧源码从 git 历史（批 ≤5 提交）找回。
+~~Flutter~~：批 6 已清退，Flutter SDK 与 `PUB_HOSTED_URL` 镜像不再是本项目依赖；旧源码从 git 历史（批 ≤5 提交）找回。
 
 Vue 侧关键钉版：`vue ^3.5`、`vue-router ^4.5`、`pinia ^2.3`、`decimal.js ^10.4`、`vite ^5.4`、`@vitejs/plugin-vue ^5.1`、`@vitejs/plugin-legacy ^5.4`、`typescript ~5.6`、`vitest ^2.1`、`vue-tsc ^2.1`、`es-check ^7`。**不要照抄参考项目 ezbookkeeping 的 Vite 8 / TS 6 / vue-router 5 / Pinia 4 / `target: safari16.4`**，那会在 iOS 14.8 上「全绿白屏」。
 
-验证用（已建好可跳过）：
+项目内 `.venv` 供 `bean-check` 使用，按需创建，不装到系统 Python：
 ```bash
 python3 -m venv .venv
-.venv/Scripts/python.exe -m pip install beancount
+python -m pip install beancount    # 激活 .venv 后执行
 ```
 
 ---
@@ -78,7 +78,7 @@ python3 -m venv .venv
 │   ├── package.json / vite.config.ts / tsconfig*.json / .nvmrc / .npmrc
 │   ├── public/           # sw.js + manifest.json + icons/ + favicon.png（PWA 静态资源）
 │   ├── src/              # 源码：api/ core/（含 sync/ 离线内核） router/ stores/ styles/ views/ components/ + main.ts / App.vue
-│   └── dist/             # 构建产物（gitignore）；dist/legacy/ 为冻结的旧版回滚基准（仅本机留存）
+│   └── dist/             # 构建产物（gitignore）；dist/legacy/ 为冻结的旧版回滚基准（不入库）
 ├── scripts/              # check-bean / verify-version / smoke / local.sh / check-legacy / check-test-floor / compat
 ├── export_demo/          # Python/sh 验证参考
 └── data/                 # 运行时 SQLite（git 忽略）；backups/ 也在其下
@@ -86,7 +86,7 @@ python3 -m venv .venv
 
 **前端架构（Vue 3 SPA，唯一前端）**：
 - `core/Money.ts`：`decimal.js` 定点金额唯一入口（只收 string 构造、`ROUND_HALF_UP`、`toString()` 固定 `toFixed()`）；另有 `core/{accounts,calendar,csv,filters,opening,ordering,record,storage,m2}.ts` 核心领域逻辑（全部带 `.test.ts`）。
-- `core/sync/`：离线同步内核——`models.ts`（本地实体/死信分类，`DEAD_CODES` 与后端稳定码同源）、`localStore.ts`（Memory 实现）、`idbStore.ts`（IndexedDB 真相源，单事务原子写）、`engine.ts`（SyncEngine：pull→push 重映射→pull、库世代隔离、指数退避、CAS 多标签页租约）+ 8 份真实契约样本（`fixtures/`）。
+- `core/sync/`：离线同步内核——`models.ts`（本地实体/死信分类，`DEAD_CODES` 与后端稳定码同源）、`localStore.ts`（Memory 实现）、`idbStore.ts`（IndexedDB 真相源，单事务原子写）、`engine.ts`（SyncEngine：pull→push 重映射→pull、库世代隔离、指数退避、CAS 多标签页租约）+ 9 份真实契约样本（`fixtures/`，其中 6 份被 `engine.test.ts` 引用）。
 - `api/{types,routes,errors,client}.ts`：36 端点手写 TS 类型 / 路由常量 / `ApiError` / 类型化 fetch 客户端（401 single-flight / 428 / `X-Ledger-Id` 断言 / FormData 上传；**不生成** OpenAPI）。
 - `stores/`：`session / privacy / recordSheet / sync`；views 20 页 + components（AppLayout / RecordSheet / SyncBadge 等）。
 - `vite.config.ts`：`base: './'`、`build.target: 'es2015'`、`@vitejs/plugin-legacy`（`targets: Safari >= 14`）、`outDir: 'dist'`、`server.proxy['/api'] → 127.0.0.1:8080`、alias `@`、`define.__APP_VERSION__` 读 package.json。
@@ -132,7 +132,7 @@ python3 -m venv .venv
 - `authMiddleware` 包裹所有业务路由；放行 `/api/health` 与 register/login；自服务端点仅需登录态，业务端点额外校验为账本成员。
 - **会话凭据（D-7 = A，已实现）**：默认优先读 `fambean_session` httpOnly Cookie（`Path=/`、`SameSite=Lax`、30 天；内网 HTTP 不设 `Secure`），`Authorization: Bearer` 兜底；空串视为未登录，旧版 `/legacy/` 继续用 Bearer 不受影响。**Bearer 分支在观察期结束前不得删除。**
 - **CSRF 只约束 Cookie 路径**：非 GET/HEAD/OPTIONS 的 Cookie 会话必须带 `X-CSRF`，缺失 403 `csrf_required`；显式 Bearer 请求豁免。`LEDGER_AUTH_COOKIE=false` 时完全退回 Bearer 旧行为（不下发、不读取 Cookie，也不要求 CSRF）。
-- **兼容期**：`LEDGER_AUTH_EXPOSE_TOKEN=true`（默认）时登录 / 刷新 / 改密响应体仍返回 `token` 供旧版使用；批 6 cutover 后置 `false`。
+- **兼容期**：`LEDGER_AUTH_EXPOSE_TOKEN` 默认 `false`（Vue 版只靠 httpOnly Cookie）；仅回滚 `/legacy/` 旧版时显式置 `true`，届时登录 / 刷新 / 改密响应体返回 `token` 供旧版使用。
 - 登录失败限流：`LEDGER_LOGIN_MAX_ATTEMPTS` / `WINDOW_MINUTES` / `LOCKOUT_MINUTES`；强制改密态对业务端点返回 **428**，新前端需跳改密页而非显示通用错误。
 
 ---
@@ -153,8 +153,8 @@ python3 -m venv .venv
 | 在线 `POST /api/transactions` | `account_id` | 服务端自增整数 id |
 | 离线 `POST /api/sync/push` | `account_uuid` | 字符串 uuid；所有 posting 必须带，不能用账户名 |
 
-**M7 批 4/5 待落地的硬约束**（方案 §6.6.1 / §7，勿提前宣称已有）：
-- **库世代**：restore 覆盖 DB 后 `sync_log` 自增回退，客户端 `last_seq` 超前会「永远拉不到且不报错」。迁移 014 增 `app_settings.db_instance_id`（建库写入、restore 成功后重写），pull/push/health 返回 `instance_id`，客户端按 `{ledger_id:{instance_id,last_seq}}` 比对，不匹配则清该账本实体 + 全量 pull，pending 转隔离区不静默删。
+**批 4/5 已落地的硬约束**（实现口径，勿回退；与 §4 / §9 同口径）：
+- **库世代**：restore 覆盖 DB 后 `sync_log` 自增回退，客户端 `last_seq` 超前会「永远拉不到且不报错」。迁移 014 建独立 `db_instance` 单例表存 UUID（建库写入、restore 成功后 `RotateInstanceID` 轮换），pull/push/health 返回 `instance_id`，客户端按 `{ledger_id:{instance_id,last_seq}}` 比对，不匹配则清该账本实体 + 全量 pull，pending 转隔离区不静默删。
 - **IndexedDB 原子写**：只允许 `recordEntry` / `applyPushResults` / `applyPullChanges` 三个跨 store 的单事务原子操作；`last_seq` 仅在变更成功应用后单调推进。
 - **多标签页租约**：Safari 14.1 无 `BroadcastChannel` / `navigator.locks`，用 `storage` 事件选举 + IndexedDB 单记录 CAS 租约；401 刷新也只由 leader 执行。
 - **失败分类 / 死信**：pending 增 `attempts / last_error_code / next_retry_at / state`；4xx 按码转 dead 并在同步页可见，网络与 5xx 指数退避封顶。
@@ -221,7 +221,7 @@ python3 -m venv .venv
 - **Beancount 兼容**：改 `internal/export/beancount.go` / `files.go` 后必须重新跑 bean-check。**测试中 `BEAN_CHECK_STRICT=1` 时找不到校验器即失败**，不要改回静默跳过（会形成「测试全绿但账芯从未被验证」的假绿灯）。
 - **备份必须用 `VACUUM INTO`，禁止复制 db 文件**：WAL 模式下未 checkpoint 的数据在 `-wal` 里。实测主库 188 KB / WAL 4.1 MB 时直接复制只得到 236/300 条记录，且**不报错**。快照后必须过 `PRAGMA integrity_check` 与行数比对。
 - **全库级操作要系统管理员**：备份 / 下载 / 恢复校验 `users.is_admin`，不能用账本级 `owner` 代替。
-- **迁移优先**：任何 schema 改动走 `migrate.go`，幂等、记录 `schema_migrations`；新增编号顺延（当前 013，下一个是 014）。
+- **迁移优先**：任何 schema 改动走 `migrate.go`，幂等、记录 `schema_migrations`；新增编号顺延（当前至 014，下一个是 015）。
 - **借贷平衡**：后端 `handleCreateTransaction` 按币种平衡校验；前端记一笔页实时指示。
 - **UUID 引用**：同步实体一律用 `uuid` 互引，勿用服务端自增 `id` 跨端传递；在线用 `account_id`、离线 push 用 `account_uuid`（§6）。
 - **不可变**：交易一旦创建不原地改；改账 = 新增冲正交易。
@@ -234,13 +234,13 @@ python3 -m venv .venv
 
 ## 9. 已知边界 / 当前待办（M7 六批全部完成）
 
-**已落地（批 0~6，实测通过 2026-11-12）**：Vue 3 + Vite 脚手架与全部 20 页、`core/Money` 定点金额、`es2015` + plugin-legacy + es2020 语法门禁 + `compat.mjs` API/CSS 扫描、36 端点手写 TS 类型 + 类型化 fetch 客户端（401 single-flight / 428 / `X-Ledger-Id` 断言 / FormData）、D-7 httpOnly Cookie + CSRF + CORS 白名单、迁移 013/014、恢复/导入全链路（M2-a~g）、离线同步内核（`core/sync/`，8 份真实契约样本 + 14 引擎用例）、PWA（`public/sw.js` + 更新提示）、CI `web-verify` job（含用例数下限防假绿）、Dockerfile Node 构建、工具链钉版（`.nvmrc` 22.23.4 / `engines >=22.22 <23` / `engine-strict`）、`LEDGER_AUTH_EXPOSE_TOKEN` 默认 `false`。Vitest **289/289**（34 文件）；`go test`（严格 bean-check）全绿。
+**已落地（批 0~6，2026-11-12 交付）**：Vue 3 + Vite 脚手架与全部 20 页、`core/Money` 定点金额、`es2015` + plugin-legacy + es2020 语法门禁 + `compat.mjs` API/CSS 扫描、36 端点手写 TS 类型 + 类型化 fetch 客户端（401 single-flight / 428 / `X-Ledger-Id` 断言 / FormData）、D-7 httpOnly Cookie + CSRF + CORS 白名单、迁移 013/014、恢复/导入全链路（M2-a~g）、离线同步内核（`core/sync/`，9 份真实契约样本〔其中 6 份被引擎用例引用〕+ 14 引擎用例）、PWA（`public/sw.js` + 更新提示）、CI `web-verify` job（含用例数下限防假绿）、Dockerfile Node 构建、工具链钉版（`.nvmrc` 22.23.4 / `engines >=22.22 <23` / `engine-strict`）、`LEDGER_AUTH_EXPOSE_TOKEN` 默认 `false`。Vitest **301/301**（37 文件）；Go `build` / `vet` / `test ./...` 全绿。
 
 **遗留 / 注意**：
-1. `package-lock.json` 在 Linux 实机（CI ubuntu）上的 `npm ci` 与 Dockerfile Node 构建尚未首跑验证（本地领先 `origin/develop` 14 个提交，push 后由 `web-verify` / 镜像构建观察）；若失败按 lock 缺平台二进制处理（重新在 Linux 生成）。
+1. `package-lock.json` 在 Linux（CI ubuntu）上的 `npm ci` 与 Dockerfile Node 构建，以 GitHub Actions `web-verify` / 镜像构建的运行记录为准，别把「配置写了」当成「已经跑过」；若失败按 lock 缺平台二进制处理（重新在 Linux 生成）。
 2. `docs/` 目录已于 2026-11-14 清空（19 份旧阶段文档），内容仅存于 git 历史，需要时从历史提交取回。
-3. `frontend/dist/legacy/` 为**冻结回滚基准**（本机基准已被构建清空，需从 git 历史重建）；`web-build` 的 `emptyOutDir` 会清掉它——需要回滚能力时从 `d297318` 之前的 git 历史重建。回滚旧版须同时设 `LEDGER_AUTH_EXPOSE_TOKEN=true`。
-4. `CHANGELOG.md` 顶部已为 `[0.5.1] - 2026-11-13`，M7 批 0~6 与图标/密码补丁已记入该版本；tag / `frontend/package.json` / 镜像示例已同步为 0.5.1，**tag 尚未 push**。
+3. `frontend/dist/legacy/` 为**冻结回滚基准**（不入库，需从 git 历史重建）；`web-build` 的 `emptyOutDir` 会清掉它——需要回滚能力时从 `d297318` 之前的 git 历史重建。回滚旧版须同时设 `LEDGER_AUTH_EXPOSE_TOKEN=true`。
+4. `CHANGELOG.md` 顶部已为 `[0.5.1] - 2026-11-13`，M7 批 0~6 与图标/密码补丁已记入该版本；tag / `frontend/package.json` / 镜像示例已同步为 0.5.1，**`v0.5.1` tag 已推送至 origin**。
 5. 真机双端联调（浏览器 A/B 同时在线、离线多设备端到端）与批 5 离线链路真机冒烟尚未完整确认。
 6. 下期（M4+）：Beancount 通用语法导入、OFX/CSV 自动导入、规则引擎、商品/价格 CRUD、跨币种 cost 注解、Postgres 横向扩展。
 
@@ -252,7 +252,6 @@ python3 -m venv .venv
 
 ```bash
 # 后端（托管 frontend/dist，Vue 版）
-export PATH="$PATH:/d/Environment/go/bin"
 (cd frontend && npm run build)   # 先构建前端产物
 LEDGER_DB=data/ledger.db LEDGER_WEB_ROOT=frontend/dist go run ./cmd/server   # 默认 :8080
 
@@ -274,18 +273,18 @@ curl -s -b /tmp/fb.cookie -X POST http://127.0.0.1:8080/api/accounts -H 'X-CSRF:
 curl -s -b /tmp/fb.cookie -X POST http://127.0.0.1:8080/api/transactions -H 'X-CSRF: 1' -H 'Content-Type: application/json' \
   -d '{"date":"2026-08-02","description":"早餐","flag":"*","client_request_id":"demo-001","postings":[{"account_id":1,"commodity":"CNY","amount":"-10.00"},{"account_id":2,"commodity":"CNY","amount":"10.00"}]}'
 curl -s -b /tmp/fb.cookie http://127.0.0.1:8080/api/export -o data/family.beancount
-.venv/Scripts/python.exe -m beancount.scripts.check data/family.beancount   # 退出码 0 通过
+python -m beancount.scripts.check data/family.beancount   # 激活 .venv 后；退出码 0 通过
 
 # NAS 交叉编译（纯 Go 免 CGO）
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o familyledger ./cmd/server
 ```
 
-> 本机 `bean-check.exe` 直接运行静默返回 1（Windows 包装脚本问题），改用 `.venv/Scripts/python.exe -m beancount.scripts.check` 校验。
-> 实测（2026-11-12）：`bash scripts/local.sh test`（Go 全量 + 严格 bean-check）、`web-test`（Vitest **289/289**）、`web-typecheck`、`web-compat` 均通过。
+> `bean-check` 一律用项目 `.venv` 内 Python 以模块方式调用（`-m beancount.scripts.check`），不依赖系统可执行文件。
+> 质量门禁：`scripts/local.sh check`（Go 全量 + 严格 bean-check）、`web-test` / `web-typecheck` / `web-build` / `web-compat`；CI `web-verify` job 会再跑一遍并校验用例数下限。
 
 ### 10.1 统一命令入口
 
-本机 Windows 无 `make`，用 `scripts/local.sh`；Linux/CI 用 `Makefile`（两者一一对应）。
+统一入口：仓库根用 `bash scripts/local.sh <cmd>`；Linux/CI 可用等价的 `Makefile`（两者一一对应）。
 
 ```bash
 # 后端
@@ -304,7 +303,7 @@ bash scripts/local.sh web-compat    # es-check es2020 语法门禁 + §14.7 API/
 bash scripts/local.sh check-legacy  # 校验冻结的 dist/legacy 回滚基准基路径
 ```
 
-> `web-build` 会清空 `frontend/dist`（含本机留存的 `dist/legacy/`），需要回滚基准时先备份该目录。
+> `web-build` 会清空 `frontend/dist`（含其中的 `dist/legacy/`），需要回滚基准时先备份该目录。
 > 版本号以 `frontend/package.json` 为准，与 CHANGELOG / git tag 三处一致（`verify-version.sh` 校验）。
 > 前端门禁已进 CI：`web-verify` job（npm ci → vitest + 用例数下限 → typecheck → build → compat）。
 

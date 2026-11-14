@@ -1,6 +1,6 @@
 # export_demo — 验证参考目录（非运行依赖）
 
-本目录是一份**独立的验证参考**，用于在本机直观验证两件事：
+本目录是一份**独立的验证参考**，用于独立验证两件事：
 
 1. **Beancount 导出格式正确性**：数据库 → `.beancount` 文本 → `bean-check` 通过。
 2. **离线多端同步协议**：双设备（client_id）互相 push/pull、增量水位、幂等。
@@ -20,12 +20,12 @@
 
 ```bash
 # 在项目根目录执行
-.venv/Scripts/python.exe export_demo/seed_and_export.py
+python export_demo/seed_and_export.py   # 激活项目 .venv 后
 ```
 
 - 自动重建 `export_demo/ledger.db`（样例库）与 `export_demo/sample.beancount`（导出文本）。
 - 文本同时打印到 stdout。
-- 校验：`.venv/Scripts/bean-check.exe export_demo/sample.beancount` → 退出码 0 即通过。
+- 校验：`python -m beancount.scripts.check export_demo/sample.beancount` → 退出码 0 即通过。
 
 > 该脚本只依赖 `schema.sql` 的核心表，不建立 `sync_log`/`sessions`（导出用不到），属正常。
 
@@ -51,7 +51,7 @@
 - 账户实体字段：`{uuid, name, type, open_date, commodity_restriction}`。
 
 **前置**：
-- `go` 在 PATH（脚本内已 `export PATH="$PATH:/d/Environment/go/bin"`；本机 Go 装在非默认路径时按需改）。
+- `go` 在 PATH（各脚本自带 PATH 兜底，按需调整）。
 - 项目根已建 `.venv`（`bean-check` 用）。
 
 ```bash

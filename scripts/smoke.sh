@@ -30,7 +30,7 @@ cleanup() {
     wait "$SERVER_PID" 2>/dev/null || true
   fi
   if [[ $KEEP_WORK -eq 0 ]]; then
-    # Windows 下进程刚退出时二进制文件的句柄可能尚未释放，重试后再放弃
+    # 部分平台进程刚退出时二进制句柄可能尚未释放，重试后再放弃
     rm -rf "$WORK" 2>/dev/null \
       || { sleep 1; rm -rf "$WORK" 2>/dev/null; } \
       || true

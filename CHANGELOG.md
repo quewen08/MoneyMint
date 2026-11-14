@@ -28,9 +28,19 @@ M7 前端全量重构收官后的首个补丁版本：Vue 3 SPA 取代 Flutter W
 
 ### Changed（文档口径收口，2026-11-11）
 
-- **按老板决策暂缓且本次未改动**：CI `web-verify` 门禁、`.nvmrc` / `.npmrc` 钉版、`package-lock.json` 在 Linux/WSL 重生成、`verify-version.sh` 改读 `frontend/package.json`。以上均保持未完成状态，勿当现状。
+> **时点快照**：本节记录 11-11 的决策与实测，已被 11-12 批 6（`c04588b`）覆盖。CI `web-verify` / `.nvmrc` 钉版 / `verify-version.sh` 改读 `frontend/package.json` 均已落地，Vitest 已增至 37 文件 301 用例，迁移至 014。**勿把下方「暂缓」当当前结论。**
+
+- **按老板决策暂缓且本次未改动（11-11 时点）**：CI `web-verify` 门禁、`.nvmrc` / `.npmrc` 钉版、`package-lock.json` 在 Linux/WSL 重生成、`verify-version.sh` 改读 `frontend/package.json`。以上在当时均保持未完成状态，勿当当前现状。
 
 > 实测（2026-11-11）：Vitest 22 文件 / 202 用例全过，`vue-tsc --noEmit` 零错误，`go vet` + `BEAN_CHECK_STRICT=1 go test ./...` 全绿；`frontend/src` 57 文件 / 14,067 行；迁移至 013。
+
+---
+
+## 历史归档（Flutter 时代，2026-11-04~06）
+
+> **附录性质，非版本号段落**：以下条目属 **Flutter Web / M3 期**（源码 `*.dart`，提交 `010f9b5` 一带），**不属于 [0.5.1] 的 Vue 3 SPA 重构**，故从该版本中隔离出来、原文保留以免丢失历史。
+> 按时间倒序恰好落在 `[0.5.1]`（11-13）与 `[0.5.0]`（11-03）之间；`scripts/verify-version.sh` 只匹配 `## [x.y.z]` 形态，本段不参与版本号解析。
+> 注意此处的「批 4 / F-10」指 Flutter 改版第 4 批，与 M7 批 4（`bf17cdd` / `8ddb8bb`）是两条不同编号轴。
 
 批 4 / F-10：前端改版收口（PC 增量 + 回归）。改版四批中的最后一批，全部为前端改动，后端与账芯零改动。
 
