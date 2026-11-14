@@ -38,9 +38,6 @@ smoketest_bin
 ledgerauthtest_bin
 *.exe
 
-# 演示目录（运行时不需要）
-export_demo/
-
 # 编辑器 / 智能体本地记忆
 .idea/
 .vscode/

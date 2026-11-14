@@ -6,7 +6,7 @@
 //   - 同一交易下，按币种分组的金额之和必须为 0（借贷平衡）；
 //   - 金额一律以定点十进制字符串写出，避免浮点误差（DB 中请用最小单位整数或 decimal 字符串存储）。
 //
-// 与 export_demo/seed_and_export.py 为同一套序列化逻辑。
+// 上述约束由包内单测与 BEAN_CHECK_STRICT=1 严格模式共同守护。
 package export
 
 import (

@@ -80,7 +80,6 @@ python -m pip install beancount    # 激活 .venv 后执行
 │   ├── src/              # 源码：api/ core/（含 sync/ 离线内核） router/ stores/ styles/ views/ components/ + main.ts / App.vue
 │   └── dist/             # 构建产物（gitignore）；dist/legacy/ 为冻结的旧版回滚基准（不入库）
 ├── scripts/              # check-bean / verify-version / smoke / local.sh / check-legacy / check-test-floor / compat
-├── export_demo/          # Python/sh 验证参考
 └── data/                 # 运行时 SQLite（git 忽略）；backups/ 也在其下
 ```
 

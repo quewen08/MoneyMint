@@ -5,7 +5,6 @@ __pycache__/
 
 # Local DB / generated artifacts
 *.db
-export_demo/ledger.db
 
 # Go build output
 /bin/
@@ -43,13 +42,11 @@ data/logs/
 
 # Generated export artifacts (beancount)
 *.beancount
-export_demo/*.beancount
 
 # Compiled binaries / test builds (root-level, CGO_ENABLED=0 go build 产物)
 familyledger
 smoketest_bin
 ledgerauthtest_bin
-.sync_test_bin
 *.exe
 
 # OS / editor
