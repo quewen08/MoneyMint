@@ -28,7 +28,6 @@ M7 前端全量重构收官后的首个补丁版本：Vue 3 SPA 取代 Flutter W
 
 ### Changed（文档口径收口，2026-11-11）
 
-- 方案升 **v2.5**：§1 标为立项基线快照，§9 / §11 / §14.1 / §14.3 / §14.6 / §14.7 对齐代码现状；`AGENTS.md` / `CLAUDE.md` / `README.md` 同步到批 2.5；方案 / 换框架评估 / 进度审查报告已在本地修订，**按老板 2026-11-11 指示 `docs/` 目录暂不提交，保持未跟踪**。
 - **按老板决策暂缓且本次未改动**：CI `web-verify` 门禁、`.nvmrc` / `.npmrc` 钉版、`package-lock.json` 在 Linux/WSL 重生成、`verify-version.sh` 改读 `frontend/package.json`。以上均保持未完成状态，勿当现状。
 
 > 实测（2026-11-11）：Vitest 22 文件 / 202 用例全过，`vue-tsc --noEmit` 零错误，`go vet` + `BEAN_CHECK_STRICT=1 go test ./...` 全绿；`frontend/src` 57 文件 / 14,067 行；迁移至 013。

@@ -11,6 +11,9 @@ export_demo/ledger.db
 /bin/
 dist/
 
+# Node / frontend dependencies
+node_modules/
+
 # Flutter / Dart
 frontend/.dart_tool/
 frontend/build/

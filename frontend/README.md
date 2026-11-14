@@ -1,7 +1,7 @@
 # frontend — 家庭记账 Web 前端（Vue 3 SPA，cutover 后唯一前端）
 
 类 Beancount 的 NAS 个人云记账应用的 Web 前端（PWA）。与 Go 后端通过 REST 通信，
-支持离线记账 + 增量同步（`src/core/sync/` 离线内核），对齐 `../docs/prototype/index.html` 设计稿。
+支持离线记账 + 增量同步（`src/core/sync/` 离线内核）。
 
 ## 技术栈
 

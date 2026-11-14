@@ -1,6 +1,6 @@
 # CLAUDE.md — FamBean 工作约定
 
-> 给 Claude 系工具的项目速查。**权威技术上下文在 [`AGENTS.md`](AGENTS.md)，重构方案在 [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（v2.6）**；本文只记「怎么干活」与「不要做什么」，不重复全文。
+> 给 Claude 系工具的项目速查。**权威技术上下文在 [`AGENTS.md`](AGENTS.md)**；本文只记「怎么干活」与「不要做什么」，不重复全文。
 
 ## 先读这三件事
 

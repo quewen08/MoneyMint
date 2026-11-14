@@ -528,7 +528,7 @@ export interface SetRegistrationRequest {
   enabled: boolean
 }
 
-// ---------- M2：恢复与导入（批 4，与 docs/m2-plan.md §4/§5 对齐） ----------
+// ---------- M2：恢复与导入（批 4） ----------
 
 /** 恢复预检 / 执行结果里的核心表行数统计。 */
 export interface RestoreStats {

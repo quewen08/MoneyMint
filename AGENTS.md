@@ -4,7 +4,7 @@
 > 用户：全栈独做（老板），后端 Go / 前端与产品决策均本人拍板。沟通可直接给结论。
 > 提醒：因独做全栈，"分配负责人/邀请角色关注"类提醒不适用，改为提醒其自写验收标准、留档、关键模块自评审。
 
-**文档分工**：AI / 开发者技术上下文 = 本文；用户与部署快速上手 = [`README.md`](README.md)；Claude 系工具的工作约定 = [`CLAUDE.md`](CLAUDE.md)；M7 重构的**方案、决策、验收与风险** = [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（当前 **v2.6**，D-1~D-7 已锁定，**批 0~6 全部落地，cutover 完成**）。**本文只记「已实现的现状」，方案里的待办见 §9，勿把计划当现状。**
+**文档分工**：AI / 开发者技术上下文 = 本文；用户与部署快速上手 = [`README.md`](README.md)；Claude 系工具的工作约定 = [`CLAUDE.md`](CLAUDE.md)。**本文只记「已实现的现状」，待办见 §9，勿把计划当现状。**
 
 ---
 
@@ -30,7 +30,7 @@
 
 **核心不变约束**：导出的 `.beancount` 必须能被 `bean-check` 直接校验通过（退出码 0、无报错）。
 
-**当前阶段**：M7 六批全部完成，仓库只剩一套前端。遗留小尾巴：AGENTS §7 端点表 36 条口径复核、docs/ 4 份不入库（clone 断链风险）。
+**当前阶段**：M7 六批全部完成，仓库只剩一套前端。遗留小尾巴：AGENTS §7 端点表 36 条口径复核。
 
 ---
 
@@ -81,8 +81,7 @@ python3 -m venv .venv
 │   └── dist/             # 构建产物（gitignore）；dist/legacy/ 为冻结的旧版回滚基准（仅本机留存）
 ├── scripts/              # check-bean / verify-version / smoke / local.sh / check-legacy / check-test-floor / compat
 ├── export_demo/          # Python/sh 验证参考
-├── data/                 # 运行时 SQLite（git 忽略）；backups/ 也在其下
-└── docs/                 # 设计规格 / 同步协议 / 原型 / 任务书 / M7 方案（next-phase-frontend-plan.md v2.6）/ 进度审查报告
+└── data/                 # 运行时 SQLite（git 忽略）；backups/ 也在其下
 ```
 
 **前端架构（Vue 3 SPA，唯一前端）**：
@@ -207,7 +206,7 @@ python3 -m venv .venv
 | `/*`（非 `/api/`） | GET/HEAD | 公开 | 前端静态资源 + SPA 回退（`LEDGER_WEB_ROOT`） |
 
 > **在线记账幂等冲突矩阵（迁移 013，已实现）**：新建 → `201 {uuid, idempotent:false}`；同 key 命中未删 → `200 {uuid, idempotent:true}`；命中已软删 → `409 idempotency_key_deleted`（换新 key 重提）；同 key 不同 payload → `409 idempotency_payload_mismatch`。旧客户端不传 `client_request_id` 时保持原行为。冲正沿 `opening_key`，**禁止复用** `client_request_id`。
-> **M2 端点（批 4，已实现）**：`/api/backup/restore/preview`、`/api/backup/restore`、`/api/import/beancount/preview`、`/api/import/beancount`。防误操作靠 **只读预检 + `RESTORE` 确认词 + pre-restore 快照 + 单一大事务**（**未**采用方案早期设想的 `Idempotency-Key` 头 + 通用 `idempotency_keys` 表）；恢复仅系统管理员、导入登录即可，两者均豁免账本上下文。验收记录见 `docs/m2-g-acceptance-2026-11-11.md`。
+> **M2 端点（批 4，已实现）**：`/api/backup/restore/preview`、`/api/backup/restore`、`/api/import/beancount/preview`、`/api/import/beancount`。防误操作靠 **只读预检 + `RESTORE` 确认词 + pre-restore 快照 + 单一大事务**（**未**采用方案早期设想的 `Idempotency-Key` 头 + 通用 `idempotency_keys` 表）；恢复仅系统管理员、导入登录即可，两者均豁免账本上下文。
 > 多账本上下文：业务端点需带 `X-Ledger-Id` 头，服务端缺失回退默认账本 id=1；`/api/import/*`、`/api/db/*`、`/api/backup/*` 为 middleware 豁免路径。`viewer` 只读（非 GET 一律 403）、`editor` 可写、`owner` 可管理。**新前端 API 客户端必须强制注入并断言该头，缺失直接抛错，绝不静默回退**（否则交易会记进错误账本）。
 > 备份端点例外：备份是全库级产物，**不解析 `X-Ledger-Id`、不校验账本成员**，只要求登录态 + `users.is_admin`。账本级 owner ≠ 系统管理员，勿混用。
 > 鉴权范围按 `/api/` 前缀划分：非 `/api/` 一律放行交由静态托管，新增前端路由无需改白名单。
@@ -239,7 +238,7 @@ python3 -m venv .venv
 
 **遗留 / 注意**：
 1. `package-lock.json` 在 Linux 实机（CI ubuntu）上的 `npm ci` 与 Dockerfile Node 构建尚未首跑验证（本地领先 `origin/develop` 14 个提交，push 后由 `web-verify` / 镜像构建观察）；若失败按 lock 缺平台二进制处理（重新在 Linux 生成）。
-2. `docs/` **5 份**（m2-plan / next-phase-frontend-plan / m2-g 验收记录 / 批 3 交付 / 框架评估与进度审查等）按老板口径不入库，clone 后断链。
+2. `docs/` 目录已于 2026-11-14 清空（19 份旧阶段文档），内容仅存于 git 历史，需要时从历史提交取回。
 3. `frontend/dist/legacy/` 为**冻结回滚基准**（本机基准已被构建清空，需从 git 历史重建）；`web-build` 的 `emptyOutDir` 会清掉它——需要回滚能力时从 `d297318` 之前的 git 历史重建。回滚旧版须同时设 `LEDGER_AUTH_EXPOSE_TOKEN=true`。
 4. `CHANGELOG.md` 顶部已为 `[0.5.1] - 2026-11-13`，M7 批 0~6 与图标/密码补丁已记入该版本；tag / `frontend/package.json` / 镜像示例已同步为 0.5.1，**tag 尚未 push**。
 5. 真机双端联调（浏览器 A/B 同时在线、离线多设备端到端）与批 5 离线链路真机冒烟尚未完整确认。

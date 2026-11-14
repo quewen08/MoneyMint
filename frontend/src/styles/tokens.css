@@ -1,6 +1,6 @@
 /*
  * 设计 token（批 0）
- * 数值直接取自 docs/prototype/pc-redesign.html 与 mobile-redesign-v2.html，
+ * 数值沿用改版期原型已定的设计 token，
  * 不新建设计系统；后续页面只能引用变量，禁止散落硬编码色值。
  */
 :root {

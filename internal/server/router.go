@@ -139,7 +139,7 @@ func newRouter(h *handler.Handler, svc *service.Service, webRoot string, corsCfg
 
 	// 导入（Beancount → 新账本）：登录即可，按当前用户维度新建账本。
 	// 预检（只读）+ 执行；支持 JSON {"text"} 或 multipart file 两种提交形态。
-	// 路径与 docs/m2-plan.md §4.3 保持一致。
+	// 恢复与导入端点（批 4）。
 	mux.HandleFunc("/api/import/beancount/preview", methodSwitch(map[string]http.HandlerFunc{
 		http.MethodPost: h.HandleImportPreview,
 	}))

@@ -11,7 +11,6 @@
 > **当前状态（2026-11-12，批 6 cutover 完成）**：M7 前端全量重构批 0~6 全部落地，
 > **Vue 3 + Vite 纯 SPA 已是唯一前端**；Flutter 版源码与构建链已清退（git 历史可查），
 > `frontend/dist/legacy/` 为冻结的旧版回滚基准（仅本机留存，不再重建）。
-> 完整方案、决策与验收见 [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md)（v2.6）。
 > 想直接跑起来用，按下面「快速开始」即可；架构与约定看 [`AGENTS.md`](AGENTS.md)。
 
 ## 特性
@@ -160,7 +159,7 @@ docker exec famben /app/server -reset-password awen -new-password 新密码
 - 下载前先看 SHA256 与行数清单：`GET /api/backup/list`（仅系统管理员）。
 - ⚠️ 请勿直接复制 `ledger.db` 文件当备份——WAL 模式下会丢数据且不报错。
 
-> 备份还原与 Beancount 导入（M2）方案已出但**尚未实现**，见 [`docs/m2-plan.md`](docs/m2-plan.md)。
+> 备份还原与 Beancount 导入（M2）已交付（批 4，2026-11-11）。
 
 ## 使用文档
 
@@ -226,8 +225,7 @@ curl -s $B/api/export -H "$AUTH" -o data/family.beancount
 ├── scripts/              # local.sh / check-bean / verify-version / smoke / check-legacy / check-test-floor
 ├── Dockerfile            # 三阶段（Node 构建 Vue → Go → alpine 运行时）
 ├── docker-compose.yml    # 家用部署示例
-├── data/                 # 运行时 SQLite 与 backups/（git 忽略）
-└── docs/                 # 设计规格 / 同步协议 / 原型 / 任务书 / M7 方案
+└── data/                 # 运行时 SQLite 与 backups/（git 忽略）
 ```
 
 旧版 `frontend/lib/` 按 `app / core / viewmodels / widgets / screens` 分层，新版 `frontend/src/` 按
@@ -251,12 +249,6 @@ HTTPS / 换端口 / 域名均无需改代码：Vue 产物用相对 `/api` 与 `b
 
 - [`AGENTS.md`](AGENTS.md) — 开发上下文：架构 / 约定 / Schema / 端点清单（面向开发者与 AI 助手）
 - [`CLAUDE.md`](CLAUDE.md) — Claude 系工具的工作约定：命令 / 禁区 / 关键文件索引
-- [`docs/next-phase-frontend-plan.md`](docs/next-phase-frontend-plan.md) — **M7 全量重构方案 v2.6**（决策 / 分批 / 验收 / 风险，权威来源；批 0~6 已全部落地）
-- [`docs/frontend-framework-rewrite-assessment.md`](docs/frontend-framework-rewrite-assessment.md) — 换框架可行性评估
-- [`docs/m2-plan.md`](docs/m2-plan.md) — 备份还原 + Beancount 导入方案（**已完工**；验收记录见 `docs/m2-g-acceptance-2026-11-11.md`）
-- [`docs/design-spec.md`](docs/design-spec.md) — 产品设计规格
-- [`docs/sync-design.md`](docs/sync-design.md) — 离线同步协议设计
-- [`docs/frontend-revamp-tasks.md`](docs/frontend-revamp-tasks.md) — 旧版前端改版任务清单
 - [`CHANGELOG.md`](CHANGELOG.md) — 版本变更记录
 
 ## 许可证

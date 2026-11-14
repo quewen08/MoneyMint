@@ -1,7 +1,7 @@
 // Package beancount 提供 Beancount 文本的纯函数解析器（零数据库、零文件依赖），
 // 供 M2 导入功能把 .beancount 文本解析为结构化结果。
 //
-// 设计约束（与 docs/m2-plan.md §5 一致）：
+// 设计约束：
 //   - 仅支持自家导出用到的「严格子集」：option / commodity / open / close / price /
 //     交易块（含 metadata）；遇到不支持的语法（include / plugin / balance / pad /
 //     note / document / event / custom / cost 注解 {} / price 注解 @）整体拒绝。
